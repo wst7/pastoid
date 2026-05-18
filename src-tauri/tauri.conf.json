@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ClipOn",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "identifier": "com.wstreet7.clipon",
   "build": {
     "beforeDevCommand": "bun run dev",

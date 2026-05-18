@@ -118,6 +118,10 @@ pub fn import_clipboard_items(
     items: Vec<ClipboardItem>,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
+    let settings = state.settings.lock().map_err(|e| e.to_string())?;
+    let max_items = settings.max_items as usize;
+    drop(settings);
+
     let mut existing_items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
 
     for item in items {
@@ -127,6 +131,15 @@ pub fn import_clipboard_items(
     }
 
     existing_items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    let pinned: Vec<_> = existing_items.iter().filter(|i| i.is_pinned).cloned().collect();
+    let mut non_pinned: Vec<_> = existing_items.iter().filter(|i| !i.is_pinned).cloned().collect();
+
+    non_pinned.truncate(max_items.saturating_sub(pinned.len()));
+
+    existing_items.clear();
+    existing_items.extend(pinned);
+    existing_items.extend(non_pinned);
 
     let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
     storage::save_clipboard_data(&data_dir, &existing_items)?;

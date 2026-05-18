@@ -331,7 +331,7 @@ export default function MainApp() {
               <input
                 type="number"
                 min={1}
-                max={500}
+                max={100}
                 value={String(settings.max_items)}
                 onChange={(e) => handleMaxItemsChange(e.target.value)}
                 disabled={loadingSettings}

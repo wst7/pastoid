@@ -45,7 +45,7 @@ pub fn load_clipboard_data(data_dir: &Path) -> Vec<ClipboardItem> {
 pub fn save_clipboard_data(data_dir: &Path, items: &[ClipboardItem]) -> Result<(), String> {
     let data_file = get_data_file_path(data_dir);
 
-    let json = match serde_json::to_string_pretty(items) {
+    let json = match serde_json::to_string(items) {
         Ok(json) => json,
         Err(e) => return Err(format!("Failed to serialize data: {}", e)),
     };
