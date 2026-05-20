@@ -1,68 +1,48 @@
-# ClipOn
+# Pastoid
 
-A lightweight clipboard manager built with Tauri + React + TypeScript.
+Pastoid is a lightweight, fast clipboard manager for macOS, Windows, and Linux. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
 
-## Features
+## Why Pastoid?
 
-- 📋 Auto-record clipboard history
-- 📌 Pin frequently used items
-- 🔍 Quick search
-- 🌙 Dark/Light theme
-- 🌍 Multi-language support (Chinese/English)
-- 🚀 Auto-start on system boot
-- ⚙️ Configurable maximum record count
+Your clipboard is one of the most used tools on your computer, yet it only remembers one item at a time. Pastoid changes that by automatically saving everything you copy, so you never lose a snippet again. Whether it's a code block, a URL, a password, or a piece of text you copied hours ago — Pastoid keeps it safe and makes it easy to find.
 
-## Development
+## Key Features
 
-### Prerequisites
+- **📋 Automatic History** — Everything you copy is recorded in the background without any extra steps.
+- **📌 Pin Important Items** — Keep frequently used snippets at the top of your list for instant access.
+- **🔍 Instant Search** — Find any copied item in seconds with real-time search as you type.
+- **🌙 Theme Support** — Choose between Light, Dark, or follow your system automatically.
+- **🌍 Bilingual** — Full support for both English and Chinese interfaces.
+- **🚀 Start with System** — Optional auto-start so Pastoid is always ready when you are.
+- **⌨️ Keyboard-First** — Open the quick paste panel with a global shortcut, navigate with arrow keys, and paste without touching your mouse.
+- **⚙️ Configurable Limits** — Set how many items to keep (1–100) to balance history depth and performance.
 
-- Node.js >= 20
-- Rust >= 1.75
+## Screenshots
 
-### Install Dependencies
+<p align="center">
+  <img src="snapshots/quick-paste.png" alt="Pastoid Quick Paste Panel (Light)" width="500">
+  <br><br>
+  <img src="snapshots/quick-paste-dark.png" alt="Pastoid Quick Paste Panel (Dark)" width="500">
+</p>
 
-```bash
-npm install
-```
+## Quick Paste Panel
 
-### Development Mode
+Press your configured shortcut (default: `Cmd+Shift+V`) anywhere to instantly summon the quick paste panel. It appears over any app — even full-screen games or videos — so you can paste without breaking your flow.
 
-```bash
-npm run tauri dev
-```
+Inside the panel:
+- **↑↓** to navigate
+- **↵** to paste
+- **⌘P** to pin or unpin
+- **⌘⌫** to delete an item
+- **⌘⇧X** to clear all history
+- **Esc** to close
 
-### Build for Production
+## Privacy by Design
 
-```bash
-npm run tauri build
-```
+Pastoid stores your clipboard history locally on your machine. No cloud, no account, no tracking. Your data stays yours.
 
-### Release New Version
+## Supported Platforms
 
-Automated releases with release-it:
-
-```bash
-# Interactive release
-npm run release
-
-# Auto-increment versions
-npm run release:patch  # 0.1.0 -> 0.1.1
-npm run release:minor  # 0.1.0 -> 0.2.0
-npm run release:major  # 0.1.0 -> 1.0.0
-```
-
-Requires GitHub Token:
-```bash
-export GITHUB_TOKEN="your_token"
-```
-
-## Tech Stack
-
-- **Frontend**: React + TypeScript + Vite
-- **UI**: HeroUI v3 + Tailwind CSS
-- **Backend**: Tauri (Rust)
-- **Release**: release-it + conventional-changelog
-
-## License
-
-MIT
+- macOS 11+ (Intel & Apple Silicon)
+- Windows 10/11
+- Linux (AppImage & .deb)
