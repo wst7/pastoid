@@ -36,10 +36,8 @@ pub fn add_clipboard_item(
 pub fn delete_clipboard_item(
     id: String,
     state: tauri::State<AppState>,
-    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     state.repo.delete(&id);
-    crate::tray::tray_menu_display(&app_handle);
     Ok(())
 }
 
@@ -47,10 +45,8 @@ pub fn delete_clipboard_item(
 pub fn update_clipboard_item(
     item: ClipboardItem,
     state: tauri::State<AppState>,
-    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     state.repo.update(item);
-    crate::tray::tray_menu_display(&app_handle);
     Ok(())
 }
 
@@ -122,9 +118,6 @@ pub fn save_settings(
     rust_i18n::set_locale(&settings.language);
 
     storage::save_settings_to_file(&state.data_dir, &settings)?;
-
-    // 刷新托盘菜单（语言可能已更改）
-    crate::tray::tray_menu_display(&app_handle);
 
     Ok(())
 }

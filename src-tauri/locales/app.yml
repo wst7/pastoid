@@ -1,11 +1,8 @@
 _version: 2
 tray:
-  history_title:
-    en: "=== History ==="
-    zh: "=== 历史记录 ==="
-  no_history:
-    en: "No history"
-    zh: "无历史记录"
+  open_quick_paste:
+    en: "Open Quick Paste"
+    zh: "打开剪贴板面板"
   preferences:
     en: "Preferences"
     zh: "偏好设置"

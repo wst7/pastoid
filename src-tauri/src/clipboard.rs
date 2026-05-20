@@ -1,5 +1,4 @@
 use crate::models::{AppState, ClipboardItem};
-use crate::tray::tray_menu_display;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
@@ -74,7 +73,6 @@ fn check_clipboard(
     if let Some(ref item) = new_item {
         // 只改内存，文件由后台 flush 线程处理
         if state.repo.add(item.clone()) {
-            tray_menu_display(app_handle);
             return Ok(Some(item.clone()));
         }
     }
