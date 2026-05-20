@@ -8,12 +8,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { SearchBar } from "@/components/SearchBar";
-import { ClipboardList } from "@/components/ClipboardList";
-import ShortcutRecordInput from "@/components/ShortcutRecordInput";
-import { useClipboard } from "@/hooks/useClipboard";
 import { Tabs, Label, ListBox, Select, Switch, Button, Spinner } from "@heroui/react";
-import { ClipboardList as ClipboardListIcon, Settings, Info, RefreshCw } from "lucide-react";
+import ShortcutRecordInput from "@/components/ShortcutRecordInput";
+import { Settings, Info, RefreshCw } from "lucide-react";
 
 interface UpdateInfo {
   has_update: boolean;
@@ -49,9 +46,8 @@ const themes = (t: (key: string) => string) => [
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  const { displayedPinned, displayedUnpinned, isLoading, search, setSearch, copyToClipboard, deleteItem, togglePin, reload } = useClipboard();
 
-  const [activeTab, setActiveTab] = useState("clips");
+  const [activeTab, setActiveTab] = useState("settings");
   const [settings, setSettings] = useState<SettingsData>({
     language: "zh",
     theme: "system",
@@ -154,7 +150,6 @@ export default function App() {
     const newSettings = { ...settings, max_items };
     setSettings(newSettings);
     await saveSettings(newSettings);
-    reload();
   };
 
   const handleShortcutChange = (shortcut: string) => {
@@ -217,13 +212,6 @@ export default function App() {
         >
           <Tabs.ListContainer>
             <Tabs.List aria-label="Navigation">
-              <Tabs.Tab id="clips">
-                <div className="flex items-center gap-2">
-                  <ClipboardListIcon className="size-4" />
-                  <span>{t('clips')}</span>
-                </div>
-                <Tabs.Indicator />
-              </Tabs.Tab>
               <Tabs.Tab id="settings">
                 <div className="flex items-center gap-2">
                   <Settings className="size-4" />
@@ -244,29 +232,6 @@ export default function App() {
       </div>
 
       <main className="flex-1 overflow-hidden">
-        {activeTab === "clips" && (
-          <div className="h-full flex flex-col">
-            <div className="px-4 py-3 border-b border-border bg-background">
-              <SearchBar value={search} onChange={setSearch} placeholder={t('search')} />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              {isLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="w-5 h-5 border border-blue-500 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <ClipboardList
-                  pinnedItems={displayedPinned}
-                  unpinnedItems={displayedUnpinned}
-                  onCopy={copyToClipboard}
-                  onDelete={deleteItem}
-                  onTogglePin={togglePin}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
         {activeTab === "settings" && (
           <div className="h-full overflow-y-auto p-4 space-y-6">
             <div className="grid gap-1.5">
@@ -361,7 +326,7 @@ export default function App() {
             <div className="max-w-sm mx-auto p-6 space-y-8">
               <div className="text-center">
                 <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                  <ClipboardListIcon className="size-10 text-primary" />
+                  <Settings className="size-10 text-primary" />
                 </div>
                 <h2 className="text-2xl font-bold">{t('appName')}</h2>
                 <p className="text-muted-foreground mt-1">v{packageInfo.version}</p>

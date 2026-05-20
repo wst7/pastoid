@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { Search, Clipboard, Pin, X } from "lucide-react";
+import { Search, Clipboard, Pin, Trash2, X } from "lucide-react";
 import { Kbd, Button } from "@heroui/react";
 import type { ClipboardItem } from "@/types/clipboard";
 
@@ -49,6 +49,31 @@ export default function QuickPaste() {
   const filteredItemsRef = useRef(filteredItems);
   filteredItemsRef.current = filteredItems;
 
+  const togglePin = useCallback(async (item: ClipboardItem) => {
+    try {
+      const updated = { ...item, isPinned: !item.isPinned, updatedAt: Date.now() };
+      await invoke("update_clipboard_item", { item: updated });
+      setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
+    } catch (e) {
+      console.error("Toggle pin failed:", e);
+    }
+  }, []);
+
+  const deleteItem = useCallback(async (item: ClipboardItem) => {
+    try {
+      await invoke("delete_clipboard_item", { id: item.id });
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+    } catch (e) {
+      console.error("Delete failed:", e);
+    }
+  }, []);
+
+  const togglePinRef = useRef(togglePin);
+  togglePinRef.current = togglePin;
+
+  const deleteItemRef = useRef(deleteItem);
+  deleteItemRef.current = deleteItem;
+
   const pasteRef = useRef(paste);
   pasteRef.current = paste;
 
@@ -85,6 +110,17 @@ export default function QuickPaste() {
       } else if (e.key === "Escape") {
         e.preventDefault();
         getCurrentWindow().hide();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "p") {
+        e.preventDefault();
+        const item = items[activeIndexRef.current];
+        if (item) togglePinRef.current(item);
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === "Backspace" || e.key === "Delete")) {
+        e.preventDefault();
+        const item = items[activeIndexRef.current];
+        if (item) {
+          deleteItemRef.current(item);
+          setActiveIndex((prev) => Math.max(0, Math.min(prev, items.length - 2)));
+        }
       }
     };
 
@@ -207,6 +243,22 @@ export default function QuickPaste() {
                       ⌘{idx + 1}
                     </span>
                   )}
+
+                  {/* actions — appear on hover */}
+                  <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                    <div
+                      onClick={(e) => { e.stopPropagation(); togglePin(item); }}
+                      className={`min-w-6 w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer ${item.isPinned ? "text-amber-400" : "text-zinc-400 opacity-40"}`}
+                    >
+                      <Pin size={11} fill={item.isPinned ? "currentColor" : "none"} />
+                    </div>
+                    <div
+                      onClick={(e) => { e.stopPropagation(); deleteItem(item); }}
+                      className="min-w-6 w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-red-500 cursor-pointer"
+                    >
+                      <Trash2 size={11} />
+                    </div>
+                  </span>
                 </div>
               );
             })}
@@ -222,6 +274,12 @@ export default function QuickPaste() {
           </span>
           <span className="flex items-center gap-1">
             <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↵</Kbd> 粘贴
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘P</Kbd> 固定
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘⌫</Kbd> 删除
           </span>
         </div>
         <span className="flex items-center gap-1">
