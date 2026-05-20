@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ClipOn",
+  "productName": "Pastoid",
   "version": "1.4.1",
-  "identifier": "com.wstreet7.clipon",
+  "identifier": "com.pastoid.app",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ClipOn",
+        "title": "Pastoid",
         "width": 550,
         "height": 550,
         "minWidth": 450,
@@ -27,7 +27,7 @@
       },
       {
         "label": "quick-paste",
-        "title": "ClipOn",
+        "title": "Pastoid",
         "url": "quick-paste.html",
         "width": 500,
         "height": 400,

@@ -1,5 +1,5 @@
 {
-  "appName": "ClipOn",
+  "appName": "Pastoid",
   "dark": "暗黑",
   "search": "搜索...",
   "noItems": "暂无记录",
@@ -33,5 +33,6 @@
   "downloadUpdate": "下载更新",
   "installUpdate": "安装更新",
   "downloadFailed": "下载失败，请重试",
-  "shortcutLabel": "快速粘贴快捷键"
+  "shortcutLabel": "快速粘贴快捷键",
+  "description": "轻量级剪贴板管理器"
 }

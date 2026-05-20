@@ -1,5 +1,5 @@
 {
-  "appName": "ClipOn",
+  "appName": "Pastoid",
   "search": "Search...",
   "noItems": "No items",
   "noItemsHint": "Copied content will appear here",
@@ -33,5 +33,6 @@
   "downloadUpdate": "Download Update",
   "installUpdate": "Install Update",
   "downloadFailed": "Download failed, please retry",
-  "shortcutLabel": "Quick Paste Shortcut"
+  "shortcutLabel": "Quick Paste Shortcut",
+  "description": "Lightweight clipboard manager"
 }

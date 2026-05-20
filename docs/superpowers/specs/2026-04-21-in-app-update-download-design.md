@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implement in-app downloading of updates for ClipOn. User can check for updates, download the installer within the app (with progress display), and open it directly for installation. No code signing certificate required, works with existing GitHub Releases workflow.
+Implement in-app downloading of updates for Pastoid. User can check for updates, download the installer within the app (with progress display), and open it directly for installation. No code signing certificate required, works with existing GitHub Releases workflow.
 
 ## Requirements
 

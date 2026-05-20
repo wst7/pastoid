@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add in-app update download functionality with progress display, allowing users to download and open installers directly from within ClipOn.
+**Goal:** Add in-app update download functionality with progress display, allowing users to download and open installers directly from within Pastoid.
 
 **Architecture:**
 - Backend: Add Tauri commands in commands.rs to handle download streaming and installer opening
@@ -106,8 +106,8 @@ Add this new command at the end of the file:
 pub async fn start_download_update(app_handle: AppHandle) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.github.com/repos/wst7/clipon/releases/latest")
-        .header("User-Agent", "ClipOn")
+        .get("https://api.github.com/repos/wst7/pastoid/releases/latest")
+        .header("User-Agent", "Pastoid")
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -123,7 +123,7 @@ pub async fn start_download_update(app_handle: AppHandle) -> Result<String, Stri
 
     let download_response = client
         .get(&asset.browser_download_url)
-        .header("User-Agent", "ClipOn")
+        .header("User-Agent", "Pastoid")
         .send()
         .await
         .map_err(|e| e.to_string())?;

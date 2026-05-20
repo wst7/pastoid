@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## 项目概览
-ClipOn - Tauri + React + TypeScript 构建的轻量级剪贴板管理器
+Pastoid - Tauri + React + TypeScript 构建的轻量级剪贴板管理器
 
 ## 常用命令
 

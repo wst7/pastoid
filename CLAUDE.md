@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClipOn - A lightweight clipboard manager built with Tauri + React + TypeScript.
+Pastoid - A lightweight clipboard manager built with Tauri + React + TypeScript.
 
 ## Common Commands
 

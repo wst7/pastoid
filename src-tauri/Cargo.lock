@@ -546,35 +546,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clipon"
-version = "1.4.1"
-dependencies = [
- "arboard",
- "chrono",
- "dirs 5.0.1",
- "enigo",
- "futures-util",
- "open",
- "reqwest 0.12.28",
- "rust-i18n",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-nspanel",
- "tauri-plugin-autostart",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-shell",
- "tempfile",
- "tokio",
- "tray-icon 0.22.0",
- "uuid",
-]
-
-[[package]]
 name = "cocoa"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3180,6 +3151,35 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link 0.2.1",
+]
+
+[[package]]
+name = "pastoid"
+version = "1.4.1"
+dependencies = [
+ "arboard",
+ "chrono",
+ "dirs 5.0.1",
+ "enigo",
+ "futures-util",
+ "open",
+ "reqwest 0.12.28",
+ "rust-i18n",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-nspanel",
+ "tauri-plugin-autostart",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-shell",
+ "tempfile",
+ "tokio",
+ "tray-icon 0.22.0",
+ "uuid",
 ]
 
 [[package]]

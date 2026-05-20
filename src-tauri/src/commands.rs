@@ -83,9 +83,14 @@ pub fn save_settings(
     use tauri_plugin_autostart::ManagerExt;
     let autostart = app_handle.autolaunch();
     if settings.autostart {
-        let _ = autostart.enable();
+        if let Err(e) = autostart.enable() {
+            eprintln!("Failed to enable autostart: {}", e);
+            return Err(format!("开启自启动失败: {}", e));
+        }
     } else {
-        let _ = autostart.disable();
+        if let Err(e) = autostart.disable() {
+            eprintln!("Failed to disable autostart: {}", e);
+        }
     }
 
     // 如果 max_items 变了，通知 repo 截断
@@ -110,6 +115,16 @@ pub fn save_settings(
             let _ = crate::shortcut::register(&app_handle, &old_shortcut);
             return Err(format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
         }
+
+        // 更新托盘菜单上的快捷键显示
+        if let Err(e) = crate::tray::update_tray_menu(&app_handle) {
+            eprintln!("Failed to update tray menu: {}", e);
+        }
+    }
+
+    // 如果主题变了，广播给所有窗口
+    if current_settings.theme != settings.theme {
+        let _ = app_handle.emit("theme-changed", settings.theme.clone());
     }
 
     *current_settings = settings.clone();
@@ -153,8 +168,8 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
 
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.github.com/repos/wst7/clipon/releases/latest")
-        .header("User-Agent", "ClipOn")
+        .get("https://api.github.com/repos/wst7/pastoid/releases/latest")
+        .header("User-Agent", "Pastoid")
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -164,7 +179,7 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
             has_update: false,
             current_version: current_version.clone(),
             latest_version: current_version,
-            download_url: "https://github.com/wst7/clipon/releases".to_string(),
+            download_url: "https://github.com/wst7/pastoid/releases".to_string(),
             release_notes: None,
         });
     }
@@ -228,8 +243,8 @@ fn find_asset_for_platform(release: &GitHubRelease) -> Option<&GitHubAsset> {
 pub async fn start_download_update(app_handle: AppHandle) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
-        .get("https://api.github.com/repos/wst7/clipon/releases/latest")
-        .header("User-Agent", "ClipOn")
+        .get("https://api.github.com/repos/wst7/pastoid/releases/latest")
+        .header("User-Agent", "Pastoid")
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -245,7 +260,7 @@ pub async fn start_download_update(app_handle: AppHandle) -> Result<String, Stri
 
     let download_response = client
         .get(&asset.browser_download_url)
-        .header("User-Agent", "ClipOn")
+        .header("User-Agent", "Pastoid")
         .send()
         .await
         .map_err(|e| e.to_string())?;

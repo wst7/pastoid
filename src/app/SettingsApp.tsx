@@ -325,12 +325,12 @@ export default function SettingsApp() {
           <div className="h-full overflow-y-auto">
             <div className="max-w-sm mx-auto p-6 space-y-8">
               <div className="text-center">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                  <Settings className="size-10 text-primary" />
+                <div className="w-20 h-20 mx-auto mb-4 rounded-2xl overflow-hidden shadow-sm">
+                  <img src="/logo.svg" alt="Pastoid" className="w-full h-full" />
                 </div>
                 <h2 className="text-2xl font-bold">{t('appName')}</h2>
                 <p className="text-muted-foreground mt-1">v{packageInfo.version}</p>
-                <p className="text-sm text-muted-foreground mt-2">Lightweight clipboard manager</p>
+                <p className="text-sm text-muted-foreground mt-2">{t('description')}</p>
               </div>
 
               <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
@@ -407,7 +407,7 @@ export default function SettingsApp() {
               </div>
 
               <div className="text-center text-xs text-muted-foreground pt-4">
-                <p>© 2026 ClipOn. All rights reserved.</p>
+                <p>© 2026 Pastoid. All rights reserved.</p>
               </div>
             </div>
           </div>
