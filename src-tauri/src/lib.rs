@@ -68,10 +68,18 @@ pub fn run() {
                 if let Ok(panel) = window.to_panel() {
                     #[allow(deprecated)]
                     {
-                        use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                        use tauri_nspanel::cocoa::appkit::{
+                            NSMainMenuWindowLevel, NSWindowCollectionBehavior,
+                        };
+                        // 不抢占其它窗口焦点
+                        panel.set_style_mask(1 << 7); // NSWindowStyleMaskNonActivatingPanel
+                        // 层级高于菜单栏，确保覆盖全屏应用
+                        panel.set_level(NSMainMenuWindowLevel + 1);
+                        // 在所有 Space（含全屏）中共享
                         panel.set_collection_behaviour(
-                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-                            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces,
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                                | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
+                                | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
                         );
                     }
                 }
