@@ -195,7 +195,7 @@ export default function QuickPaste() {
                   key={item.id}
                   data-index={idx}
                   onClick={() => paste(item)}
-                  className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer select-none transition-colors ${
+                  className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer select-none transition-all duration-300 ${
                     isActive
                       ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300"
                       : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
@@ -206,16 +206,16 @@ export default function QuickPaste() {
                     {item.isPinned ? (
                       <Pin
                         size={13}
-                        className={
+                        className={`transition-colors duration-300 ${
                           isActive
                             ? "text-amber-500"
                             : "text-amber-400/70"
-                        }
+                        }`}
                         fill={isActive ? "currentColor" : "none"}
                       />
                     ) : (
                       <span
-                        className={`text-[10px] font-medium ${
+                        className={`text-[10px] font-medium transition-colors duration-300 ${
                           isActive
                             ? "text-blue-400"
                             : "text-zinc-300 dark:text-zinc-600"
@@ -231,30 +231,17 @@ export default function QuickPaste() {
                     {preview(item.content)}
                   </span>
 
-                  {/* shortcut badge */}
-                  {idx < 9 && (
-                    <span
-                      className={`shrink-0 text-[10px] font-medium tracking-wide ${
-                        isActive
-                          ? "text-blue-400"
-                          : "text-zinc-400 dark:text-zinc-500"
-                      }`}
-                    >
-                      ⌘{idx + 1}
-                    </span>
-                  )}
-
                   {/* actions — appear on hover */}
-                  <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                  <span className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     <div
                       onClick={(e) => { e.stopPropagation(); togglePin(item); }}
-                      className={`min-w-6 w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer ${item.isPinned ? "text-amber-400" : "text-zinc-400 opacity-40"}`}
+                      className={`min-w-6 w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 cursor-pointer transition-colors duration-300 ${item.isPinned ? "text-amber-400" : "text-zinc-400 opacity-40"}`}
                     >
                       <Pin size={11} fill={item.isPinned ? "currentColor" : "none"} />
                     </div>
                     <div
                       onClick={(e) => { e.stopPropagation(); deleteItem(item); }}
-                      className="min-w-6 w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-red-500 cursor-pointer"
+                      className="min-w-6 w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-red-500 cursor-pointer transition-colors duration-300"
                     >
                       <Trash2 size={11} />
                     </div>

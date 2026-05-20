@@ -1,9 +1,9 @@
 
 import ReactDOM from "react-dom/client";
-import App from "./app/MainApp";
+import SettingsApp from "./app/SettingsApp";
 import "./i18n";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <App />,
+  <SettingsApp />,
 );

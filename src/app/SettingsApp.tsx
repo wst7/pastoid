@@ -1,5 +1,5 @@
 /**
- * 主窗口应用 - 剪贴板管理 + 设置
+ * 设置窗口应用
  */
 import { useEffect, useState } from "react";
 import packageInfo from '../../package.json' with { type: 'json' };
@@ -44,7 +44,7 @@ const themes = (t: (key: string) => string) => [
   { id: "dark", name: t("dark") },
 ];
 
-export default function App() {
+export default function SettingsApp() {
   const { t, i18n } = useTranslation();
 
   const [activeTab, setActiveTab] = useState("settings");
