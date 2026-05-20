@@ -13,8 +13,8 @@ i18n!("locales");
 
 use models::AppState;
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri::Manager;
+
 
 pub fn run() {
     tauri::Builder::default()
@@ -33,6 +33,8 @@ pub fn run() {
 
             // 设置语言
             rust_i18n::set_locale(&settings.language);
+
+            let shortcut_str = settings.shortcut.clone();
 
             let repo = Arc::new(repository::ClipboardRepository::new(
                 data_dir.clone(),
@@ -57,25 +59,16 @@ pub fn run() {
                 tray::setup_window_close_handler(&main_window);
             }
 
-            // 注册全局快捷键 Cmd+Shift+V 呼出快速粘贴面板
-            let handle = app.handle().clone();
-            let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV);
-            if let Err(e) = handle.global_shortcut().on_shortcut(shortcut, move |app, _s, event| {
-                if event.state() == ShortcutState::Pressed {
-                    if let Some(window) = app.get_webview_window("quick-paste") {
-                        if window.is_visible().unwrap_or(false) {
-                            let _ = window.hide();
-                        } else {
-                            let _ = window.center();
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                            // 通知前端刷新数据并聚焦搜索
-                            let _ = window.emit("panel-opened", ());
-                        }
-                    }
-                }
-            }) {
-                eprintln!("Failed to register global shortcut: {}", e);
+            // 注册全局快捷键
+            if let Err(e) = shortcut::register(
+                app.handle(),
+                &shortcut_str,
+            ) {
+                eprintln!(
+                    "Failed to register shortcut '{}': {}. Falling back to default.",
+                    shortcut_str, e
+                );
+                let _ = shortcut::register(app.handle(), "Cmd+Shift+V");
             }
 
             // 启动剪切板监听
