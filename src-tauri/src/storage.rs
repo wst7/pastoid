@@ -176,6 +176,7 @@ mod tests {
         let settings = load_settings(temp_dir.path());
         assert_eq!(settings.language, "zh");
         assert_eq!(settings.theme, "system");
+        assert_eq!(settings.shortcut, "Cmd+Shift+V");
     }
 
     #[test]
@@ -196,6 +197,7 @@ mod tests {
         assert_eq!(loaded.theme, "dark");
         assert!(loaded.autostart);
         assert_eq!(loaded.max_items, 50);
+        assert_eq!(loaded.shortcut, "Ctrl+Alt+K");
     }
 
     #[test]
