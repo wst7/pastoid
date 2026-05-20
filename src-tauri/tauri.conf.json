@@ -38,6 +38,7 @@
         "alwaysOnTop": true,
         "visible": false,
         "skipTaskbar": true,
+        "visibleOnAllWorkspaces": true,
         "shadow": false,
         "windowEffects": {
           "effects": ["popover"],

@@ -14,6 +14,8 @@ i18n!("locales");
 use models::AppState;
 use std::sync::Arc;
 use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri_nspanel::WebviewWindowExt;
 
 
 pub fn run() {
@@ -21,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
@@ -57,6 +60,26 @@ pub fn run() {
             // 设置窗口关闭事件
             if let Some(main_window) = app.get_webview_window("main") {
                 tray::setup_window_close_handler(&main_window);
+            }
+
+            // quick-paste 窗口转为 NSPanel 以在全屏应用上方显示
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("quick-paste") {
+                if let Ok(panel) = window.to_panel() {
+                    #[allow(deprecated)]
+                    {
+                        use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                        panel.set_collection_behaviour(
+                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+                            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces,
+                        );
+                    }
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window("quick-paste") {
+                let _ = window.set_visible_on_all_workspaces(true);
             }
 
             // 注册全局快捷键
