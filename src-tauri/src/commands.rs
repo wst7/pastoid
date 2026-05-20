@@ -2,8 +2,7 @@ use crate::models::{AppState, ClipboardItem, Settings};
 use crate::storage;
 use serde::Deserialize;
 use std::io::Write;
-use tauri::AppHandle;
-use tauri::Emitter;
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Deserialize)]
 struct GitHubRelease {
@@ -21,8 +20,7 @@ struct GitHubAsset {
 
 #[tauri::command]
 pub fn get_clipboard_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
-    let items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-    Ok(items.clone())
+    Ok(state.repo.get_items())
 }
 
 #[tauri::command]
@@ -30,36 +28,7 @@ pub fn add_clipboard_item(
     item: ClipboardItem,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
-    let settings = state.settings.lock().map_err(|e| e.to_string())?;
-    let max_items = settings.max_items;
-    drop(settings);
-
-    let mut items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-
-    let is_duplicate = items
-        .iter()
-        .any(|existing| existing.content == item.content && existing.item_type == item.item_type);
-
-    if !is_duplicate {
-        items.insert(0, item.clone());
-
-        let max_items = max_items as usize;
-        if items.len() > max_items {
-            let pinned: Vec<_> = items.iter().filter(|i| i.is_pinned).cloned().collect();
-            let mut non_pinned: Vec<_> = items.iter().filter(|i| !i.is_pinned).cloned().collect();
-
-            non_pinned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-            non_pinned.truncate(max_items.saturating_sub(pinned.len()));
-
-            items.clear();
-            items.extend(pinned);
-            items.extend(non_pinned);
-        }
-
-        let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
-        storage::save_clipboard_data(&data_dir, &items)?;
-    }
-
+    state.repo.add(item);
     Ok(())
 }
 
@@ -69,15 +38,8 @@ pub fn delete_clipboard_item(
     state: tauri::State<AppState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let mut items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-    items.retain(|item| item.id != id);
-
-    let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
-    storage::save_clipboard_data(&data_dir, &items)?;
-    drop(items);
-    drop(data_dir);
+    state.repo.delete(&id);
     crate::tray::tray_menu_display(&app_handle);
-
     Ok(())
 }
 
@@ -87,29 +49,14 @@ pub fn update_clipboard_item(
     state: tauri::State<AppState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let mut items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-
-    if let Some(index) = items.iter().position(|i| i.id == item.id) {
-        items[index] = item.clone();
-
-        let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
-        storage::save_clipboard_data(&data_dir, &items)?;
-        drop(items);
-        drop(data_dir);
-        crate::tray::tray_menu_display(&app_handle);
-    }
-
+    state.repo.update(item);
+    crate::tray::tray_menu_display(&app_handle);
     Ok(())
 }
 
 #[tauri::command]
 pub fn clear_clipboard_items(state: tauri::State<AppState>) -> Result<(), String> {
-    let mut items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-    items.clear();
-
-    let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
-    storage::save_clipboard_data(&data_dir, &items)?;
-
+    state.repo.clear();
     Ok(())
 }
 
@@ -118,32 +65,7 @@ pub fn import_clipboard_items(
     items: Vec<ClipboardItem>,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
-    let settings = state.settings.lock().map_err(|e| e.to_string())?;
-    let max_items = settings.max_items as usize;
-    drop(settings);
-
-    let mut existing_items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-
-    for item in items {
-        if !existing_items.iter().any(|i| i.id == item.id) {
-            existing_items.push(item);
-        }
-    }
-
-    existing_items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    let pinned: Vec<_> = existing_items.iter().filter(|i| i.is_pinned).cloned().collect();
-    let mut non_pinned: Vec<_> = existing_items.iter().filter(|i| !i.is_pinned).cloned().collect();
-
-    non_pinned.truncate(max_items.saturating_sub(pinned.len()));
-
-    existing_items.clear();
-    existing_items.extend(pinned);
-    existing_items.extend(non_pinned);
-
-    let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
-    storage::save_clipboard_data(&data_dir, &existing_items)?;
-
+    state.repo.import(items);
     Ok(())
 }
 
@@ -170,13 +92,36 @@ pub fn save_settings(
         let _ = autostart.disable();
     }
 
+    // 如果 max_items 变了，通知 repo 截断
+    if current_settings.max_items != settings.max_items {
+        state.repo.set_max_items(settings.max_items);
+    }
+
+    // shortcut 变更检测
+    if current_settings.shortcut != settings.shortcut {
+        let old_shortcut = current_settings.shortcut.clone();
+        let new_shortcut = settings.shortcut.clone();
+
+        // 先注销旧快捷键
+        if let Err(e) = crate::shortcut::unregister(&app_handle, &old_shortcut) {
+            eprintln!("Failed to unregister old shortcut '{}': {}", old_shortcut, e);
+        }
+
+        // 注册新快捷键
+        if let Err(e) = crate::shortcut::register(&app_handle, &new_shortcut) {
+            // 注册失败时回滚到旧快捷键
+            eprintln!("Failed to register new shortcut '{}': {}", new_shortcut, e);
+            let _ = crate::shortcut::register(&app_handle, &old_shortcut);
+            return Err(format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
+        }
+    }
+
     *current_settings = settings.clone();
 
     // 更新语言环境
     rust_i18n::set_locale(&settings.language);
 
-    let data_dir = state.data_dir.lock().map_err(|e| e.to_string())?;
-    storage::save_settings_to_file(&data_dir, &settings)?;
+    storage::save_settings_to_file(&state.data_dir, &settings)?;
 
     // 刷新托盘菜单（语言可能已更改）
     crate::tray::tray_menu_display(&app_handle);
@@ -190,16 +135,7 @@ pub fn get_history_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardI
     let max_items = settings.max_items as usize;
     drop(settings);
 
-    let items = state.clipboard_items.lock().map_err(|e| e.to_string())?;
-    let mut sorted_items = items.clone();
-    sorted_items.sort_by(|a, b| {
-        if a.is_pinned != b.is_pinned {
-            b.is_pinned.cmp(&a.is_pinned)
-        } else {
-            b.created_at.cmp(&a.created_at)
-        }
-    });
-    Ok(sorted_items.into_iter().take(max_items).collect())
+    Ok(state.repo.get_history(max_items))
 }
 
 #[derive(serde::Serialize)]
@@ -353,5 +289,60 @@ pub async fn start_download_update(app_handle: AppHandle) -> Result<String, Stri
 #[tauri::command]
 pub fn open_installer(path: String) -> Result<(), String> {
     open::that(&path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn paste_clipboard(content: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+
+    app_handle
+        .clipboard()
+        .write_text(content)
+        .map_err(|e| format!("clipboard write: {}", e))?;
+
+    if let Some(window) = app_handle.get_webview_window("quick-paste") {
+        let _ = window.hide();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        let mut enigo = Enigo::new(&Settings::default())
+            .map_err(|e| format!("Failed to init enigo: {}", e))?;
+
+        // Cmd+Tab 切换到上一个应用
+        enigo.key(Key::Meta, Direction::Press)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo.key(Key::Tab, Direction::Click)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo.key(Key::Meta, Direction::Release)
+            .map_err(|e| format!("enigo: {}", e))?;
+
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Cmd+V 粘贴
+        enigo.key(Key::Meta, Direction::Press)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo.key(Key::Unicode('v'), Direction::Click)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo.key(Key::Meta, Direction::Release)
+            .map_err(|e| format!("enigo: {}", e))?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        let mut enigo = Enigo::new(&Settings::default())
+            .map_err(|e| format!("Failed to init enigo: {}", e))?;
+        enigo.key(Key::Control, Direction::Press)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo.key(Key::Unicode('v'), Direction::Click)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo.key(Key::Control, Direction::Release)
+            .map_err(|e| format!("enigo: {}", e))?;
+    }
+
     Ok(())
 }
