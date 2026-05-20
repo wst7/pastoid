@@ -1,6 +1,7 @@
 import { ClipboardItemCard } from "./ClipboardItem";
 import type { ClipboardItem } from "@/types/clipboard";
 import { Clipboard } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ClipboardListProps {
   pinnedItems: ClipboardItem[];
@@ -17,6 +18,7 @@ export function ClipboardList({
   onDelete,
   onTogglePin,
 }: ClipboardListProps) {
+  const { t } = useTranslation();
   const hasPinned = pinnedItems.length > 0;
   const hasUnpinned = unpinnedItems.length > 0;
   const isEmpty = !hasPinned && !hasUnpinned;
@@ -26,8 +28,8 @@ export function ClipboardList({
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="flex flex-col items-center gap-2 text-center text-gray-500">
           <Clipboard size={18} />
-          <span>暂无记录</span>
-          <span className="text-xs">复制内容后会显示在这里</span>
+          <span>{t("noItems")}</span>
+          <span className="text-xs">{t("noItemsHint")}</span>
         </div>
       </div>
     );

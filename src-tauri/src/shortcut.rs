@@ -32,8 +32,6 @@ pub fn unregister(app: &AppHandle, shortcut: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_toggle_quick_paste_does_not_crash_without_window() {
     }

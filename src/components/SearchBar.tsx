@@ -1,10 +1,4 @@
-/**
- * 搜索栏组件
- */
-import { Search, X } from "lucide-react";
-import { Input } from "@heroui/react";
-
-const ICON_SIZE = 14;
+import { SearchField } from "@heroui/react";
 
 interface SearchBarProps {
   value: string;
@@ -15,30 +9,19 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChange,
-  placeholder = "搜索...",
+  placeholder,
 }: SearchBarProps) {
-  const handleClear = () => {
-    onChange("");
-  };
-
   return (
-    <div className="relative w-full max-w-2xl mx-auto">
-      <Search size={ICON_SIZE} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
-      <Input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="pl-8 pr-9 h-8 rounded-xl bg-background border border-input text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none placeholder:text-muted-foreground/60"
-      />
-      {value && (
-        <button
-          onClick={handleClear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground"
-        >
-          <X size={ICON_SIZE} />
-        </button>
-      )}
-    </div>
+    <SearchField.Root
+      value={value}
+      onChange={onChange}
+      className="w-full max-w-2xl mx-auto"
+    >
+      <SearchField.Group>
+        <SearchField.SearchIcon />
+        <SearchField.Input placeholder={placeholder} className="h-8" />
+        {value && <SearchField.ClearButton />}
+      </SearchField.Group>
+    </SearchField.Root>
   );
 }

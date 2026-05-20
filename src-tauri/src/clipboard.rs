@@ -1,5 +1,4 @@
 use crate::models::{AppState, ClipboardItem};
-use crate::storage;
 use crate::tray::tray_menu_display;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -51,19 +50,9 @@ fn check_clipboard(
     app_handle: &AppHandle,
     last_content: &mut Option<String>,
 ) -> Result<Option<ClipboardItem>, ()> {
-    // 在线程内获取 state，避免跨线程引用
     let state = app_handle.state::<AppState>();
-    let data_dir = match state.data_dir.lock() {
-        Ok(dir) => dir,
-        Err(_) => return Err(()),
-    };
 
-    let mut items = match state.clipboard_items.lock() {
-        Ok(i) => i,
-        Err(_) => return Err(()),
-    };
-
-    // 使用作用域确保锁在 arboard 操作前释放
+    // 使用作用域确保 arboard 操作不持有任何锁
     let new_item = {
         match arboard::Clipboard::new() {
             Ok(mut clipboard) => match clipboard.get_text() {
@@ -82,19 +71,9 @@ fn check_clipboard(
         }
     };
 
-    // arboard 操作完成后才修改 items
     if let Some(ref item) = new_item {
-        let is_duplicate = items.iter().any(|existing| {
-            existing.content == item.content && existing.item_type == item.item_type
-        });
-
-        if !is_duplicate {
-            items.insert(0, item.clone());
-            if let Err(e) = storage::save_clipboard_data(&data_dir, &items) {
-                eprintln!("保存剪贴板数据失败: {}", e);
-            }
-            drop(items);
-            drop(data_dir);
+        // 只改内存，文件由后台 flush 线程处理
+        if state.repo.add(item.clone()) {
             tray_menu_display(app_handle);
             return Ok(Some(item.clone()));
         }

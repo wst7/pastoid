@@ -71,21 +71,9 @@ fn build_tray_menu(app_handle: &AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn s
 
     let state = app_handle.state::<crate::models::AppState>();
 
-    // 获取历史记录
-    let items = state.clipboard_items.lock().unwrap();
-
-    // 排序：置顶在前，时间倒序
-    let mut sorted_items: Vec<_> = items.clone();
-    sorted_items.sort_by(|a, b| {
-        if a.is_pinned != b.is_pinned {
-            b.is_pinned.cmp(&a.is_pinned)
-        } else {
-            b.created_at.cmp(&a.created_at)
-        }
-    });
-
-    // 取前20条
-    let display_items: Vec<_> = sorted_items.into_iter().take(20).collect();
+    // 与 preference 页面保持一致，用 max_items 作为显示数量
+    let max_items = state.repo.max_items();
+    let display_items = state.repo.get_history(max_items as usize);
 
     // 添加历史记录标题（禁用）
     if !display_items.is_empty() {
@@ -162,37 +150,21 @@ pub fn tray_menu_display(app_handle: &AppHandle) {
 
 fn copy_item_to_clipboard(app_handle: &AppHandle, item_id: &str) {
     let state = app_handle.state::<crate::models::AppState>();
-    let items = state.clipboard_items.lock().unwrap();
 
-    let content = items
-        .iter()
-        .find(|i| i.id == item_id)
-        .map(|i| i.content.clone());
-
-    drop(items);
-
-    if let Some(text) = content {
+    if let Some(item) = state.repo.find_by_id(item_id) {
         if let Ok(mut clipboard) = arboard::Clipboard::new() {
-            let _ = clipboard.set_text(&text);
+            let _ = clipboard.set_text(&item.content);
         }
     }
 }
 
-
-
 fn clear_all_items(app_handle: &AppHandle) {
     let state = app_handle.state::<crate::models::AppState>();
 
-    let mut items = state.clipboard_items.lock().unwrap();
-    items.clear();
+    state.repo.clear();
+    // 立即 flush，确保托盘菜单重建时数据已清空
+    let _ = state.repo.flush_now();
 
-    // 保存到文件
-    let data_dir = state.data_dir.lock().unwrap();
-    let _ = crate::storage::save_clipboard_data(&data_dir, &items);
-
-    // 刷新托盘菜单
-    drop(items);
-    drop(data_dir);
     tray_menu_display(app_handle);
 
     // 通知前端清空

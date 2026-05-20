@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -22,6 +23,25 @@
         "fullscreen": false,
         "transparent": true,
         "titleBarStyle": "Overlay"
+      },
+      {
+        "label": "quick-paste",
+        "title": "ClipOn",
+        "url": "quick-paste.html",
+        "width": 500,
+        "height": 400,
+        "center": true,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "shadow": false,
+        "windowEffects": {
+          "effects": ["popover"],
+          "radius": 16
+        }
       }
     ],
     "security": {

@@ -63,30 +63,28 @@ export function useClipboard() {
     }
   }, [items]);
 
+  const reload = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data: ClipboardItem[] = await invoke('get_clipboard_items');
+      setItems(data);
+    } catch (err) {
+      console.error('同步失败:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const sync = async () => {
-      setIsLoading(true);
+    reload();
+
+    const unlistenClipboardChanged = listen<ClipboardItem>('clipboard_changed', async () => {
       try {
         const data: ClipboardItem[] = await invoke('get_clipboard_items');
         setItems(data);
       } catch (err) {
         console.error('同步失败:', err);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    sync();
-
-    const unlistenClipboardChanged = listen<ClipboardItem>('clipboard_changed', (event) => {
-      const newItem = event.payload;
-      setItems((prev) => {
-        const isDuplicate = prev.some(
-          (item) => item.content === newItem.content && item.type === newItem.type
-        );
-        if (isDuplicate) return prev;
-        return [newItem, ...prev];
-      });
     });
 
     const unlistenClipboardCleared = listen('clipboard-cleared', () => {
@@ -98,7 +96,7 @@ export function useClipboard() {
       unlistenClipboardChanged.then((fn) => fn());
       unlistenClipboardCleared.then((fn) => fn());
     };
-  }, []);
+  }, [reload]);
 
   return {
     items,
@@ -111,5 +109,6 @@ export function useClipboard() {
     copyToClipboard,
     deleteItem,
     togglePin,
+    reload,
   };
 }
