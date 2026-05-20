@@ -6,6 +6,26 @@ import { Search, Clipboard, Pin, Trash2, X } from "lucide-react";
 import { Kbd, Button } from "@heroui/react";
 import type { ClipboardItem } from "@/types/clipboard";
 
+interface SettingsData {
+  theme: string;
+}
+
+function applyTheme(theme: string) {
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const html = document.documentElement;
+  if (isDark) {
+    html.classList.add("dark");
+    html.classList.remove("light");
+    html.setAttribute("data-theme", "dark");
+  } else {
+    html.classList.remove("dark");
+    html.classList.add("light");
+    html.setAttribute("data-theme", "light");
+  }
+}
+
 export default function QuickPaste() {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ClipboardItem[]>([]);
@@ -68,16 +88,33 @@ export default function QuickPaste() {
     }
   }, []);
 
+  const clearAll = useCallback(async () => {
+    try {
+      await invoke("clear_clipboard_items");
+      setItems([]);
+    } catch (e) {
+      console.error("Clear all failed:", e);
+    }
+  }, []);
+
   const togglePinRef = useRef(togglePin);
   togglePinRef.current = togglePin;
 
   const deleteItemRef = useRef(deleteItem);
   deleteItemRef.current = deleteItem;
 
+  const clearAllRef = useRef(clearAll);
+  clearAllRef.current = clearAll;
+
   const pasteRef = useRef(paste);
   pasteRef.current = paste;
 
   useEffect(() => {
+    // 读取主题设置
+    invoke<SettingsData>("get_settings")
+      .then((data) => applyTheme(data.theme))
+      .catch(() => applyTheme("system"));
+
     loadItems();
 
     const unlisten = listen("panel-opened", () => {
@@ -93,6 +130,10 @@ export default function QuickPaste() {
       if (blurEnabled.current) {
         getCurrentWindow().hide();
       }
+    });
+
+    const unlistenTheme = listen<string>("theme-changed", (event) => {
+      applyTheme(event.payload);
     });
 
     const handleKey = (e: KeyboardEvent) => {
@@ -121,6 +162,9 @@ export default function QuickPaste() {
           deleteItemRef.current(item);
           setActiveIndex((prev) => Math.max(0, Math.min(prev, items.length - 2)));
         }
+      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        clearAllRef.current();
       }
     };
 
@@ -129,6 +173,7 @@ export default function QuickPaste() {
       window.removeEventListener("keydown", handleKey);
       unlisten.then((fn) => fn());
       unlistenBlur.then((fn) => fn());
+      unlistenTheme.then((fn) => fn());
     };
   }, []);
 
@@ -148,7 +193,7 @@ export default function QuickPaste() {
 
   return (
     <>
-      <div className="h-screen flex flex-col justify-center overflow-hidden rounded-2xl bg-white/85 dark:bg-zinc-900/85 border-2 border-zinc-300 dark:border-zinc-600">
+      <div className="h-screen flex flex-col overflow-hidden rounded-2xl bg-white/85 dark:bg-zinc-900/85 border-2 border-zinc-300 dark:border-zinc-600">
       {/* header */}
       <div className="shrink-0 px-4 pt-3 pb-2">
         <div className="flex items-center gap-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 px-3 py-2 ring-1 ring-zinc-200 dark:ring-zinc-700 focus-within:ring-2 focus-within:ring-blue-400/60 transition-shadow">
@@ -163,7 +208,7 @@ export default function QuickPaste() {
             autoFocus
             spellCheck={false}
           />
-          {search && (
+          {search ? (
             <Button
               isIconOnly
               variant="ghost"
@@ -173,12 +218,22 @@ export default function QuickPaste() {
             >
               <X size={14} />
             </Button>
-          )}
+          ) : items.length > 0 ? (
+            <Button
+              isIconOnly
+              variant="ghost"
+              size="sm"
+              onPress={clearAll}
+              className="text-zinc-400 hover:text-red-500 shrink-0 min-w-6 w-6 h-6"
+            >
+              <Trash2 size={14} />
+            </Button>
+          ) : null}
         </div>
       </div>
 
       {/* list */}
-      <div ref={listRef} className="overflow-y-auto px-2 pb-1 max-h-[320px]">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-2 pb-1">
         {filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-400">
             <Clipboard size={28} strokeWidth={1.5} />
@@ -267,6 +322,9 @@ export default function QuickPaste() {
           </span>
           <span className="flex items-center gap-1">
             <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘⌫</Kbd> 删除
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘⇧X</Kbd> 清除全部
           </span>
         </div>
         <span className="flex items-center gap-1">

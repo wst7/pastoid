@@ -9,6 +9,7 @@
     "clipboard-manager:default",
     "notification:default",
     "autostart:default",
+    "autostart:allow-is-enabled",
     "shell:default",
     "global-shortcut:default",
     "global-shortcut:allow-register",
