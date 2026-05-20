@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.0](https://github.com/wst7/clipon/compare/v1.4.1...v1.5.0) (2026-05-20)
+
+### ✨ Features | 新功能
+
+* add NSPanel level and style mask for fullscreen overlay ([5155054](https://github.com/wst7/clipon/commit/5155054b9a14485799aeac6dd701913f72ee5e21))
+* add shortcut field to Settings model ([403817d](https://github.com/wst7/clipon/commit/403817d176646f832f8786a7d767fb5413c3d2d9))
+* add shortcut manager module with register/unregister ([40de7d6](https://github.com/wst7/clipon/commit/40de7d605d5c8964fdc34506a28d184a95047579))
+* add shortcut recording input component ([3b0c8e6](https://github.com/wst7/clipon/commit/3b0c8e681123cedc9fd22dae6bdceb9f7bbda927))
+* integrate shortcut binding into settings page ([08aa033](https://github.com/wst7/clipon/commit/08aa0337a9378f1828f5a3efe05ef48afe478cad))
+* re-register shortcut on settings change ([8bce97c](https://github.com/wst7/clipon/commit/8bce97c1c918ef6e1b7183c1439a4ded38172d26))
+* tray accelerator, quick-paste clear, autostart fix, theme sync ([7df52f3](https://github.com/wst7/clipon/commit/7df52f3965bc1b391a421817038a9fb0810a6de0))
+* use shortcut module for shortcut registration on startup ([898e99c](https://github.com/wst7/clipon/commit/898e99c43fb18c05682e0f79fb6e13ba32d9f6ce))
+* use tauri-nspanel for fullscreen overlay ([5a02cc2](https://github.com/wst7/clipon/commit/5a02cc2334d61832cedb46da20e2010fb6b70240))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* use Settings default for shortcut fallback, log fallback failure ([ec27c4a](https://github.com/wst7/clipon/commit/ec27c4a60528af87cb0a1ee103c06e1419089edb))
+
 ## [1.4.1](https://github.com/wst7/clipon/compare/v1.4.0...v1.4.1) (2026-05-18)
 
 ## [1.4.0](https://github.com/wst7/clipon/compare/v1.3.0...v1.4.0) (2026-04-21)
