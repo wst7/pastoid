@@ -1,7 +1,8 @@
 {
   "appName": "ClipOn",
   "search": "Search...",
-  "noItems": "No clipboard items",
+  "noItems": "No items",
+  "noItemsHint": "Copied content will appear here",
   "pinned": "Pinned",
   "copy": "Copy",
   "delete": "Delete",
@@ -31,5 +32,6 @@
   "downloading": "Downloading...",
   "downloadUpdate": "Download Update",
   "installUpdate": "Install Update",
-  "downloadFailed": "Download failed, please retry"
+  "downloadFailed": "Download failed, please retry",
+  "shortcutLabel": "Quick Paste Shortcut"
 }

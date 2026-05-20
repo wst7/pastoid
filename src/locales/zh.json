@@ -2,7 +2,8 @@
   "appName": "ClipOn",
   "dark": "暗黑",
   "search": "搜索...",
-  "noItems": "暂无剪贴板记录",
+  "noItems": "暂无记录",
+  "noItemsHint": "复制内容后会显示在这里",
   "pinned": "已固定",
   "copy": "复制",
   "delete": "删除",
@@ -31,5 +32,6 @@
   "downloading": "下载中...",
   "downloadUpdate": "下载更新",
   "installUpdate": "安装更新",
-  "downloadFailed": "下载失败，请重试"
+  "downloadFailed": "下载失败，请重试",
+  "shortcutLabel": "快速粘贴快捷键"
 }
