@@ -1,4 +1,13 @@
-# Pastoid
+<p align="center">
+  <img src="public/logo.svg" alt="Pastoid" width="120" height="120">
+</p>
+
+<h1 align="center">Pastoid</h1>
+
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/wst7/pastoid?label=version" alt="Latest Release">
+  <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
+</p>
 
 Pastoid is a lightweight, fast clipboard manager for macOS, Windows, and Linux. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
 
