@@ -65,10 +65,13 @@ pub fn run() {
                 &shortcut_str,
             ) {
                 eprintln!(
-                    "Failed to register shortcut '{}': {}. Falling back to default.",
-                    shortcut_str, e
+                    "Failed to register shortcut '{}': {}. Falling back to '{}'.",
+                    shortcut_str, e, models::Settings::default().shortcut
                 );
-                let _ = shortcut::register(app.handle(), "Cmd+Shift+V");
+                let default_shortcut = models::Settings::default().shortcut;
+                if let Err(e2) = shortcut::register(app.handle(), &default_shortcut) {
+                    eprintln!("Failed to register fallback shortcut '{}': {}", default_shortcut, e2);
+                }
             }
 
             // 启动剪切板监听
