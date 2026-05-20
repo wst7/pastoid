@@ -23,11 +23,11 @@ pub struct ClipboardItem {
 
 // 应用状态
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub struct AppState {
-    pub clipboard_items: Mutex<Vec<ClipboardItem>>,
-    pub data_dir: Mutex<PathBuf>,
+    pub repo: Arc<crate::repository::ClipboardRepository>,
+    pub data_dir: PathBuf,
     pub settings: Mutex<Settings>,
 }
 
@@ -39,6 +39,7 @@ pub struct Settings {
     pub autostart: bool,
     #[serde(rename = "max_items")]
     pub max_items: u32,
+    pub shortcut: String,
 }
 
 impl Default for Settings {
@@ -48,6 +49,7 @@ impl Default for Settings {
             theme: "system".to_string(),
             autostart: false,
             max_items: 20,
+            shortcut: "Cmd+Shift+V".to_string(),
         }
     }
 }
@@ -112,6 +114,7 @@ mod tests {
         assert_eq!(settings.theme, "system");
         assert!(!settings.autostart);
         assert_eq!(settings.max_items, 20);
+        assert_eq!(settings.shortcut, "Cmd+Shift+V");
     }
 
     #[test]
@@ -121,6 +124,7 @@ mod tests {
             theme: "dark".to_string(),
             autostart: true,
             max_items: 50,
+            shortcut: "Ctrl+Alt+K".to_string(),
         };
         let settings2 = settings1.clone();
 
@@ -128,6 +132,7 @@ mod tests {
         assert_eq!(settings1.theme, settings2.theme);
         assert_eq!(settings1.autostart, settings2.autostart);
         assert_eq!(settings1.max_items, settings2.max_items);
+        assert_eq!(settings1.shortcut, settings2.shortcut);
     }
 
     #[test]
@@ -137,6 +142,7 @@ mod tests {
             theme: "dark".to_string(),
             autostart: true,
             max_items: 100,
+            shortcut: "Cmd+Shift+V".to_string(),
         };
 
         let json = serde_json::to_string(&settings).unwrap();
@@ -144,12 +150,14 @@ mod tests {
         assert!(json.contains("\"theme\":\"dark\""));
         assert!(json.contains("\"autostart\":true"));
         assert!(json.contains("\"max_items\":100"));
+        assert!(json.contains("\"shortcut\":\"Cmd+Shift+V\""));
 
         let decoded: Settings = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.language, "en");
         assert_eq!(decoded.theme, "dark");
         assert!(decoded.autostart);
         assert_eq!(decoded.max_items, 100);
+        assert_eq!(decoded.shortcut, "Cmd+Shift+V");
     }
 
     #[test]
