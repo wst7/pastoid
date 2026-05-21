@@ -50,8 +50,28 @@ Inside the panel:
 
 Pastoid stores your clipboard history locally on your machine. No cloud, no account, no tracking. Your data stays yours.
 
-## Supported Platforms
+## Installation
 
-- macOS 11+ (Intel & Apple Silicon)
-- Windows 10/11
-- Linux (AppImage & .deb)
+### macOS
+
+1. Download the `.dmg` file from the [latest release](https://github.com/wst7/pastoid/releases/latest).
+2. Open the `.dmg` and drag **Pastoid** into your **Applications** folder.
+3. If you see the message **"Pastoid.app" is damaged and can't be opened**, this is due to macOS Gatekeeper blocking unsigned apps. Run this command in Terminal to allow it:
+
+   ```bash
+   xattr -cr /Applications/Pastoid.app
+   ```
+
+4. Open Pastoid from your Applications folder. You may need to go to **System Settings → Privacy & Security** and click **Open Anyway** on the first launch.
+
+### Windows
+
+1. Download the `.msi` or `.exe` installer from the [latest release](https://github.com/wst7/pastoid/releases/latest).
+2. Run the installer and follow the prompts.
+
+### Linux
+
+Download the `.AppImage` or `.deb` package from the [latest release](https://github.com/wst7/pastoid/releases/latest).
+
+- **AppImage**: Make it executable and run it directly.
+- **.deb**: Install with `sudo dpkg -i pastoid_*.deb`.
