@@ -56,7 +56,7 @@
     "clipboard-manager": null,
     "notification": null,
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyRDZBMzM1MjcxODQ1RDAKUldUUVJSZ25OYVBXSXI2Znp2N3I3bWdEZjBhdUEzV0pJaGZUdUFjQjVCK2lFemRGSlJoNGUrWWYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNERUVCQUM5MjkzMzA1NTcKUldSWEJUTXB5YnJ1UFRnaklhWTZNRjdHb0hVcDV1VzdWV1V2Tm93ZnN4RjZGTytTRTZQbFU5MVoK",
       "endpoints": [
         "https://github.com/wst7/pastoid/releases/latest/download/latest.json"
       ]
