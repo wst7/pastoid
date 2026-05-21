@@ -113,7 +113,7 @@ export default function QuickPaste() {
     // 读取主题设置
     invoke<SettingsData>("get_settings")
       .then((data) => applyTheme(data.theme))
-      .catch(() => applyTheme("system"));
+      .catch(() => applyTheme("light"));
 
     loadItems();
 

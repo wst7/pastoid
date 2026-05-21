@@ -40,7 +40,6 @@ const languages = [
 ];
 
 const themes = (t: (key: string) => string) => [
-  { id: "system", name: t("system") },
   { id: "light", name: t("light") },
   { id: "dark", name: t("dark") },
 ];
@@ -64,10 +63,7 @@ export default function SettingsApp() {
   const [downloadedPath, setDownloadedPath] = useState<string | null>(null);
 
   const applyTheme = (theme: string) => {
-    const isDark =
-      theme === "dark" ||
-      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    console.log('[Theme] applyTheme called:', theme, 'isDark:', isDark, 'systemDark:', window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const isDark = theme === "dark";
     const html = document.documentElement;
 
     const currentWindow = getCurrentWindow();
@@ -88,14 +84,6 @@ export default function SettingsApp() {
 
   useEffect(() => {
     applyTheme(settings.theme);
-
-    // 当主题为"跟随系统"时，监听系统主题变化
-    if (settings.theme !== "system") return;
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => applyTheme("system");
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
   }, [settings.theme]);
 
   useEffect(() => {
