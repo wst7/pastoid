@@ -85,11 +85,15 @@ pub fn save_settings(
     if settings.autostart {
         if let Err(e) = autostart.enable() {
             eprintln!("Failed to enable autostart: {}", e);
+            #[cfg(target_os = "macos")]
+            return Err(format!("开启自启动失败: {}。请确保应用已安装到 /Applications/ 目录", e));
+            #[cfg(not(target_os = "macos"))]
             return Err(format!("开启自启动失败: {}", e));
         }
     } else {
+        // 关闭时忽略错误（可能登录项本来就不存在）
         if let Err(e) = autostart.disable() {
-            eprintln!("Failed to disable autostart: {}", e);
+            eprintln!("Warn: Failed to disable autostart (may not exist): {}", e);
         }
     }
 
