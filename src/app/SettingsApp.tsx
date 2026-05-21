@@ -5,25 +5,15 @@ import { useEffect, useState } from "react";
 import packageInfo from '../../package.json' with { type: 'json' };
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { check, Update } from "@tauri-apps/plugin-updater";
 import { Tabs, Label, ListBox, Select, Switch, Button, Spinner } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { Settings, Info, RefreshCw } from "lucide-react";
 
-interface UpdateInfo {
-  has_update: boolean;
+interface UpdateStatus {
+  update: Update | null;
   current_version: string;
-  latest_version: string;
-  download_url: string;
-  release_notes: string | null;
-}
-
-interface DownloadProgress {
-  downloaded: number;
-  total: number;
-  percent: number;
 }
 
 interface SettingsData {
@@ -57,10 +47,9 @@ export default function SettingsApp() {
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [downloadedPath, setDownloadedPath] = useState<string | null>(null);
 
   const applyTheme = (theme: string) => {
     const isDark = theme === "dark";
@@ -161,8 +150,11 @@ export default function SettingsApp() {
   const checkForUpdate = async () => {
     setCheckingUpdate(true);
     try {
-      const info = await invoke<UpdateInfo>("check_update");
-      setUpdateInfo(info);
+      const update = await check();
+      setUpdateStatus({
+        update: update || null,
+        current_version: packageInfo.version,
+      });
     } catch (error) {
       console.error("Failed to check update:", error);
     } finally {
@@ -170,31 +162,35 @@ export default function SettingsApp() {
     }
   };
 
-  const handleDownloadUpdate = async () => {
+  const handleDownloadAndInstall = async () => {
+    if (!updateStatus?.update) return;
+
     setIsDownloading(true);
     setDownloadProgress(0);
 
-    const unlisten = await listen<DownloadProgress>('download_progress', (event) => {
-      setDownloadProgress(event.payload.percent);
-    });
-
     try {
-      const path = await invoke<string>("start_download_update");
-      setDownloadedPath(path);
+      await updateStatus.update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case 'Started':
+            setDownloadProgress(0);
+            break;
+          case 'Progress':
+            // event.data.chunkLength 是当前块大小，需要手动累加计算百分比
+            setDownloadProgress((prev) => {
+              const newProgress = prev + (event.data.chunkLength / 1024 / 1024);
+              return Math.min(newProgress, 100);
+            });
+            break;
+          case 'Finished':
+            setDownloadProgress(100);
+            break;
+        }
+      });
+      // 安装完成后会自动重启
     } catch (error) {
-      console.error("Download failed:", error);
-      if (updateInfo?.download_url) {
-        openUrl(updateInfo.download_url);
-      }
+      console.error("Download or install failed:", error);
     } finally {
       setIsDownloading(false);
-      unlisten();
-    }
-  };
-
-  const handleInstall = () => {
-    if (downloadedPath) {
-      invoke("open_installer", { path: downloadedPath });
     }
   };
 
@@ -335,7 +331,7 @@ export default function SettingsApp() {
 
               <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
                 <h3 className="font-medium mb-3">{t('checkUpdate')}</h3>
-                {!updateInfo ? (
+                {!updateStatus ? (
                   <Button
                     onPress={checkForUpdate}
                     isDisabled={checkingUpdate}
@@ -349,13 +345,13 @@ export default function SettingsApp() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">{t('currentVersion')}</span>
-                      <span className="font-medium">{updateInfo.current_version}</span>
+                      <span className="font-medium">{updateStatus.current_version}</span>
                     </div>
-                    {updateInfo.has_update ? (
+                    {updateStatus.update ? (
                       <>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-green-500">{t('newVersion')}</span>
-                          <span className="font-medium text-green-500">{updateInfo.latest_version}</span>
+                          <span className="font-medium text-green-500">{updateStatus.update.version}</span>
                         </div>
 
                         {isDownloading ? (
@@ -363,24 +359,16 @@ export default function SettingsApp() {
                             <div className="w-full bg-muted rounded-full h-2">
                               <div
                                 className="bg-primary h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${downloadProgress}%` }}
+                                style={{ width: `${Math.min(downloadProgress, 100)}%` }}
                               />
                             </div>
                             <p className="text-xs text-center text-muted-foreground">
-                              {t('downloading')} {downloadProgress.toFixed(1)}%
+                              {t('downloading')}...
                             </p>
                           </div>
-                        ) : downloadedPath ? (
-                          <Button
-                            onPress={handleInstall}
-                            variant="primary"
-                            className="w-full"
-                          >
-                            {t('installUpdate')}
-                          </Button>
                         ) : (
                           <Button
-                            onPress={handleDownloadUpdate}
+                            onPress={handleDownloadAndInstall}
                             variant="primary"
                             className="w-full"
                           >
@@ -394,8 +382,7 @@ export default function SettingsApp() {
                     <Button
                       variant="ghost"
                       onPress={() => {
-                        setUpdateInfo(null);
-                        setDownloadedPath(null);
+                        setUpdateStatus(null);
                         setDownloadProgress(0);
                       }}
                       className="w-full"

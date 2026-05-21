@@ -10,6 +10,7 @@
     "notification:default",
     "autostart:default",
     "autostart:allow-is-enabled",
+    "updater:default",
     "shell:default",
     "global-shortcut:default",
     "global-shortcut:allow-register",
