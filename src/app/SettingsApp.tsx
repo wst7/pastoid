@@ -40,6 +40,7 @@ const languages = [
 ];
 
 const themes = (t: (key: string) => string) => [
+  { id: "system", name: t("system") },
   { id: "light", name: t("light") },
   { id: "dark", name: t("dark") },
 ];
@@ -66,6 +67,7 @@ export default function SettingsApp() {
     const isDark =
       theme === "dark" ||
       (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    console.log('[Theme] applyTheme called:', theme, 'isDark:', isDark, 'systemDark:', window.matchMedia("(prefers-color-scheme: dark)").matches);
     const html = document.documentElement;
 
     const currentWindow = getCurrentWindow();
@@ -86,6 +88,14 @@ export default function SettingsApp() {
 
   useEffect(() => {
     applyTheme(settings.theme);
+
+    // 当主题为"跟随系统"时，监听系统主题变化
+    if (settings.theme !== "system") return;
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => applyTheme("system");
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
   }, [settings.theme]);
 
   useEffect(() => {
@@ -133,7 +143,9 @@ export default function SettingsApp() {
 
   const handleThemeChange = (key: React.Key | null) => {
     if (!key) return;
-    const theme = key as string;
+    // HeroUI Select 可能传递 Set，需要提取第一个值
+    const selectedKey = (key as unknown) instanceof Set ? Array.from(key as unknown as Set<React.Key>)[0] : key;
+    const theme = String(selectedKey);
     const newSettings = { ...settings, theme };
     setSettings(newSettings);
     saveSettings(newSettings);
