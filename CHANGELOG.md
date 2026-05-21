@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0](https://github.com/wst7/clipon/compare/v1.5.0...v1.6.0) (2026-05-21)
+
+### ✨ Features | 新功能
+
+* migrate to Tauri official updater plugin ([c7b725b](https://github.com/wst7/clipon/commit/c7b725bb223c0676030120ffc8eeab4b58552c6a))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* correct quick-paste build and rename main window to settings ([a88c541](https://github.com/wst7/clipon/commit/a88c541e6263fb62c184445f2da106239a621351))
+* handle HeroUI Select Set key and add theme debug logging ([af79ab9](https://github.com/wst7/clipon/commit/af79ab9e9f052d78f3167bf6dba775e1497edacf))
+* improve autostart error messages for macOS development ([41bb154](https://github.com/wst7/clipon/commit/41bb15493405f2a19ee083c38e969c95fc97fd31))
+* remove 'system' theme option due to WebView matchMedia inaccuracy ([975ddc0](https://github.com/wst7/clipon/commit/975ddc0e75e11ea0fb50524b9f6af23e5c3f859e))
+* restrict tauri-nspanel to macOS-only to fix Linux build ([d54ae3c](https://github.com/wst7/clipon/commit/d54ae3cd15227f0ab4c19616322f6472a0aa5b10))
+
 ## [1.5.0](https://github.com/wst7/clipon/compare/v1.4.1...v1.5.0) (2026-05-20)
 
 ### ✨ Features | 新功能
