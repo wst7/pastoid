@@ -64,7 +64,7 @@ pub fn run() {
             tray::setup_tray(app)?;
 
             // 设置窗口关闭事件
-            if let Some(main_window) = app.get_webview_window("main") {
+            if let Some(main_window) = app.get_webview_window("settings") {
                 tray::setup_window_close_handler(&main_window);
             }
 

@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "label": "main",
+        "label": "settings",
         "title": "Pastoid",
         "width": 550,
         "height": 550,

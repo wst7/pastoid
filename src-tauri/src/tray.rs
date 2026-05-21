@@ -25,7 +25,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .on_tray_icon_event(|tray, event| match event {
             TrayIconEvent::DoubleClick { .. } => {
                 // 双击：显示主窗口
-                if let Some(window) = tray.app_handle().get_webview_window("main") {
+                if let Some(window) = tray.app_handle().get_webview_window("settings") {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -39,7 +39,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     crate::shortcut::toggle_quick_paste(app_handle);
                 }
                 "preferences" => {
-                    if let Some(window) = app_handle.get_webview_window("main") {
+                    if let Some(window) = app_handle.get_webview_window("settings") {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -66,7 +66,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .on_tray_icon_event(|tray, event| match event {
             TrayIconEvent::DoubleClick { .. } => {
                 // 双击：显示主窗口
-                if let Some(window) = tray.app_handle().get_webview_window("main") {
+                if let Some(window) = tray.app_handle().get_webview_window("settings") {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -80,7 +80,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     crate::shortcut::toggle_quick_paste(app_handle);
                 }
                 "preferences" => {
-                    if let Some(window) = app_handle.get_webview_window("main") {
+                    if let Some(window) = app_handle.get_webview_window("settings") {
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
