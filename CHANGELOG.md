@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.1](https://github.com/wst7/pastoid/compare/v1.6.0...v1.6.1) (2026-05-21)
+
+### 🐛 Bug Fixes | Bug 修复
+
+* update updater public key for new signing key pair ([9975971](https://github.com/wst7/pastoid/commit/9975971cf40bdd60517c2c404e74717896b35eeb))
+
 ## [1.6.0](https://github.com/wst7/clipon/compare/v1.5.0...v1.6.0) (2026-05-21)
 
 ### ✨ Features | 新功能
