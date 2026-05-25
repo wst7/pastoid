@@ -176,7 +176,10 @@ mod tests {
         let settings = load_settings(temp_dir.path());
         assert_eq!(settings.language, "zh");
         assert_eq!(settings.theme, "system");
+        #[cfg(target_os = "macos")]
         assert_eq!(settings.shortcut, "Cmd+Shift+V");
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(settings.shortcut, "Ctrl+Shift+V");
     }
 
     #[test]

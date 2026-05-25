@@ -49,7 +49,10 @@ impl Default for Settings {
             theme: "system".to_string(),
             autostart: false,
             max_items: 20,
+            #[cfg(target_os = "macos")]
             shortcut: "Cmd+Shift+V".to_string(),
+            #[cfg(not(target_os = "macos"))]
+            shortcut: "Ctrl+Shift+V".to_string(),
         }
     }
 }
@@ -114,7 +117,10 @@ mod tests {
         assert_eq!(settings.theme, "system");
         assert!(!settings.autostart);
         assert_eq!(settings.max_items, 20);
+        #[cfg(target_os = "macos")]
         assert_eq!(settings.shortcut, "Cmd+Shift+V");
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(settings.shortcut, "Ctrl+Shift+V");
     }
 
     #[test]
