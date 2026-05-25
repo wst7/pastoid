@@ -4,11 +4,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { Search, Clipboard, Pin, Trash2, X } from "lucide-react";
 import { Kbd, Button } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import type { ClipboardItem } from "@/types/clipboard";
 
 interface SettingsData {
   theme: string;
 }
+
+const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
 function applyTheme(theme: string) {
   const isDark =
@@ -27,6 +30,7 @@ function applyTheme(theme: string) {
 }
 
 export default function QuickPaste() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -203,7 +207,7 @@ export default function QuickPaste() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索剪贴板内容…"
+            placeholder={t("search")}
             className="flex-1 bg-transparent text-sm text-zinc-800 dark:text-zinc-100 outline-none placeholder:text-zinc-400"
             autoFocus
             spellCheck={false}
@@ -238,7 +242,7 @@ export default function QuickPaste() {
           <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-400">
             <Clipboard size={28} strokeWidth={1.5} />
             <span className="text-sm">
-              {search ? "没有匹配的内容" : "剪贴板为空"}
+              {search ? t("noMatches") : t("emptyClipboard")}
             </span>
           </div>
         ) : (
@@ -312,23 +316,65 @@ export default function QuickPaste() {
       <div className="shrink-0 flex items-center justify-between px-4 py-2 text-[11px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↑↓</Kbd> 导航
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↑↓</Kbd> {t("nav")}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↵</Kbd> 粘贴
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↵</Kbd> {t("paste")}
           </span>
-          <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘P</Kbd> 固定
-          </span>
-          <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘⌫</Kbd> 删除
-          </span>
-          <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">⌘⇧X</Kbd> 清除全部
-          </span>
+          {isMac ? (
+            <>
+              <span className="flex items-center gap-1">
+                <Kbd>
+                  <Kbd.Abbr keyValue="command" className="text-[10px]" />
+                  <Kbd.Content className="text-[10px]">P</Kbd.Content>
+                </Kbd>
+                {t("pin")}
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>
+                  <Kbd.Abbr keyValue="command" className="text-[10px]" />
+                  <Kbd.Content className="text-[10px]">⌫</Kbd.Content>
+                </Kbd>
+                {t("delete")}
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>
+                  <Kbd.Abbr keyValue="command" className="text-[10px]" />
+                  <Kbd.Abbr keyValue="shift" className="text-[10px]" />
+                  <Kbd.Content className="text-[10px]">X</Kbd.Content>
+                </Kbd>
+                {t("clearAll")}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1">
+                <Kbd>
+                  <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
+                  <Kbd.Content className="text-[10px]">P</Kbd.Content>
+                </Kbd>
+                {t("pin")}
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>
+                  <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
+                  <Kbd.Content className="text-[10px]">⌫</Kbd.Content>
+                </Kbd>
+                {t("delete")}
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>
+                  <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
+                  <Kbd.Abbr keyValue="shift" className="text-[10px]" />
+                  <Kbd.Content className="text-[10px]">X</Kbd.Content>
+                </Kbd>
+                {t("clearAll")}
+              </span>
+            </>
+          )}
         </div>
         <span className="flex items-center gap-1">
-          <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">Esc</Kbd> 关闭
+          <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">Esc</Kbd> {t("close")}
         </span>
       </div>
     </div>

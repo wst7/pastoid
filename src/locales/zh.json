@@ -34,5 +34,11 @@
   "installUpdate": "安装更新",
   "downloadFailed": "下载失败，请重试",
   "shortcutLabel": "快速粘贴快捷键",
-  "description": "轻量级剪贴板管理器"
+  "description": "轻量级剪贴板管理器",
+  "nav": "导航",
+  "paste": "粘贴",
+  "clearAll": "清除全部",
+  "close": "关闭",
+  "noMatches": "没有匹配的内容",
+  "emptyClipboard": "剪贴板为空"
 }

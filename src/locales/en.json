@@ -34,5 +34,11 @@
   "installUpdate": "Install Update",
   "downloadFailed": "Download failed, please retry",
   "shortcutLabel": "Quick Paste Shortcut",
-  "description": "Lightweight clipboard manager"
+  "description": "Lightweight clipboard manager",
+  "nav": "Navigate",
+  "paste": "Paste",
+  "clearAll": "Clear All",
+  "close": "Close",
+  "noMatches": "No matches",
+  "emptyClipboard": "Clipboard is empty"
 }
