@@ -303,10 +303,10 @@ export default function QuickPaste() {
       </div>
 
       {/* footer */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 text-[11px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 text-[11px] text-zinc-500 dark:text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <Kbd>
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
               <Kbd.Abbr keyValue="up" className="text-[10px]" />
               <Kbd.Content className="text-[10px]">/</Kbd.Content>
               <Kbd.Abbr keyValue="down" className="text-[10px]" />
@@ -314,7 +314,7 @@ export default function QuickPaste() {
             {t("nav")}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd>
+            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
               <Kbd.Abbr keyValue="enter" className="text-[10px]" />
             </Kbd>
             {t("paste")}
@@ -322,21 +322,21 @@ export default function QuickPaste() {
           {isMac ? (
             <>
               <span className="flex items-center gap-1">
-                <Kbd>
+                <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
                   <Kbd.Abbr keyValue="command" className="text-[10px]" />
                   <Kbd.Content className="text-[10px]">P</Kbd.Content>
                 </Kbd>
                 {t("pin")}
               </span>
               <span className="flex items-center gap-1">
-                <Kbd>
+                <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
                   <Kbd.Abbr keyValue="command" className="text-[10px]" />
                   <Kbd.Abbr keyValue="delete" className="text-[10px]" />
                 </Kbd>
                 {t("delete")}
               </span>
               <span className="flex items-center gap-1">
-                <Kbd>
+                <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
                   <Kbd.Abbr keyValue="command" className="text-[10px]" />
                   <Kbd.Abbr keyValue="shift" className="text-[10px]" />
                   <Kbd.Content className="text-[10px]">X</Kbd.Content>
@@ -347,21 +347,21 @@ export default function QuickPaste() {
           ) : (
             <>
               <span className="flex items-center gap-1">
-                <Kbd>
+                <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
                   <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
                   <Kbd.Content className="text-[10px]">P</Kbd.Content>
                 </Kbd>
                 {t("pin")}
               </span>
               <span className="flex items-center gap-1">
-                <Kbd>
+                <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
                   <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
                   <Kbd.Abbr keyValue="delete" className="text-[10px]" />
                 </Kbd>
                 {t("delete")}
               </span>
               <span className="flex items-center gap-1">
-                <Kbd>
+                <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
                   <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
                   <Kbd.Abbr keyValue="shift" className="text-[10px]" />
                   <Kbd.Content className="text-[10px]">X</Kbd.Content>
@@ -372,8 +372,8 @@ export default function QuickPaste() {
           )}
         </div>
         <span className="flex items-center gap-1">
-          <Kbd>
-            <Kbd.Abbr keyValue="escape" className="text-[10px]" />
+          <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200">
+            <Kbd.Content className="text-[10px]">Esc</Kbd.Content>
           </Kbd>
           {t("close")}
         </span>
