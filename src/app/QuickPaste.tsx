@@ -222,16 +222,6 @@ export default function QuickPaste() {
             >
               <X size={14} />
             </Button>
-          ) : items.length > 0 ? (
-            <Button
-              isIconOnly
-              variant="ghost"
-              size="sm"
-              onPress={clearAll}
-              className="text-zinc-400 hover:text-red-500 shrink-0 min-w-6 w-6 h-6"
-            >
-              <Trash2 size={14} />
-            </Button>
           ) : null}
         </div>
       </div>
