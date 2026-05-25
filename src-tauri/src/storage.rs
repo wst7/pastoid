@@ -20,10 +20,49 @@ pub fn get_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
     app_dir
 }
 
-/// 初始化日志：终端 + 文件
+const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024; // 5 MB
+const MAX_LOG_BACKUPS: usize = 3;
+
+/// 轮转日志文件：pastoid.log → pastoid.log.1 → pastoid.log.2 → pastoid.log.3（删除最旧）
+fn rotate_logs(log_dir: &Path) -> Result<(), String> {
+    let log_file = log_dir.join("pastoid.log");
+    if !log_file.exists() {
+        return Ok(());
+    }
+
+    let size = fs::metadata(&log_file)
+        .map_err(|e| format!("Failed to read log metadata: {}", e))?
+        .len();
+
+    if size < MAX_LOG_SIZE {
+        return Ok(());
+    }
+
+    // 删除最旧的备份
+    let oldest = log_dir.join(format!("pastoid.log.{}", MAX_LOG_BACKUPS));
+    if oldest.exists() {
+        let _ = fs::remove_file(&oldest);
+    }
+
+    // 依次后移：2→3, 1→2, current→1
+    for i in (1..MAX_LOG_BACKUPS).rev() {
+        let src = log_dir.join(format!("pastoid.log.{}", i));
+        let dest = log_dir.join(format!("pastoid.log.{}", i + 1));
+        if src.exists() {
+            let _ = fs::rename(&src, &dest);
+        }
+    }
+
+    let _ = fs::rename(&log_file, log_dir.join("pastoid.log.1"));
+    Ok(())
+}
+
+/// 初始化日志：终端 + 文件（带自动轮转）
 pub fn init_logger(data_dir: &Path) -> Result<(), String> {
     let log_dir = data_dir.join("logs");
     fs::create_dir_all(&log_dir).map_err(|e| format!("Failed to create log dir: {}", e))?;
+
+    rotate_logs(&log_dir)?;
 
     let log_file = log_dir.join("pastoid.log");
     let file = fs::OpenOptions::new()
