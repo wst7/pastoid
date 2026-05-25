@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0](https://github.com/wst7/pastoid/compare/v1.6.1...v1.7.0) (2026-05-25)
+
+### ✨ Features | 新功能
+
+* add log rotation (5MB max, keep 3 backups) ([85d800f](https://github.com/wst7/pastoid/commit/85d800f91670d5e17749cffa50c2af27c57b7061))
+* add startup and shutdown logs ([bc5dbef](https://github.com/wst7/pastoid/commit/bc5dbef0f64764686138b4c00803a2c730c01bea))
+* add structured logging with file output ([2e0ac27](https://github.com/wst7/pastoid/commit/2e0ac2703bf90c2472a002422be9173790595c0c))
+* auto-migrate data from old identifier com.pastoid.app to com.wst7.pastoid ([c8ad25e](https://github.com/wst7/pastoid/commit/c8ad25e02f0ddcffe9d1a874df224bdf969d24d5))
+* platform-aware shortcuts display with i18n in quick-paste panel ([d6ba0ca](https://github.com/wst7/pastoid/commit/d6ba0caea7c6684e7654da01d5ed524f72a7ccfe))
+* remove clear-all button from quick-paste panel header ([1a35a3b](https://github.com/wst7/pastoid/commit/1a35a3b1899c4591531f0d65860e3963605c19ff))
+* use RFC3339 format for log timestamps ([a9303a3](https://github.com/wst7/pastoid/commit/a9303a3fa22bb2b27eaa013cd7cdbbe751d0836a))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* normalize global shortcut for Windows/Linux platform ([ce3a52e](https://github.com/wst7/pastoid/commit/ce3a52ec7270be28c6e147cdc6d97ef473193140))
+* remove incorrect time_level override so log timestamps appear ([b685700](https://github.com/wst7/pastoid/commit/b68570051b2d8c0a3b7fe52465622c60be25c4c6))
+
 ## [1.6.1](https://github.com/wst7/pastoid/compare/v1.6.0...v1.6.1) (2026-05-21)
 
 ### 🐛 Bug Fixes | Bug 修复
