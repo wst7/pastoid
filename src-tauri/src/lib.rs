@@ -38,6 +38,9 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            // identifier 变更后自动迁移旧数据
+            storage::migrate_data_if_needed(&app.handle());
+
             let data_dir = storage::get_data_dir(&app.handle());
             let settings = storage::load_settings(&data_dir);
 

@@ -3,6 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
+const OLD_APP_IDENTIFIER: &str = "com.pastoid.app";
+
 pub fn get_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
     let app_dir = app_handle
         .path()
@@ -14,6 +16,69 @@ pub fn get_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
     }
 
     app_dir
+}
+
+/// 如果 identifier 变更导致 data_dir 改变，自动将旧目录数据迁移到新目录
+pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
+    let new_dir = match app_handle.path().app_data_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Migration: failed to get new app data dir: {}", e);
+            return;
+        }
+    };
+
+    // 如果新目录已有数据，说明不是首次启动，跳过迁移
+    let new_settings = new_dir.join("settings.json");
+    if new_settings.exists() {
+        return;
+    }
+
+    // 构建旧目录路径（基于旧 identifier）
+    let old_dir = if cfg!(target_os = "macos") {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("~"))
+            .join("Application Support")
+            .join(OLD_APP_IDENTIFIER)
+    } else if cfg!(target_os = "windows") {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("%APPDATA%"))
+            .join(OLD_APP_IDENTIFIER)
+    } else {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("~/.local/share"))
+            .join(OLD_APP_IDENTIFIER)
+    };
+
+    if !old_dir.exists() {
+        return;
+    }
+
+    eprintln!("Migration: detected old data dir at {:?}, migrating to {:?}", old_dir, new_dir);
+
+    if let Err(e) = fs::create_dir_all(&new_dir) {
+        eprintln!("Migration: failed to create new data dir: {}", e);
+        return;
+    }
+
+    // 复制所有文件
+    match fs::read_dir(&old_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let src = entry.path();
+                let dest = new_dir.join(entry.file_name());
+                if src.is_file() {
+                    if let Err(e) = fs::copy(&src, &dest) {
+                        eprintln!("Migration: failed to copy {:?} to {:?}: {}", src, dest, e);
+                    }
+                }
+            }
+            eprintln!("Migration: completed successfully");
+        }
+        Err(e) => {
+            eprintln!("Migration: failed to read old data dir: {}", e);
+        }
+    }
 }
 
 fn get_data_file_path(data_dir: &Path) -> PathBuf {
