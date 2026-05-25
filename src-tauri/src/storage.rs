@@ -409,4 +409,94 @@ mod tests {
         // pinned 项目应该保留
         assert!(loaded.iter().any(|i| i.content == "item 1"));
     }
+
+    #[test]
+    fn test_rotate_logs_under_threshold_noop() {
+        let temp_dir = create_temp_dir();
+        let log_dir = temp_dir.path().join("logs");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        // 写入 1KB 日志（小于 5MB 阈值）
+        fs::write(log_dir.join("pastoid.log"), "x".repeat(1024)).unwrap();
+
+        rotate_logs(&log_dir).unwrap();
+
+        // 不应产生任何备份文件
+        assert!(log_dir.join("pastoid.log").exists());
+        assert!(!log_dir.join("pastoid.log.1").exists());
+    }
+
+    #[test]
+    fn test_rotate_logs_over_threshold_creates_backup() {
+        let temp_dir = create_temp_dir();
+        let log_dir = temp_dir.path().join("logs");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        // 写入刚好超过 5MB 的内容
+        let over = (MAX_LOG_SIZE + 1024) as usize;
+        fs::write(log_dir.join("pastoid.log"), "x".repeat(over)).unwrap();
+
+        rotate_logs(&log_dir).unwrap();
+
+        // 当前日志被清空（新进程会重新创建），旧日志移到 .1
+        assert!(!log_dir.join("pastoid.log").exists());
+        assert!(log_dir.join("pastoid.log.1").exists());
+        assert!(!log_dir.join("pastoid.log.2").exists());
+    }
+
+    #[test]
+    fn test_rotate_logs_shifts_backups() {
+        let temp_dir = create_temp_dir();
+        let log_dir = temp_dir.path().join("logs");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        // 预置 .1 和 .2
+        fs::write(log_dir.join("pastoid.log.1"), "backup1").unwrap();
+        fs::write(log_dir.join("pastoid.log.2"), "backup2").unwrap();
+
+        // 当前日志超过阈值
+        let over = (MAX_LOG_SIZE + 1024) as usize;
+        fs::write(log_dir.join("pastoid.log"), "x".repeat(over)).unwrap();
+
+        rotate_logs(&log_dir).unwrap();
+
+        // .1 → .2, .2 → .3, current → .1
+        assert!(!log_dir.join("pastoid.log").exists());
+        assert!(log_dir.join("pastoid.log.1").exists());
+        assert!(log_dir.join("pastoid.log.2").exists());
+        assert!(log_dir.join("pastoid.log.3").exists());
+        assert!(!log_dir.join("pastoid.log.4").exists());
+
+        // 验证内容
+        assert_eq!(fs::read_to_string(log_dir.join("pastoid.log.2")).unwrap(), "backup1");
+        assert_eq!(fs::read_to_string(log_dir.join("pastoid.log.3")).unwrap(), "backup2");
+    }
+
+    #[test]
+    fn test_rotate_logs_drops_oldest_backup() {
+        let temp_dir = create_temp_dir();
+        let log_dir = temp_dir.path().join("logs");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        // 预置 .1 .2 .3（达到上限）
+        fs::write(log_dir.join("pastoid.log.1"), "b1").unwrap();
+        fs::write(log_dir.join("pastoid.log.2"), "b2").unwrap();
+        fs::write(log_dir.join("pastoid.log.3"), "b3").unwrap();
+
+        // 当前日志超过阈值
+        let over = (MAX_LOG_SIZE + 1024) as usize;
+        fs::write(log_dir.join("pastoid.log"), "x".repeat(over)).unwrap();
+
+        rotate_logs(&log_dir).unwrap();
+
+        // 最旧的 .3 被删除，但 .2 移到 .3，.1 移到 .2，current → .1
+        assert!(!log_dir.join("pastoid.log.4").exists());
+        assert!(log_dir.join("pastoid.log.3").exists());
+        assert!(log_dir.join("pastoid.log.2").exists());
+        assert!(log_dir.join("pastoid.log.1").exists());
+
+        // 验证内容链式移动
+        assert_eq!(fs::read_to_string(log_dir.join("pastoid.log.3")).unwrap(), "b2");
+        assert_eq!(fs::read_to_string(log_dir.join("pastoid.log.2")).unwrap(), "b1");
+    }
 }
