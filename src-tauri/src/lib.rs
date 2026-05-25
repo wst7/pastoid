@@ -44,7 +44,6 @@ pub fn run() {
             if let Err(e) = storage::init_logger(&data_dir) {
                 eprintln!("Failed to initialize logger: {}", e);
             }
-
             // identifier 变更后自动迁移旧数据
             storage::migrate_data_if_needed(&app.handle());
             let settings = storage::load_settings(&data_dir);
@@ -122,6 +121,8 @@ pub fn run() {
 
             // 启动剪切板监听
             clipboard::start_clipboard_monitor(app.handle().clone());
+
+            log::info!("Pastoid started");
 
             Ok(())
         })

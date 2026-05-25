@@ -48,6 +48,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     clear_all_items(app_handle);
                 }
                 "quit" => {
+                    log::info!("Pastoid exiting");
                     std::process::exit(0);
                 }
                 _ => {}
@@ -89,6 +90,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     clear_all_items(app_handle);
                 }
                 "quit" => {
+                    log::info!("Pastoid exiting");
                     std::process::exit(0);
                 }
                 _ => {}
