@@ -303,77 +303,77 @@ export default function QuickPaste() {
       </div>
 
       {/* footer */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 text-[11px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <Kbd>
-              <Kbd.Abbr keyValue="up" className="text-[10px]" />
-              <Kbd.Content className="text-[10px]">/</Kbd.Content>
-              <Kbd.Abbr keyValue="down" className="text-[10px]" />
+      <div className="shrink-0 flex items-center justify-between px-4 py-2.5 text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-200 dark:border-zinc-700">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5">
+            <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+              <Kbd.Abbr keyValue="up" className="text-xs" />
+              <Kbd.Content className="text-xs">/</Kbd.Content>
+              <Kbd.Abbr keyValue="down" className="text-xs" />
             </Kbd>
             {t("nav")}
           </span>
-          <span className="flex items-center gap-1">
-            <Kbd>
-              <Kbd.Abbr keyValue="enter" className="text-[10px]" />
+          <span className="flex items-center gap-1.5">
+            <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+              <Kbd.Abbr keyValue="enter" className="text-xs" />
             </Kbd>
             {t("paste")}
           </span>
           {isMac ? (
             <>
-              <span className="flex items-center gap-1">
-                <Kbd>
-                  <Kbd.Abbr keyValue="command" className="text-[10px]" />
-                  <Kbd.Content className="text-[10px]">P</Kbd.Content>
+              <span className="flex items-center gap-1.5">
+                <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+                  <Kbd.Abbr keyValue="command" className="text-xs" />
+                  <Kbd.Content className="text-xs">P</Kbd.Content>
                 </Kbd>
                 {t("pin")}
               </span>
-              <span className="flex items-center gap-1">
-                <Kbd>
-                  <Kbd.Abbr keyValue="command" className="text-[10px]" />
-                  <Kbd.Abbr keyValue="delete" className="text-[10px]" />
+              <span className="flex items-center gap-1.5">
+                <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+                  <Kbd.Abbr keyValue="command" className="text-xs" />
+                  <Kbd.Abbr keyValue="delete" className="text-xs" />
                 </Kbd>
                 {t("delete")}
               </span>
-              <span className="flex items-center gap-1">
-                <Kbd>
-                  <Kbd.Abbr keyValue="command" className="text-[10px]" />
-                  <Kbd.Abbr keyValue="shift" className="text-[10px]" />
-                  <Kbd.Content className="text-[10px]">X</Kbd.Content>
+              <span className="flex items-center gap-1.5">
+                <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+                  <Kbd.Abbr keyValue="command" className="text-xs" />
+                  <Kbd.Abbr keyValue="shift" className="text-xs" />
+                  <Kbd.Content className="text-xs">X</Kbd.Content>
                 </Kbd>
                 {t("clearAll")}
               </span>
             </>
           ) : (
             <>
-              <span className="flex items-center gap-1">
-                <Kbd>
-                  <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
-                  <Kbd.Content className="text-[10px]">P</Kbd.Content>
+              <span className="flex items-center gap-1.5">
+                <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+                  <Kbd.Abbr keyValue="ctrl" className="text-xs" />
+                  <Kbd.Content className="text-xs">P</Kbd.Content>
                 </Kbd>
                 {t("pin")}
               </span>
-              <span className="flex items-center gap-1">
-                <Kbd>
-                  <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
-                  <Kbd.Abbr keyValue="delete" className="text-[10px]" />
+              <span className="flex items-center gap-1.5">
+                <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+                  <Kbd.Abbr keyValue="ctrl" className="text-xs" />
+                  <Kbd.Abbr keyValue="delete" className="text-xs" />
                 </Kbd>
                 {t("delete")}
               </span>
-              <span className="flex items-center gap-1">
-                <Kbd>
-                  <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
-                  <Kbd.Abbr keyValue="shift" className="text-[10px]" />
-                  <Kbd.Content className="text-[10px]">X</Kbd.Content>
+              <span className="flex items-center gap-1.5">
+                <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+                  <Kbd.Abbr keyValue="ctrl" className="text-xs" />
+                  <Kbd.Abbr keyValue="shift" className="text-xs" />
+                  <Kbd.Content className="text-xs">X</Kbd.Content>
                 </Kbd>
                 {t("clearAll")}
               </span>
             </>
           )}
         </div>
-        <span className="flex items-center gap-1">
-          <Kbd>
-            <Kbd.Abbr keyValue="escape" className="text-[10px]" />
+        <span className="flex items-center gap-1.5">
+          <Kbd className="bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-sm">
+            <Kbd.Content className="text-xs">Esc</Kbd.Content>
           </Kbd>
           {t("close")}
         </span>
