@@ -78,6 +78,7 @@ pub fn init_logger(data_dir: &Path) -> Result<(), String> {
 
     let file_config = ConfigBuilder::new()
         .set_target_level(LevelFilter::Debug)
+        .set_time_format_rfc3339()
         .build();
 
     CombinedLogger::init(vec![
