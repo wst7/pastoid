@@ -316,10 +316,18 @@ export default function QuickPaste() {
       <div className="shrink-0 flex items-center justify-between px-4 py-2 text-[11px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↑↓</Kbd> {t("nav")}
+            <Kbd>
+              <Kbd.Abbr keyValue="up" className="text-[10px]" />
+              <Kbd.Content className="text-[10px]">/</Kbd.Content>
+              <Kbd.Abbr keyValue="down" className="text-[10px]" />
+            </Kbd>
+            {t("nav")}
           </span>
           <span className="flex items-center gap-1">
-            <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">↵</Kbd> {t("paste")}
+            <Kbd>
+              <Kbd.Abbr keyValue="enter" className="text-[10px]" />
+            </Kbd>
+            {t("paste")}
           </span>
           {isMac ? (
             <>
@@ -333,7 +341,7 @@ export default function QuickPaste() {
               <span className="flex items-center gap-1">
                 <Kbd>
                   <Kbd.Abbr keyValue="command" className="text-[10px]" />
-                  <Kbd.Content className="text-[10px]">⌫</Kbd.Content>
+                  <Kbd.Abbr keyValue="delete" className="text-[10px]" />
                 </Kbd>
                 {t("delete")}
               </span>
@@ -358,7 +366,7 @@ export default function QuickPaste() {
               <span className="flex items-center gap-1">
                 <Kbd>
                   <Kbd.Abbr keyValue="ctrl" className="text-[10px]" />
-                  <Kbd.Content className="text-[10px]">⌫</Kbd.Content>
+                  <Kbd.Abbr keyValue="delete" className="text-[10px]" />
                 </Kbd>
                 {t("delete")}
               </span>
@@ -374,7 +382,10 @@ export default function QuickPaste() {
           )}
         </div>
         <span className="flex items-center gap-1">
-          <Kbd className="bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] px-1.5 py-0.5">Esc</Kbd> {t("close")}
+          <Kbd>
+            <Kbd.Abbr keyValue="escape" className="text-[10px]" />
+          </Kbd>
+          {t("close")}
         </span>
       </div>
     </div>
