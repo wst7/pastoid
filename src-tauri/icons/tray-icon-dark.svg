@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none">
-  <rect width="8" height="4" x="8" y="2" rx="1" ry="1" fill="#555555"/>
-  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" fill="none" stroke="#555555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="12" y1="11" x2="16" y2="11" stroke="#555555" stroke-width="2" stroke-linecap="round"/>
-  <line x1="12" y1="16" x2="16" y2="16" stroke="#555555" stroke-width="2" stroke-linecap="round"/>
-  <line x1="9" y1="11" x2="9.01" y2="11" stroke="#555555" stroke-width="2" stroke-linecap="round"/>
-  <line x1="9" y1="16" x2="9.01" y2="16" stroke="#555555" stroke-width="2" stroke-linecap="round"/>
+  <rect width="8" height="4" x="8" y="2" rx="1" ry="1" fill="#1a1a1a"/>
+  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="12" y1="11" x2="16" y2="11" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="12" y1="16" x2="16" y2="16" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="9" y1="11" x2="9.01" y2="11" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="9" y1="16" x2="9.01" y2="16" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
 </svg>
