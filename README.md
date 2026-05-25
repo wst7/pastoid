@@ -13,7 +13,7 @@ Pastoid is a lightweight, fast clipboard manager for macOS, Windows, and Linux. 
 
 ## Why Pastoid?
 
-Your clipboard is one of the most used tools on your computer, yet it only remembers one item at a time. Pastoid changes that by automatically saving everything you copy, so you never lose a snippet again. Whether it's a code block, a URL, a password, or a piece of text you copied hours ago — Pastoid keeps it safe and makes it easy to find.
+Pastoid keeps your clipboard history at your fingertips — a configurable number of recent items, ready to search and paste in an instant. Whether it's a code block, a URL or a piece of text you copied hours ago — Pastoid keeps it accessible.
 
 ## Key Features
 
