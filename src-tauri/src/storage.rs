@@ -1,4 +1,6 @@
 use crate::models::{ClipboardItem, Settings};
+use log::LevelFilter;
+use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode, WriteLogger};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
@@ -18,12 +20,43 @@ pub fn get_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
     app_dir
 }
 
+/// 初始化日志：终端 + 文件
+pub fn init_logger(data_dir: &Path) -> Result<(), String> {
+    let log_dir = data_dir.join("logs");
+    fs::create_dir_all(&log_dir).map_err(|e| format!("Failed to create log dir: {}", e))?;
+
+    let log_file = log_dir.join("pastoid.log");
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)
+        .map_err(|e| format!("Failed to open log file: {}", e))?;
+
+    let term_config = ConfigBuilder::new()
+        .set_time_level(LevelFilter::Error)
+        .set_target_level(LevelFilter::Error)
+        .build();
+
+    let file_config = ConfigBuilder::new()
+        .set_time_level(LevelFilter::Debug)
+        .set_target_level(LevelFilter::Debug)
+        .build();
+
+    CombinedLogger::init(vec![
+        TermLogger::new(LevelFilter::Info, term_config, TerminalMode::Stderr, ColorChoice::Auto),
+        WriteLogger::new(LevelFilter::Debug, file_config, file),
+    ])
+    .map_err(|e| format!("Failed to init logger: {}", e))?;
+
+    Ok(())
+}
+
 /// 如果 identifier 变更导致 data_dir 改变，自动将旧目录数据迁移到新目录
 pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
     let new_dir = match app_handle.path().app_data_dir() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Migration: failed to get new app data dir: {}", e);
+            log::error!("Migration: failed to get new app data dir: {}", e);
             return;
         }
     };
@@ -54,29 +87,29 @@ pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
         return;
     }
 
-    eprintln!("Migration: detected old data dir at {:?}, migrating to {:?}", old_dir, new_dir);
+    log::info!("Migration: detected old data dir at {:?}, migrating to {:?}", old_dir, new_dir);
 
     if let Err(e) = fs::create_dir_all(&new_dir) {
-        eprintln!("Migration: failed to create new data dir: {}", e);
+        log::error!("Migration: failed to create new data dir: {}", e);
         return;
     }
 
     // 复制所有文件
     match fs::read_dir(&old_dir) {
         Ok(entries) => {
-            for entry in entries.flatten() {
+                for entry in entries.flatten() {
                 let src = entry.path();
                 let dest = new_dir.join(entry.file_name());
                 if src.is_file() {
                     if let Err(e) = fs::copy(&src, &dest) {
-                        eprintln!("Migration: failed to copy {:?} to {:?}: {}", src, dest, e);
+                        log::error!("Migration: failed to copy {:?} to {:?}: {}", src, dest, e);
                     }
                 }
             }
-            eprintln!("Migration: completed successfully");
+            log::info!("Migration: completed successfully");
         }
         Err(e) => {
-            eprintln!("Migration: failed to read old data dir: {}", e);
+            log::error!("Migration: failed to read old data dir: {}", e);
         }
     }
 }
@@ -117,12 +150,12 @@ pub fn load_clipboard_data(data_dir: &Path, max_items: u32) -> Vec<ClipboardItem
                 items
             }
             Err(e) => {
-                eprintln!("Failed to parse clipboard data: {}", e);
+                log::error!("Failed to parse clipboard data: {}", e);
                 Vec::new()
             }
         },
         Err(e) => {
-            eprintln!("Failed to read clipboard data file: {}", e);
+            log::error!("Failed to read clipboard data file: {}", e);
             Vec::new()
         }
     }
@@ -163,12 +196,12 @@ pub fn load_settings(data_dir: &Path) -> Settings {
         Ok(content) => match serde_json::from_str::<Settings>(&content) {
             Ok(settings) => settings,
             Err(e) => {
-                eprintln!("Failed to parse settings: {}", e);
+                log::error!("Failed to parse settings: {}", e);
                 Settings::default()
             }
         },
         Err(e) => {
-            eprintln!("Failed to read settings file: {}", e);
+            log::error!("Failed to read settings file: {}", e);
             Settings::default()
         }
     }

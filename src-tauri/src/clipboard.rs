@@ -36,7 +36,7 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
                 Err(_) => {
                     consecutive_errors += 1;
                     if consecutive_errors >= max_errors {
-                        eprintln!("连续 {} 次读取剪贴板失败，暂停监控", max_errors);
+                        log::error!("连续 {} 次读取剪贴板失败，暂停监控", max_errors);
                     }
                 }
             }

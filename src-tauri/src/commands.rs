@@ -68,7 +68,7 @@ pub fn save_settings(
     let autostart = app_handle.autolaunch();
     if settings.autostart {
         if let Err(e) = autostart.enable() {
-            eprintln!("Failed to enable autostart: {}", e);
+            log::error!("Failed to enable autostart: {}", e);
             #[cfg(target_os = "macos")]
             return Err(format!("开启自启动失败: {}。请确保应用已安装到 /Applications/ 目录", e));
             #[cfg(not(target_os = "macos"))]
@@ -77,7 +77,7 @@ pub fn save_settings(
     } else {
         // 关闭时忽略错误（可能登录项本来就不存在）
         if let Err(e) = autostart.disable() {
-            eprintln!("Warn: Failed to disable autostart (may not exist): {}", e);
+            log::warn!("Failed to disable autostart (may not exist): {}", e);
         }
     }
 
@@ -93,20 +93,20 @@ pub fn save_settings(
 
         // 先注销旧快捷键
         if let Err(e) = crate::shortcut::unregister(&app_handle, &old_shortcut) {
-            eprintln!("Failed to unregister old shortcut '{}': {}", old_shortcut, e);
+            log::error!("Failed to unregister old shortcut '{}': {}", old_shortcut, e);
         }
 
         // 注册新快捷键
         if let Err(e) = crate::shortcut::register(&app_handle, &new_shortcut) {
             // 注册失败时回滚到旧快捷键
-            eprintln!("Failed to register new shortcut '{}': {}", new_shortcut, e);
+            log::error!("Failed to register new shortcut '{}': {}", new_shortcut, e);
             let _ = crate::shortcut::register(&app_handle, &old_shortcut);
             return Err(format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
         }
 
         // 更新托盘菜单上的快捷键显示
         if let Err(e) = crate::tray::update_tray_menu(&app_handle) {
-            eprintln!("Failed to update tray menu: {}", e);
+            log::error!("Failed to update tray menu: {}", e);
         }
     }
 

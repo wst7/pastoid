@@ -39,6 +39,8 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 rust-i18n = "3"
 open = "5.0.0"
 futures-util = "0.3"
+log = "0.4"
+simplelog = { version = "0.12", default-features = false, features = ["termcolor", "local-offset"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 

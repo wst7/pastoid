@@ -38,10 +38,15 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            let data_dir = storage::get_data_dir(&app.handle());
+
+            // 初始化日志
+            if let Err(e) = storage::init_logger(&data_dir) {
+                eprintln!("Failed to initialize logger: {}", e);
+            }
+
             // identifier 变更后自动迁移旧数据
             storage::migrate_data_if_needed(&app.handle());
-
-            let data_dir = storage::get_data_dir(&app.handle());
             let settings = storage::load_settings(&data_dir);
 
             // 设置语言
@@ -105,13 +110,13 @@ pub fn run() {
                 app.handle(),
                 &shortcut_str,
             ) {
-                eprintln!(
+                log::error!(
                     "Failed to register shortcut '{}': {}. Falling back to '{}'.",
                     shortcut_str, e, models::Settings::default().shortcut
                 );
                 let default_shortcut = models::Settings::default().shortcut;
                 if let Err(e2) = shortcut::register(app.handle(), &default_shortcut) {
-                    eprintln!("Failed to register fallback shortcut '{}': {}", default_shortcut, e2);
+                    log::error!("Failed to register fallback shortcut '{}': {}", default_shortcut, e2);
                 }
             }
 
