@@ -77,7 +77,6 @@ pub fn init_logger(data_dir: &Path) -> Result<(), String> {
         .build();
 
     let file_config = ConfigBuilder::new()
-        .set_time_level(LevelFilter::Debug)
         .set_target_level(LevelFilter::Debug)
         .build();
 
