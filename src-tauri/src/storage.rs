@@ -222,7 +222,7 @@ pub fn init_logger(data_dir: &Path) -> Result<(), String> {
             MAX_LOG_SIZE,
             MAX_LOG_BACKUPS,
             LevelFilter::Debug,
-        )?),  
+        )?),
     ])
     .map_err(|e| format!("Failed to init logger: {}", e))?;
 
@@ -322,15 +322,31 @@ pub(crate) fn ensure_images_dir(data_dir: &Path) -> Result<PathBuf, String> {
 
 pub(crate) fn delete_image_file(data_dir: &Path, relative_path: &str) {
     let abs_path = data_dir.join(relative_path);
-    // 安全校验：确保路径不越界
-    if let Ok(canonical) = abs_path.canonicalize() {
-        if canonical.starts_with(data_dir) {
-            if let Err(e) = fs::remove_file(&canonical) {
-                log::warn!("Failed to delete image file {:?}: {}", canonical, e);
-            }
-        } else {
-            log::warn!("Refusing to delete image outside data_dir: {:?}", canonical);
+
+    // 两侧都要 canonicalize 后再比较：data_dir 本身也可能含符号链接
+    // （macOS 上 /var -> /private/var），只解析目标会误判为越界而拒绝删除。
+    let base = match data_dir.canonicalize() {
+        Ok(base) => base,
+        Err(e) => {
+            log::warn!("Cannot resolve data_dir {:?}: {}", data_dir, e);
+            return;
         }
+    };
+
+    // canonicalize 会解析 `..`，因此这里的 starts_with 就是真正的越界防护
+    let canonical = match abs_path.canonicalize() {
+        Ok(canonical) => canonical,
+        // 文件不存在（可能已被删过）无需处理
+        Err(_) => return,
+    };
+
+    if !canonical.starts_with(&base) {
+        log::warn!("Refusing to delete image outside data_dir: {:?}", canonical);
+        return;
+    }
+
+    if let Err(e) = fs::remove_file(&canonical) {
+        log::warn!("Failed to delete image file {:?}: {}", canonical, e);
     }
 }
 
@@ -726,5 +742,63 @@ mod tests {
             fs::read_to_string(log_dir.join("pastoid.log.2")).unwrap(),
             "backup1"
         );
+    }
+
+    #[test]
+    fn test_delete_image_file_removes_file_inside_data_dir() {
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("data");
+        let images_dir = data_dir.join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+        let image = images_dir.join("shot.png");
+        fs::write(&image, b"png").unwrap();
+
+        delete_image_file(&data_dir, "images/shot.png");
+
+        assert!(!image.exists());
+    }
+
+    #[test]
+    fn test_delete_image_file_refuses_path_outside_data_dir() {
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+        let outside = temp_dir.path().join("outside.txt");
+        fs::write(&outside, b"keep me").unwrap();
+
+        delete_image_file(&data_dir, "../outside.txt");
+
+        assert!(outside.exists());
+    }
+
+    #[test]
+    fn test_delete_image_file_missing_file_is_noop() {
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+
+        delete_image_file(&data_dir, "images/nope.png");
+    }
+
+    #[test]
+    fn test_enforce_max_items_deletes_trimmed_image_file() {
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("data");
+        let images_dir = data_dir.join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+        let image = images_dir.join("old.png");
+        fs::write(&image, b"png").unwrap();
+
+        let mut old_image = ClipboardItem::new("images/old.png".to_string(), "image");
+        old_image.created_at = 1_000;
+        let mut newer_text = ClipboardItem::new("newer".to_string(), "text");
+        newer_text.created_at = 2_000;
+        let mut items = vec![old_image, newer_text];
+
+        enforce_max_items(&mut items, 1, &data_dir);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].content, "newer");
+        assert!(!image.exists(), "trimmed image file should be removed");
     }
 }

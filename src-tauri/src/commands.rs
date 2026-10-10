@@ -6,6 +6,7 @@ use tauri::{Emitter, Manager};
 
 struct ClipboardSnapshot {
     text: Option<String>,
+    image: Option<arboard::ImageData<'static>>,
 }
 
 fn capture_clipboard() -> ClipboardSnapshot {
@@ -13,13 +14,27 @@ fn capture_clipboard() -> ClipboardSnapshot {
         Ok(c) => c,
         Err(e) => {
             log::warn!("capture_clipboard: failed to open clipboard: {}", e);
-            return ClipboardSnapshot { text: None };
+            return ClipboardSnapshot { text: None, image: None };
         }
     };
 
     let text = clip.get_text().ok();
 
-    ClipboardSnapshot { text }
+    // 只在没有文本时读取图片：一是避免无谓地搬运大图，
+    // 二是还原时文本优先，两者同时存在只保留文本表示。
+    let image = if text.is_none() {
+        clip.get_image()
+            .ok()
+            .map(|img| arboard::ImageData {
+                width: img.width,
+                height: img.height,
+                bytes: std::borrow::Cow::Owned(img.bytes.into_owned()),
+            })
+    } else {
+        None
+    };
+
+    ClipboardSnapshot { text, image }
 }
 
 fn restore_clipboard(snapshot: ClipboardSnapshot) {
@@ -34,6 +49,13 @@ fn restore_clipboard(snapshot: ClipboardSnapshot) {
     if let Some(text) = &snapshot.text {
         if let Err(e) = clip.set_text(text) {
             log::warn!("restore_clipboard: failed to restore text: {}", e);
+        }
+        return;
+    }
+
+    if let Some(image) = snapshot.image {
+        if let Err(e) = clip.set_image(image) {
+            log::warn!("restore_clipboard: failed to restore image: {}", e);
         }
     }
 }
@@ -132,7 +154,10 @@ pub fn save_settings(
         let _ = app_handle.emit("theme-changed", settings.theme.clone());
     }
 
-    // 先将设置写入内存和文件（快捷键变更立即保存，注册异步执行）
+    // 先落盘：写入失败就直接返回，此时内存仍是旧值，磁盘与内存保持一致
+    storage::save_settings_to_file(&state.data_dir, &settings)?;
+
+    // 落盘成功后再更新内存
     *current_settings = settings.clone();
 
     // 更新语言环境
@@ -140,8 +165,6 @@ pub fn save_settings(
 
     // ⚠️ 关键修复：在启动后台线程前释放锁，避免死锁
     drop(current_settings);
-
-    storage::save_settings_to_file(&state.data_dir, &settings)?;
 
     if shortcut_changed {
         let app = app_handle.clone();
@@ -170,14 +193,11 @@ pub fn save_settings(
                         if let Ok(mut s) = state.settings.try_lock() {
                             s.shortcut = old_shortcut.clone();
                             let _ = storage::save_settings_to_file(&data_dir, &s);
-                            // 通知前端刷新设置
-                            let _ = app.emit("settings-changed", ());
                         } else {
                             log::warn!("无法回滚快捷键设置：settings 锁被占用");
-                            // 通知前端设置不一致,需要刷新
-                            let _ = app.emit("settings-sync-needed", ());
                         }
                     }
+                    // 前端据此回滚 UI 上显示的快捷键（下面两个分支都会走到）
                     let _ = app.emit("shortcut-error",
                         format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
                 }

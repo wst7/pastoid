@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,6 +14,34 @@ static LAST_SHORTCUT_TRIGGER: AtomicU64 = AtomicU64::new(0);
 // 当前实际注册成功的快捷键（normalized）。健康监控据此检查运行期被修改过的快捷键，
 // 而不是启动时的快照。
 static CURRENT_SHORTCUT: RwLock<String> = RwLock::new(String::new());
+
+// 应用退出时置位，让健康监控线程停止干预快捷键
+static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// 请求健康监控线程退出（应用退出时调用）
+pub fn request_shutdown() {
+    SHUTDOWN_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+fn shutdown_requested() -> bool {
+    SHUTDOWN_REQUESTED.load(Ordering::Relaxed)
+}
+
+/// 分片睡眠，便于在应用退出时及时收尾而不是等满一个检查周期。
+/// 返回 `false` 表示期间收到了退出请求。
+fn sleep_interruptible(total: Duration) -> bool {
+    const SLICE: Duration = Duration::from_secs(1);
+    let mut slept = Duration::ZERO;
+    while slept < total {
+        if shutdown_requested() {
+            return false;
+        }
+        let step = SLICE.min(total - slept);
+        std::thread::sleep(step);
+        slept += step;
+    }
+    !shutdown_requested()
+}
 
 /// 当前 Unix 时间戳（秒）。系统时间异常时回退为 0。
 fn unix_now() -> u64 {
@@ -131,13 +159,8 @@ pub fn start_health_monitor(app_handle: AppHandle) {
         log::info!("快捷键健康监控已启动，每{}秒检查一次", HEALTH_CHECK_INTERVAL_SECS);
 
         loop {
-            std::thread::sleep(check_interval);
-
-            // 检查应用是否仍在运行（通过检查窗口）
-            // 如果主窗口和快速粘贴窗口都不存在，说明应用正在关闭
-            if app_handle.get_webview_window("settings").is_none()
-                && app_handle.get_webview_window("quick-paste").is_none() {
-                log::info!("检测到应用正在关闭，停止健康监控");
+            if !sleep_interruptible(check_interval) {
+                log::info!("检测到应用正在退出，停止快捷键健康监控");
                 break;
             }
 
