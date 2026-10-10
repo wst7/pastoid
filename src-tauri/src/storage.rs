@@ -1,8 +1,10 @@
 use crate::models::{ClipboardItem, Settings};
-use log::LevelFilter;
-use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode, WriteLogger};
+use log::{LevelFilter, Log, Metadata, Record};
+use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tauri::Manager;
 
 const OLD_APP_IDENTIFIER: &str = "com.pastoid.app";
@@ -57,33 +59,170 @@ fn rotate_logs(log_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+// === 运行时自动轮转的文件日志器 ===
+
+struct RotateState {
+    file: Option<fs::File>,
+    path: PathBuf,
+    log_dir: PathBuf,
+    current_size: u64,
+    max_size: u64,
+    max_backups: usize,
+}
+
+impl RotateState {
+    fn rotate(&mut self) {
+        let _old_file = self.file.take();
+
+        let oldest = self.log_dir.join(format!("pastoid.log.{}", self.max_backups));
+        if oldest.exists() {
+            let _ = fs::remove_file(&oldest);
+        }
+
+        for i in (1..self.max_backups).rev() {
+            let src = self.log_dir.join(format!("pastoid.log.{}", i));
+            let dest = self.log_dir.join(format!("pastoid.log.{}", i + 1));
+            if src.exists() {
+                let _ = fs::rename(&src, &dest);
+            }
+        }
+
+        let _ = fs::rename(&self.path, self.log_dir.join("pastoid.log.1"));
+
+        match fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.path)
+        {
+            Ok(f) => self.file = Some(f),
+            Err(e) => {
+                eprintln!("RotatingFileLogger: failed to reopen after rotation: {}", e);
+                if let Ok(f) = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&self.path)
+                {
+                    self.file = Some(f);
+                }
+            }
+        }
+
+        self.current_size = 0;
+    }
+}
+
+struct RotatingFileLogger {
+    state: Mutex<RotateState>,
+    level: LevelFilter,
+}
+
+impl RotatingFileLogger {
+    fn new(log_dir: PathBuf, max_size: u64, max_backups: usize, level: LevelFilter) -> Result<Self, String> {
+        fs::create_dir_all(&log_dir).map_err(|e| format!("Failed to create log dir: {}", e))?;
+
+        rotate_logs(&log_dir)?;
+
+        let path = log_dir.join("pastoid.log");
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| format!("Failed to open log file: {}", e))?;
+
+        let current_size = fs::metadata(&path)
+            .ok()
+            .map(|m| m.len())
+            .unwrap_or(0);
+
+        Ok(RotatingFileLogger {
+            state: Mutex::new(RotateState {
+                file: Some(file),
+                path,
+                log_dir,
+                current_size,
+                max_size,
+                max_backups,
+            }),
+            level,
+        })
+    }
+}
+
+impl Log for RotatingFileLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= self.level
+    }
+
+    fn log(&self, record: &Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let thread = std::thread::current();
+        let thread_info = match thread.name() {
+            Some(name) if !name.is_empty() => format!("[{}]", name),
+            _ => format!("[{:?}]", thread.id()),
+        };
+
+        let line = format!(
+            "{} {} [{}] {} - {}\n",
+            now,
+            thread_info,
+            record.level(),
+            record.target(),
+            record.args()
+        );
+
+        let mut state = self.state.lock().unwrap();
+        if let Some(ref mut file) = state.file {
+            let _ = write!(file, "{}", line);
+            let _ = file.flush();
+            state.current_size += line.len() as u64;
+
+            if state.current_size >= state.max_size {
+                state.rotate();
+            }
+        }
+    }
+
+    fn flush(&self) {
+        if let Some(ref mut file) = self.state.lock().unwrap().file {
+            let _ = file.flush();
+        }
+    }
+}
+
+impl SharedLogger for RotatingFileLogger {
+    fn level(&self) -> LevelFilter {
+        self.level
+    }
+
+    fn config(&self) -> Option<&simplelog::Config> {
+        None
+    }
+
+    fn as_log(self: Box<Self>) -> Box<dyn Log> {
+        self
+    }
+}
+
 /// 初始化日志：终端 + 文件（带自动轮转）
 pub fn init_logger(data_dir: &Path) -> Result<(), String> {
-    let log_dir = data_dir.join("logs");
-    fs::create_dir_all(&log_dir).map_err(|e| format!("Failed to create log dir: {}", e))?;
-
-    rotate_logs(&log_dir)?;
-
-    let log_file = log_dir.join("pastoid.log");
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_file)
-        .map_err(|e| format!("Failed to open log file: {}", e))?;
-
     let term_config = ConfigBuilder::new()
         .set_time_level(LevelFilter::Error)
         .set_target_level(LevelFilter::Error)
         .build();
 
-    let file_config = ConfigBuilder::new()
-        .set_target_level(LevelFilter::Debug)
-        .set_time_format_rfc3339()
-        .build();
-
     CombinedLogger::init(vec![
         TermLogger::new(LevelFilter::Info, term_config, TerminalMode::Stderr, ColorChoice::Auto),
-        WriteLogger::new(LevelFilter::Debug, file_config, file),
+        Box::new(RotatingFileLogger::new(
+            data_dir.join("logs"),
+            MAX_LOG_SIZE,
+            MAX_LOG_BACKUPS,
+            LevelFilter::Debug,
+        )?),  
     ])
     .map_err(|e| format!("Failed to init logger: {}", e))?;
 
@@ -133,22 +272,32 @@ pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
         return;
     }
 
-    // 复制所有文件
-    match fs::read_dir(&old_dir) {
+    // 复制所有文件和目录
+    copy_dir_recursive(&old_dir, &new_dir);
+    log::info!("Migration: completed successfully");
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) {
+    if let Err(e) = fs::create_dir_all(dest) {
+        log::error!("Migration: failed to create dir {:?}: {}", dest, e);
+        return;
+    }
+    match fs::read_dir(src) {
         Ok(entries) => {
-                for entry in entries.flatten() {
-                let src = entry.path();
-                let dest = new_dir.join(entry.file_name());
-                if src.is_file() {
-                    if let Err(e) = fs::copy(&src, &dest) {
-                        log::error!("Migration: failed to copy {:?} to {:?}: {}", src, dest, e);
+            for entry in entries.flatten() {
+                let src_path = entry.path();
+                let dest_path = dest.join(entry.file_name());
+                if src_path.is_dir() {
+                    copy_dir_recursive(&src_path, &dest_path);
+                } else if src_path.is_file() {
+                    if let Err(e) = fs::copy(&src_path, &dest_path) {
+                        log::error!("Migration: failed to copy {:?} to {:?}: {}", src_path, dest_path, e);
                     }
                 }
             }
-            log::info!("Migration: completed successfully");
         }
         Err(e) => {
-            log::error!("Migration: failed to read old data dir: {}", e);
+            log::error!("Migration: failed to read dir {:?}: {}", src, e);
         }
     }
 }
@@ -157,8 +306,37 @@ fn get_data_file_path(data_dir: &Path) -> PathBuf {
     data_dir.join("clipboard_data.json")
 }
 
+// 图片功能的存储层地基。目前还没有代码产生 item_type == "image" 的条目，
+// 因此这几个辅助函数暂时无人调用；等图片采集/渲染接上后即可去掉 allow。
+#[allow(dead_code)]
+pub(crate) fn get_images_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("images")
+}
+
+#[allow(dead_code)]
+pub(crate) fn ensure_images_dir(data_dir: &Path) -> Result<PathBuf, String> {
+    let dir = get_images_dir(data_dir);
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create images dir: {}", e))?;
+    Ok(dir)
+}
+
+pub(crate) fn delete_image_file(data_dir: &Path, relative_path: &str) {
+    let abs_path = data_dir.join(relative_path);
+    // 安全校验：确保路径不越界
+    if let Ok(canonical) = abs_path.canonicalize() {
+        if canonical.starts_with(data_dir) {
+            if let Err(e) = fs::remove_file(&canonical) {
+                log::warn!("Failed to delete image file {:?}: {}", canonical, e);
+            }
+        } else {
+            log::warn!("Refusing to delete image outside data_dir: {:?}", canonical);
+        }
+    }
+}
+
 /// 截断条目到 max_items，保留 pinned 项目，优先保留最新的非 pinned 项目
-pub(crate) fn enforce_max_items(items: &mut Vec<ClipboardItem>, max_items: u32) {
+/// 被截断的图片条目会同步清理磁盘文件
+pub(crate) fn enforce_max_items(items: &mut Vec<ClipboardItem>, max_items: u32, data_dir: &Path) {
     let max = max_items as usize;
     if items.len() <= max {
         return;
@@ -168,6 +346,14 @@ pub(crate) fn enforce_max_items(items: &mut Vec<ClipboardItem>, max_items: u32) 
     let mut non_pinned: Vec<_> = items.iter().filter(|i| !i.is_pinned).cloned().collect();
 
     non_pinned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    // 清理被截断的图片文件
+    for item in non_pinned.iter().skip(max.saturating_sub(pinned.len())) {
+        if item.item_type == "image" && !item.content.is_empty() {
+            delete_image_file(data_dir, &item.content);
+        }
+    }
+
     non_pinned.truncate(max.saturating_sub(pinned.len()));
 
     items.clear();
@@ -185,7 +371,7 @@ pub fn load_clipboard_data(data_dir: &Path, max_items: u32) -> Vec<ClipboardItem
     match fs::read_to_string(&data_file) {
         Ok(content) => match serde_json::from_str::<Vec<ClipboardItem>>(&content) {
             Ok(mut items) => {
-                enforce_max_items(&mut items, max_items);
+                enforce_max_items(&mut items, max_items, data_dir);
                 items
             }
             Err(e) => {
@@ -205,7 +391,7 @@ pub fn save_clipboard_data(
     items: &mut Vec<ClipboardItem>,
     max_items: u32,
 ) -> Result<(), String> {
-    enforce_max_items(items, max_items);
+    enforce_max_items(items, max_items, data_dir);
 
     let data_file = get_data_file_path(data_dir);
 
@@ -498,5 +684,47 @@ mod tests {
         // 验证内容链式移动
         assert_eq!(fs::read_to_string(log_dir.join("pastoid.log.3")).unwrap(), "b2");
         assert_eq!(fs::read_to_string(log_dir.join("pastoid.log.2")).unwrap(), "b1");
+    }
+
+    #[test]
+    fn test_rotate_state_moves_files() {
+        let temp_dir = create_temp_dir();
+        let log_dir = temp_dir.path().join("logs");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        // Preseed log files
+        fs::write(log_dir.join("pastoid.log"), b"current content").unwrap();
+        fs::write(log_dir.join("pastoid.log.1"), b"backup1").unwrap();
+        fs::write(log_dir.join("pastoid.log.2"), b"backup2").unwrap();
+
+        let path = log_dir.join("pastoid.log");
+        let file = fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        let mut state = RotateState {
+            file: Some(file),
+            path,
+            log_dir: log_dir.clone(),
+            current_size: 999_999_999,
+            max_size: 100,
+            max_backups: 2,
+        };
+
+        state.rotate();
+
+        assert!(log_dir.join("pastoid.log").exists());
+        assert!(log_dir.join("pastoid.log.1").exists());
+        assert!(log_dir.join("pastoid.log.2").exists());
+        assert!(!log_dir.join("pastoid.log.3").exists());
+
+        assert_eq!(
+            fs::read_to_string(log_dir.join("pastoid.log.1")).unwrap(),
+            "current content"
+        );
+        assert_eq!(
+            fs::read_to_string(log_dir.join("pastoid.log.2")).unwrap(),
+            "backup1"
+        );
     }
 }

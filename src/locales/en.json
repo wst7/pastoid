@@ -40,5 +40,6 @@
   "clearAll": "Clear All",
   "close": "Close",
   "noMatches": "No matches",
-  "emptyClipboard": "Clipboard is empty"
+  "emptyClipboard": "Clipboard is empty",
+  "imageItem": "Image"
 }

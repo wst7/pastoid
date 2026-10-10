@@ -2,6 +2,42 @@ use crate::models::{AppState, ClipboardItem, Settings};
 use crate::storage;
 use tauri::{Emitter, Manager};
 
+// === Clipboard snapshot/restore for paste-and-keep ===
+
+struct ClipboardSnapshot {
+    text: Option<String>,
+}
+
+fn capture_clipboard() -> ClipboardSnapshot {
+    let mut clip = match arboard::Clipboard::new() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("capture_clipboard: failed to open clipboard: {}", e);
+            return ClipboardSnapshot { text: None };
+        }
+    };
+
+    let text = clip.get_text().ok();
+
+    ClipboardSnapshot { text }
+}
+
+fn restore_clipboard(snapshot: ClipboardSnapshot) {
+    let mut clip = match arboard::Clipboard::new() {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("restore_clipboard: failed to open clipboard: {}", e);
+            return;
+        }
+    };
+
+    if let Some(text) = &snapshot.text {
+        if let Err(e) = clip.set_text(text) {
+            log::warn!("restore_clipboard: failed to restore text: {}", e);
+        }
+    }
+}
+
 #[tauri::command]
 pub fn get_clipboard_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
     Ok(state.repo.get_items())
@@ -86,41 +122,68 @@ pub fn save_settings(
         state.repo.set_max_items(settings.max_items);
     }
 
-    // shortcut 变更检测
-    if current_settings.shortcut != settings.shortcut {
-        let old_shortcut = current_settings.shortcut.clone();
-        let new_shortcut = settings.shortcut.clone();
-
-        // 先注销旧快捷键
-        if let Err(e) = crate::shortcut::unregister(&app_handle, &old_shortcut) {
-            log::error!("Failed to unregister old shortcut '{}': {}", old_shortcut, e);
-        }
-
-        // 注册新快捷键
-        if let Err(e) = crate::shortcut::register(&app_handle, &new_shortcut) {
-            // 注册失败时回滚到旧快捷键
-            log::error!("Failed to register new shortcut '{}': {}", new_shortcut, e);
-            let _ = crate::shortcut::register(&app_handle, &old_shortcut);
-            return Err(format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
-        }
-
-        // 更新托盘菜单上的快捷键显示
-        if let Err(e) = crate::tray::update_tray_menu(&app_handle) {
-            log::error!("Failed to update tray menu: {}", e);
-        }
-    }
+    // 记录快捷键变更（随后在后台线程异步执行重注册，避免 Windows 阻塞 UI）
+    let shortcut_changed = current_settings.shortcut != settings.shortcut;
+    let old_shortcut = current_settings.shortcut.clone();
+    let new_shortcut = settings.shortcut.clone();
 
     // 如果主题变了，广播给所有窗口
     if current_settings.theme != settings.theme {
         let _ = app_handle.emit("theme-changed", settings.theme.clone());
     }
 
+    // 先将设置写入内存和文件（快捷键变更立即保存，注册异步执行）
     *current_settings = settings.clone();
 
     // 更新语言环境
     rust_i18n::set_locale(&settings.language);
 
+    // ⚠️ 关键修复：在启动后台线程前释放锁，避免死锁
+    drop(current_settings);
+
     storage::save_settings_to_file(&state.data_dir, &settings)?;
+
+    if shortcut_changed {
+        let app = app_handle.clone();
+        let data_dir = state.data_dir.clone();
+
+        std::thread::spawn(move || {
+            log::info!("Shortcut changed: '{}' -> '{}'", old_shortcut, new_shortcut);
+
+            if let Err(e) = crate::shortcut::unregister(&app, &old_shortcut) {
+                log::error!("Failed to unregister old shortcut '{}': {}", old_shortcut, e);
+            }
+
+            match crate::shortcut::register(&app, &new_shortcut) {
+                Ok(()) => {
+                    if let Err(e) = crate::tray::update_tray_menu(&app) {
+                        log::error!("Failed to update tray menu: {}", e);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to register new shortcut '{}': {}", new_shortcut, e);
+                    // 回滚到旧快捷键
+                    let _ = crate::shortcut::register(&app, &old_shortcut);
+                    // 回滚内存及文件中的设置以保持与实际注册状态一致
+                    if let Some(state) = app.try_state::<AppState>() {
+                        // ✅ 使用 try_lock 避免死锁，如果锁被占用则放弃回滚
+                        if let Ok(mut s) = state.settings.try_lock() {
+                            s.shortcut = old_shortcut.clone();
+                            let _ = storage::save_settings_to_file(&data_dir, &s);
+                            // 通知前端刷新设置
+                            let _ = app.emit("settings-changed", ());
+                        } else {
+                            log::warn!("无法回滚快捷键设置：settings 锁被占用");
+                            // 通知前端设置不一致,需要刷新
+                            let _ = app.emit("settings-sync-needed", ());
+                        }
+                    }
+                    let _ = app.emit("shortcut-error",
+                        format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
+                }
+            }
+        });
+    }
 
     Ok(())
 }
@@ -137,6 +200,8 @@ pub fn get_history_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardI
 #[tauri::command]
 pub fn paste_clipboard(content: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
+
+    let snap = capture_clipboard();
 
     app_handle
         .clipboard()
@@ -185,6 +250,10 @@ pub fn paste_clipboard(content: String, app_handle: tauri::AppHandle) -> Result<
         enigo.key(Key::Control, Direction::Release)
             .map_err(|e| format!("enigo: {}", e))?;
     }
+
+    // Restore original clipboard content
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    restore_clipboard(snap);
 
     Ok(())
 }

@@ -42,10 +42,17 @@ pub fn run() {
 
             // 初始化日志
             if let Err(e) = storage::init_logger(&data_dir) {
-                eprintln!("Failed to initialize logger: {}", e);
+                eprintln!("Failed to initialize file logger: {}. Falling back to stderr-only.", e);
+                let _ = simplelog::TermLogger::init(
+                    log::LevelFilter::Info,
+                    simplelog::ConfigBuilder::new().build(),
+                    simplelog::TerminalMode::Stderr,
+                    simplelog::ColorChoice::Auto,
+                );
             }
             // identifier 变更后自动迁移旧数据
             storage::migrate_data_if_needed(&app.handle());
+
             let settings = storage::load_settings(&data_dir);
 
             // 设置语言
@@ -118,6 +125,9 @@ pub fn run() {
                     log::error!("Failed to register fallback shortcut '{}': {}", default_shortcut, e2);
                 }
             }
+
+            // 启动快捷键健康监控（每60秒检查一次，5分钟无触发时自动重新注册）
+            shortcut::start_health_monitor(app.handle().clone());
 
             // 启动剪切板监听
             clipboard::start_clipboard_monitor(app.handle().clone());

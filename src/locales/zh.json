@@ -40,5 +40,6 @@
   "clearAll": "清除全部",
   "close": "关闭",
   "noMatches": "没有匹配的内容",
-  "emptyClipboard": "剪贴板为空"
+  "emptyClipboard": "剪贴板为空",
+  "imageItem": "图片"
 }

@@ -1,10 +1,11 @@
 /**
  * 设置窗口应用
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import packageInfo from '../../package.json' with { type: 'json' };
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { Tabs, Label, ListBox, Select, Switch, Button, Spinner } from "@heroui/react";
@@ -46,6 +47,8 @@ export default function SettingsApp() {
     shortcut: "Cmd+Shift+V",
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const oldShortcutRef = useRef(settings.shortcut);
+
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -77,6 +80,18 @@ export default function SettingsApp() {
 
   useEffect(() => {
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<string>("shortcut-error", (event) => {
+      console.warn("Shortcut registration failed:", event.payload);
+      setSettings((prev) => ({
+        ...prev,
+        shortcut: oldShortcutRef.current,
+      }));
+    }).then((fn) => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
   }, []);
 
   const loadSettings = async () => {
@@ -142,6 +157,7 @@ export default function SettingsApp() {
   };
 
   const handleShortcutChange = (shortcut: string) => {
+    oldShortcutRef.current = settings.shortcut;
     const newSettings = { ...settings, shortcut };
     setSettings(newSettings);
     saveSettings(newSettings);

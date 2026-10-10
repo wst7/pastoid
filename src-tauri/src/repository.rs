@@ -74,7 +74,7 @@ impl ClipboardRepository {
             .any(|i| i.content == item.content && i.item_type == item.item_type);
         if !is_duplicate {
             items.insert(0, item);
-            storage::enforce_max_items(&mut items, max);
+            storage::enforce_max_items(&mut items, max, &self.data_dir);
             self.dirty.store(true, Ordering::Relaxed);
             true
         } else {
@@ -111,7 +111,7 @@ impl ClipboardRepository {
             }
         }
         items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        storage::enforce_max_items(&mut items, max);
+        storage::enforce_max_items(&mut items, max, &self.data_dir);
         self.dirty.store(true, Ordering::Relaxed);
     }
 
@@ -127,7 +127,7 @@ impl ClipboardRepository {
 
         if new_max < old_max {
             let mut items = self.items.lock().unwrap();
-            storage::enforce_max_items(&mut items, new_max);
+            storage::enforce_max_items(&mut items, new_max, &self.data_dir);
             drop(items);
             let _ = self.flush_now();
         }
@@ -147,7 +147,7 @@ impl ClipboardRepository {
 
         let max = *self.max_items.lock().unwrap();
         let mut items = self.items.lock().unwrap();
-        storage::enforce_max_items(&mut items, max);
+        storage::enforce_max_items(&mut items, max, &self.data_dir);
 
         let result = storage::save_clipboard_data(&self.data_dir, &mut items, max);
         *self.last_flush.lock().unwrap() = Instant::now();
