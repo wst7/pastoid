@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.8.0](https://github.com/wst7/pastoid/compare/v1.7.0...v1.8.0) (2026-11-03)
+
+### ✨ Features | 新功能
+
+* capture images in clipboard history with content-addressed dedupe ([c15c4ed](https://github.com/wst7/pastoid/commit/c15c4ed19abfb4f6df8e2f571d46afb8a61188d3))
+* shortcut health monitor, runtime log rotation, clipboard restore ([487d3fd](https://github.com/wst7/pastoid/commit/487d3fdcb0fd25745010e8b0a3a161378e3a968c))
+* **ui:** redesign quick paste panel as a horizontal card strip ([0f007a3](https://github.com/wst7/pastoid/commit/0f007a322a77bf7582ca02fe26a500c696a4d8e3))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* remaining issues from the shortcut/logging review ([59f974b](https://github.com/wst7/pastoid/commit/59f974b89142a8df214ce7f1ecc0a7d542b7a7cd))
+
 ## [1.7.0](https://github.com/wst7/pastoid/compare/v1.6.1...v1.7.0) (2026-05-25)
 
 ### ✨ Features | 新功能
