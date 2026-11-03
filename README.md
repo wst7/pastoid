@@ -9,7 +9,7 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
-Pastoid is a lightweight, fast clipboard manager for macOS, Windows, and Linux. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
+Pastoid is a lightweight, fast clipboard manager for macOS. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
 
 ## Why Pastoid?
 
@@ -39,12 +39,14 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 Press your configured shortcut (default: `Cmd+Shift+V`) anywhere to instantly summon the quick paste panel. It appears over any app — even full-screen games or videos — so you can paste without breaking your flow.
 
 Inside the panel:
-- **↑↓** to navigate
+- **← →** to navigate
 - **↵** to paste
 - **⌘P** to pin or unpin
 - **⌘⌫** to delete an item
 - **⌘⇧X** to clear all history
 - **Esc** to close
+
+Images are captured too — screenshots and copied image files show up as thumbnails and paste back as images.
 
 ## Privacy by Design
 
@@ -63,15 +65,3 @@ Pastoid stores your clipboard history locally on your machine. No cloud, no acco
    ```
 
 4. Open Pastoid from your Applications folder. You may need to go to **System Settings → Privacy & Security** and click **Open Anyway** on the first launch.
-
-### Windows
-
-1. Download the `.msi` or `.exe` installer from the [latest release](https://github.com/wst7/pastoid/releases/latest).
-2. Run the installer and follow the prompts.
-
-### Linux
-
-Download the `.AppImage` or `.deb` package from the [latest release](https://github.com/wst7/pastoid/releases/latest).
-
-- **AppImage**: Make it executable and run it directly.
-- **.deb**: Install with `sudo dpkg -i pastoid_*.deb`.

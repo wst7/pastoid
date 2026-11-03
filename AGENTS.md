@@ -1,7 +1,8 @@
 # AGENTS.md
 
 ## 项目概览
-Pastoid - Tauri + React + TypeScript 构建的轻量级剪贴板管理器
+Pastoid - Tauri + React + TypeScript 构建的轻量级剪贴板管理器，**只面向 macOS**。
+其它平台的条件编译分支已经清掉，新增代码不需要再考虑 Windows/Linux。
 
 ## 常用命令
 
@@ -46,13 +47,21 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - **rust-i18n** 托盘菜单国际化: `src-tauri/locales/app.yml`
 - 核心文件:
   - `src/lib.rs` - 应用初始化、插件注册
-  - `src/commands.rs` - Tauri IPC 命令（剪贴板操作、设置管理）
-  - `src/clipboard.rs` - 剪贴板监控逻辑
+  - `src/commands.rs` - Tauri IPC 命令（剪贴板操作、设置管理、图片读取）
+  - `src/clipboard.rs` - 剪贴板监控逻辑（文本 + 图片，按内容哈希去重）
   - `src/tray.rs` - 系统托盘菜单（显示快捷键 accelerator）
-  - `src/storage.rs` - 数据持久化
+  - `src/storage.rs` - 数据持久化、日志轮转、孤儿图片回收
   - `src/models.rs` - 数据结构定义
-  - `src/shortcut.rs` - 全局快捷键注册/注销
+  - `src/shortcut.rs` - 全局快捷键注册/注销、健康监控、面板定位
   - `src/repository.rs` - ClipboardRepository（内存缓存 + 定期 flush）
+
+**剪贴板采集约定（重要）：**
+- 文本按「内容 + 类型」去重，图片按 `imageHash`（blake3）去重
+- 图片文件名直接使用哈希（`images/<hash>.png`），同一张图不会在磁盘上出现第二份
+- **先判重、再落盘**：只有确定新增时才写 PNG。历史上的 bug 就是每轮轮询都另存一张新图，
+  21 小时写了 5.9 万个文件（29GB），把历史冲垮，看起来像「复制记录不生效」
+- 用户删除/清空时会把内容键记进 `AppState.suppressed`，避免剪贴板里残留的同一条内容被重新加回来
+- 启动时后台跑一次 `cleanup_orphan_images`，回收没有被任何条目引用的图片文件
 
 **关键插件：**
 - `tauri-plugin-global-shortcut` — 全局快捷键（呼出 quick-paste）
@@ -79,10 +88,8 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - CI 自动构建并上传签名更新包（需要 `TAURI_SIGNING_PRIVATE_KEY` Secret）
 
 ## 构建产物
-- macOS: `.dmg`（x64 + aarch64 双架构分别构建）
-- Windows: `.msi` + `.exe`
-- Linux: `.AppImage` + `.deb`
-- 更新包: `.tar.gz`（macOS）/ `.nsis.zip`（Windows）/ `.AppImage.tar.gz`（Linux）+ `.sig` 签名文件
+- macOS: `.app` + `.dmg`（x64 + aarch64 双架构分别构建）
+- 更新包: `.tar.gz` + `.sig` 签名文件
 
 ## 代码约定
 - TypeScript strict 模式

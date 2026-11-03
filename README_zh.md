@@ -9,7 +9,7 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
-Pastoid 是一款轻量、快速的剪贴板管理器，支持 macOS、Windows 和 Linux。基于 Tauri 和 React 构建，后台静默运行，剪贴板历史触手可及。
+Pastoid 是一款轻量、快速的 macOS 剪贴板管理器。基于 Tauri 和 React 构建，后台静默运行，剪贴板历史触手可及。
 
 ## 为什么选择 Pastoid？
 
@@ -40,12 +40,14 @@ Pastoid 是一款轻量、快速的剪贴板管理器，支持 macOS、Windows �
 
 面板内操作：
 
-- **↑↓** 上下导航
+- **← →** 左右切换
 - **↵** 粘贴
 - **⌘P** 置顶 / 取消置顶
 - **⌘⌫** 删除条目
 - **⌘⇧X** 清空全部历史
 - **Esc** 关闭面板
+
+截图和复制的图片文件也会被收进历史，以缩略图展示，回车即可按图片粘贴。
 
 ## 隐私设计
 
@@ -64,15 +66,3 @@ Pastoid 将剪贴板历史存储在本地机器上。无云端、无账号、无
    ```
 
 4. 从应用程序文件夹打开 Pastoid。首次启动可能需要在 **系统设置 → 隐私与安全性** 中点击「仍然打开」。
-
-### Windows
-
-1. 从 [最新发布页](https://github.com/wst7/pastoid/releases/latest) 下载 `.msi` 或 `.exe` 安装包。
-2. 运行安装程序，按提示完成安装。
-
-### Linux
-
-从 [最新发布页](https://github.com/wst7/pastoid/releases/latest) 下载 `.AppImage` 或 `.deb` 包。
-
-- **AppImage**：赋予执行权限后直接运行。
-- **.deb**：`sudo dpkg -i pastoid_*.deb` 安装。
