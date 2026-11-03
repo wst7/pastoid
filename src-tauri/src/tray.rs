@@ -9,11 +9,9 @@ use rust_i18n::t;
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle();
 
-    // 创建托盘菜单
     let menu = build_tray_menu(app_handle)?;
 
-    // 创建托盘图标（macOS 白色模板图标，Windows/Linux 灰色图标）
-    #[cfg(target_os = "macos")]
+    // macOS 菜单栏用模板图标，跟随系统明暗自动反色
     let _tray = TrayIconBuilder::with_id("main")
         .icon(Image::from_bytes(include_bytes!(
             "../icons/tray/32x32.png"
@@ -22,57 +20,14 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .tooltip("Pastoid")
         .show_menu_on_left_click(true)
-        .on_tray_icon_event(|tray, event| match event {
-            TrayIconEvent::DoubleClick { .. } => {
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::DoubleClick { .. } = event {
                 // 双击：显示主窗口
                 if let Some(window) = tray.app_handle().get_webview_window("settings") {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
             }
-            _ => {}
-        })
-        .on_menu_event(|app_handle, event| {
-            let id = event.id().as_ref();
-            match id {
-                "open_quick_paste" => {
-                    crate::shortcut::toggle_quick_paste(app_handle);
-                }
-                "preferences" => {
-                    if let Some(window) = app_handle.get_webview_window("settings") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
-                "clear" => {
-                    clear_all_items(app_handle);
-                }
-                "quit" => {
-                    log::info!("Pastoid exiting");
-                    std::process::exit(0);
-                }
-                _ => {}
-            }
-        })
-        .build(app.handle())?;
-
-    #[cfg(not(target_os = "macos"))]
-    let _tray = TrayIconBuilder::with_id("main")
-        .icon(Image::from_bytes(include_bytes!(
-            "../icons/tray-dark/32x32.png"
-        ))?)
-        .menu(&menu)
-        .tooltip("Pastoid")
-        .show_menu_on_left_click(true)
-        .on_tray_icon_event(|tray, event| match event {
-            TrayIconEvent::DoubleClick { .. } => {
-                // 双击：显示主窗口
-                if let Some(window) = tray.app_handle().get_webview_window("settings") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            _ => {}
         })
         .on_menu_event(|app_handle, event| {
             let id = event.id().as_ref();
@@ -141,27 +96,27 @@ fn build_tray_menu(app_handle: &AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn s
     Ok(menu)
 }
 
-/// 将 global_hotkey 格式的快捷键字符串转换为 Tauri accelerator 格式
-/// 例如: "Cmd+Shift+V" → macOS: "Cmd+Shift+V", Windows/Linux: "Ctrl+Shift+V"
+/// 将 global_hotkey 格式的快捷键字符串转换为 Tauri accelerator 格式。
+/// 本项目只面向 macOS，两者格式一致，直接透传。
 fn shortcut_to_accelerator(shortcut: &str) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        shortcut.to_string()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        shortcut
-            .replace("Cmd", "Ctrl")
-            .replace("Option", "Alt")
-    }
+    shortcut.to_string()
 }
 
 fn clear_all_items(app_handle: &AppHandle) {
     let state = app_handle.state::<crate::models::AppState>();
 
+    // 记下被清掉的内容键，避免剪贴板里仍在的那条下一轮被加回来
+    if let Ok(mut set) = state.suppressed.lock() {
+        for item in state.repo.get_items() {
+            set.insert(item.image_hash.clone().unwrap_or_else(|| item.content.clone()));
+        }
+    }
+
     state.repo.clear();
     // 立即 flush
     let _ = state.repo.flush_now();
+    // 历史清空后图片文件都成了孤儿
+    crate::storage::cleanup_orphan_images(&state.data_dir, &std::collections::HashSet::new());
 
     // 通知前端清空
     let _ = app_handle.emit("clipboard-cleared", ());

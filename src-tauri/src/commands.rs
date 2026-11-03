@@ -1,5 +1,6 @@
 use crate::models::{AppState, ClipboardItem, Settings};
 use crate::storage;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager};
 
 // === Clipboard snapshot/restore for paste-and-keep ===
@@ -60,6 +61,8 @@ fn restore_clipboard(snapshot: ClipboardSnapshot) {
     }
 }
 
+// === 历史条目 ===
+
 #[tauri::command]
 pub fn get_clipboard_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
     Ok(state.repo.get_items())
@@ -79,7 +82,25 @@ pub fn delete_clipboard_item(
     id: String,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
+    let removed: Option<ClipboardItem> = state.repo.find_by_id(&id);
     state.repo.delete(&id);
+
+    if let Some(item) = removed {
+        // 内容可能还留在剪贴板里，记下来，避免下一轮轮询把它重新加回来
+        let key = item.image_hash.clone().unwrap_or_else(|| item.content.clone());
+        if let Ok(mut set) = state.suppressed.lock() {
+            set.insert(key);
+        }
+
+        // 图片条目被删除时同步删掉文件，但要确认没有别的条目还在引用它
+        if item.is_image() && !item.content.is_empty() {
+            let still_referenced = state.repo.referenced_image_paths().contains(&item.content);
+            if !still_referenced {
+                storage::delete_image_file(&state.data_dir, &item.content);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -94,7 +115,20 @@ pub fn update_clipboard_item(
 
 #[tauri::command]
 pub fn clear_clipboard_items(state: tauri::State<AppState>) -> Result<(), String> {
+    // 先记下所有将被清掉的内容键：剪贴板里可能还留着其中一条，
+    // 不抑制的话下一轮轮询会立刻把它加回来，清空就成了摆设。
+    if let Ok(mut set) = state.suppressed.lock() {
+        for item in state.repo.get_items() {
+            set.insert(item.image_hash.clone().unwrap_or_else(|| item.content.clone()));
+        }
+    }
+
     state.repo.clear();
+    // 立即落盘：清空是用户主动操作，不能等 5 秒自动 flush 才写，
+    // 否则这期间退出应用，重启后历史会「复活」。
+    let _ = state.repo.flush_now();
+    // 历史清空后，所有图片文件都成了孤儿
+    storage::cleanup_orphan_images(&state.data_dir, &std::collections::HashSet::new());
     Ok(())
 }
 
@@ -106,6 +140,33 @@ pub fn import_clipboard_items(
     state.repo.import(items);
     Ok(())
 }
+
+/// 读取历史里某张图片的内容，返回可直接塞进 <img src> 的 data URL。
+#[tauri::command]
+pub fn get_image_data(filename: String, state: tauri::State<AppState>) -> Result<String, String> {
+    // 只允许读取 data_dir 内部的文件
+    if filename.contains("..") || filename.starts_with('/') {
+        return Err("非法的图片路径".to_string());
+    }
+
+    let path = state.data_dir.join(&filename);
+    let base = state
+        .data_dir
+        .canonicalize()
+        .map_err(|e| format!("无法解析数据目录: {}", e))?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("无法读取图片: {}", e))?;
+
+    if !canonical.starts_with(&base) {
+        return Err("非法的图片路径".to_string());
+    }
+
+    let bytes = std::fs::read(&canonical).map_err(|e| format!("无法读取图片: {}", e))?;
+    Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
+}
+
+// === 设置 ===
 
 #[tauri::command]
 pub fn get_settings(state: tauri::State<AppState>) -> Result<Settings, String> {
@@ -127,10 +188,7 @@ pub fn save_settings(
     if settings.autostart {
         if let Err(e) = autostart.enable() {
             log::error!("Failed to enable autostart: {}", e);
-            #[cfg(target_os = "macos")]
             return Err(format!("开启自启动失败: {}。请确保应用已安装到 /Applications/ 目录", e));
-            #[cfg(not(target_os = "macos"))]
-            return Err(format!("开启自启动失败: {}", e));
         }
     } else {
         // 关闭时忽略错误（可能登录项本来就不存在）
@@ -144,7 +202,7 @@ pub fn save_settings(
         state.repo.set_max_items(settings.max_items);
     }
 
-    // 记录快捷键变更（随后在后台线程异步执行重注册，避免 Windows 阻塞 UI）
+    // 记录快捷键变更（随后在后台线程异步执行重注册，避免阻塞 UI）
     let shortcut_changed = current_settings.shortcut != settings.shortcut;
     let old_shortcut = current_settings.shortcut.clone();
     let new_shortcut = settings.shortcut.clone();
@@ -197,9 +255,11 @@ pub fn save_settings(
                             log::warn!("无法回滚快捷键设置：settings 锁被占用");
                         }
                     }
-                    // 前端据此回滚 UI 上显示的快捷键（下面两个分支都会走到）
-                    let _ = app.emit("shortcut-error",
-                        format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut));
+                    // 前端据此回滚 UI 上显示的快捷键
+                    let _ = app.emit(
+                        "shortcut-error",
+                        format!("快捷键 '{}' 注册失败，已恢复原设置", new_shortcut),
+                    );
                 }
             }
         });
@@ -217,59 +277,80 @@ pub fn get_history_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardI
     Ok(state.repo.get_history(max_items))
 }
 
+// === 粘贴 ===
+
+/// 把历史条目写进剪贴板并发一次 Cmd+V。
+///
+/// 图片条目不能再按文本粘贴——`content` 只是相对路径，按文本写会把
+/// `images/xxx.png` 这串字符粘到用户窗口里。这里按类型分别写入。
 #[tauri::command]
-pub fn paste_clipboard(content: String, app_handle: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
+pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    let state = app_handle.state::<AppState>();
+    let item = state
+        .repo
+        .find_by_id(&id)
+        .ok_or_else(|| "条目不存在".to_string())?;
+    let data_dir = state.data_dir.clone();
 
     let snap = capture_clipboard();
 
-    app_handle
-        .clipboard()
-        .write_text(content)
-        .map_err(|e| format!("clipboard write: {}", e))?;
+    if item.is_image() {
+        let path = data_dir.join(&item.content);
+        let rgba = image::ImageReader::open(&path)
+            .map_err(|e| format!("无法打开图片: {}", e))?
+            .decode()
+            .map_err(|e| format!("无法解码图片: {}", e))?
+            .to_rgba8();
+        let (width, height) = rgba.dimensions();
+
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|e| format!("打开剪贴板失败: {}", e))?;
+        clipboard
+            .set_image(arboard::ImageData {
+                width: width as usize,
+                height: height as usize,
+                bytes: std::borrow::Cow::Owned(rgba.into_raw()),
+            })
+            .map_err(|e| format!("写入图片到剪贴板失败: {}", e))?;
+    } else {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        app_handle
+            .clipboard()
+            .write_text(item.content.clone())
+            .map_err(|e| format!("clipboard write: {}", e))?;
+    }
 
     if let Some(window) = app_handle.get_webview_window("quick-paste") {
         let _ = window.hide();
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-        let mut enigo = Enigo::new(&Settings::default())
-            .map_err(|e| format!("Failed to init enigo: {}", e))?;
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    let mut enigo = Enigo::new(&Settings::default())
+        .map_err(|e| format!("Failed to init enigo: {}", e))?;
 
-        // Cmd+Tab 切换到上一个应用
-        enigo.key(Key::Meta, Direction::Press)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo.key(Key::Tab, Direction::Click)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo.key(Key::Meta, Direction::Release)
-            .map_err(|e| format!("enigo: {}", e))?;
+    // Cmd+Tab 回到上一个应用，让 Cmd+V 落在用户原本的窗口里
+    enigo
+        .key(Key::Meta, Direction::Press)
+        .map_err(|e| format!("enigo: {}", e))?;
+    enigo
+        .key(Key::Tab, Direction::Click)
+        .map_err(|e| format!("enigo: {}", e))?;
+    enigo
+        .key(Key::Meta, Direction::Release)
+        .map_err(|e| format!("enigo: {}", e))?;
 
-        std::thread::sleep(std::time::Duration::from_millis(300));
+    std::thread::sleep(std::time::Duration::from_millis(300));
 
-        // Cmd+V 粘贴
-        enigo.key(Key::Meta, Direction::Press)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo.key(Key::Unicode('v'), Direction::Click)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo.key(Key::Meta, Direction::Release)
-            .map_err(|e| format!("enigo: {}", e))?;
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        std::thread::sleep(std::time::Duration::from_millis(150));
-
-        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-        let mut enigo = Enigo::new(&Settings::default())
-            .map_err(|e| format!("Failed to init enigo: {}", e))?;
-        enigo.key(Key::Control, Direction::Press)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo.key(Key::Unicode('v'), Direction::Click)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo.key(Key::Control, Direction::Release)
-            .map_err(|e| format!("enigo: {}", e))?;
-    }
+    // Cmd+V 粘贴
+    enigo
+        .key(Key::Meta, Direction::Press)
+        .map_err(|e| format!("enigo: {}", e))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| format!("enigo: {}", e))?;
+    enigo
+        .key(Key::Meta, Direction::Release)
+        .map_err(|e| format!("enigo: {}", e))?;
 
     // Restore original clipboard content
     std::thread::sleep(std::time::Duration::from_millis(150));

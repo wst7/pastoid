@@ -82,12 +82,38 @@ pub fn toggle_quick_paste(app: &AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            let _ = window.center();
+            position_panel(&window);
             let _ = window.show();
             let _ = window.set_focus();
             let _ = window.emit("panel-opened", ());
         }
     }
+}
+
+/// 把面板摆在屏幕下方居中，像 Paste 那样贴着底边弹出。
+fn position_panel(window: &tauri::WebviewWindow) {
+    let monitor = match window.current_monitor() {
+        Ok(Some(monitor)) => monitor,
+        _ => return,
+    };
+
+    let scale = monitor.scale_factor();
+    let screen = monitor.size().to_logical::<f64>(scale);
+
+    let (win_width, win_height) = match window.outer_size() {
+        Ok(size) => {
+            let logical = size.to_logical::<f64>(scale);
+            (logical.width, logical.height)
+        }
+        Err(_) => return,
+    };
+
+    // 距离屏幕底部留一点余量，避免贴着 Dock
+    let bottom_margin = 110.0;
+    let x = ((screen.width - win_width) / 2.0).max(0.0);
+    let y = (screen.height - win_height - bottom_margin).max(0.0);
+
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
 }
 
 /// 获取快捷键最后触发时间（秒级时间戳）
@@ -96,18 +122,9 @@ pub fn get_last_trigger_time() -> u64 {
 }
 
 /// 将快捷键字符串转换为当前平台有效的格式。
-/// macOS 保持原样；Windows/Linux 将 Cmd 映射为 Ctrl，Option 映射为 Alt。
+/// 本项目只面向 macOS，global-hotkey 的写法与设置里存的写法一致，原样返回。
 pub fn normalize_shortcut(shortcut: &str) -> String {
-    #[cfg(target_os = "macos")]
-    {
-        shortcut.to_string()
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        shortcut
-            .replace("Cmd", "Ctrl")
-            .replace("Option", "Alt")
-    }
+    shortcut.to_string()
 }
 
 pub fn register(app: &AppHandle, shortcut: &str) -> Result<(), String> {
@@ -215,17 +232,8 @@ mod tests {
 
     #[test]
     fn test_normalize_shortcut() {
-        #[cfg(target_os = "macos")]
-        {
-            assert_eq!(normalize_shortcut("Cmd+Shift+V"), "Cmd+Shift+V");
-            assert_eq!(normalize_shortcut("Option+K"), "Option+K");
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            assert_eq!(normalize_shortcut("Cmd+Shift+V"), "Ctrl+Shift+V");
-            assert_eq!(normalize_shortcut("Option+K"), "Alt+K");
-            assert_eq!(normalize_shortcut("Ctrl+Alt+K"), "Ctrl+Alt+K");
-        }
+        assert_eq!(normalize_shortcut("Cmd+Shift+V"), "Cmd+Shift+V");
+        assert_eq!(normalize_shortcut("Option+K"), "Option+K");
     }
 
     #[test]

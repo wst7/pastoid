@@ -245,21 +245,11 @@ pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
         return;
     }
 
-    // 构建旧目录路径（基于旧 identifier）
-    let old_dir = if cfg!(target_os = "macos") {
-        dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("Application Support")
-            .join(OLD_APP_IDENTIFIER)
-    } else if cfg!(target_os = "windows") {
-        dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("%APPDATA%"))
-            .join(OLD_APP_IDENTIFIER)
-    } else {
-        dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("~/.local/share"))
-            .join(OLD_APP_IDENTIFIER)
-    };
+    // 构建旧目录路径（基于旧 identifier）。本项目只面向 macOS。
+    let old_dir = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join("Application Support")
+        .join(OLD_APP_IDENTIFIER);
 
     if !old_dir.exists() {
         return;
@@ -306,18 +296,81 @@ fn get_data_file_path(data_dir: &Path) -> PathBuf {
     data_dir.join("clipboard_data.json")
 }
 
-// 图片功能的存储层地基。目前还没有代码产生 item_type == "image" 的条目，
-// 因此这几个辅助函数暂时无人调用；等图片采集/渲染接上后即可去掉 allow。
-#[allow(dead_code)]
 pub(crate) fn get_images_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("images")
 }
 
-#[allow(dead_code)]
 pub(crate) fn ensure_images_dir(data_dir: &Path) -> Result<PathBuf, String> {
     let dir = get_images_dir(data_dir);
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create images dir: {}", e))?;
     Ok(dir)
+}
+
+/// 删除 images 目录下所有没有被历史条目引用的文件，返回删除数量。
+///
+/// 这是兜底清理：正常流程里图片只在确定入库时才落盘，删条目时也会同步删文件，
+/// 但历史版本的 bug 曾经留下过大量重复文件，这里负责把这类孤儿文件收干净。
+pub(crate) fn cleanup_orphan_images(
+    data_dir: &Path,
+    referenced: &std::collections::HashSet<String>,
+) -> usize {
+    // 启动清理与剪贴板监控是并行的：刚写进去、还没来得及入库的新图必须放过，
+    // 否则会把监控线程刚落盘的文件删掉。5 分钟足够覆盖任何入库窗口。
+    cleanup_orphan_images_older_than(data_dir, referenced, std::time::Duration::from_secs(300))
+}
+
+fn cleanup_orphan_images_older_than(
+    data_dir: &Path,
+    referenced: &std::collections::HashSet<String>,
+    min_age: std::time::Duration,
+) -> usize {
+    let images_dir = get_images_dir(data_dir);
+    let entries = match fs::read_dir(&images_dir) {
+        Ok(entries) => entries,
+        Err(_) => return 0,
+    };
+
+    let mut removed = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let file_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(name) => name,
+            None => continue,
+        };
+
+        let relative = format!("images/{}", file_name);
+        if referenced.contains(&relative) {
+            continue;
+        }
+
+        if min_age > std::time::Duration::ZERO {
+            let too_new = entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.elapsed().ok())
+                .map(|age| age < min_age)
+                .unwrap_or(false);
+            if too_new {
+                continue;
+            }
+        }
+
+        match fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(e) => log::warn!("清理孤儿图片失败 {:?}: {}", path, e),
+        }
+    }
+
+    if removed > 0 {
+        log::info!("清理孤儿图片文件 {} 个", removed);
+    }
+
+    removed
 }
 
 pub(crate) fn delete_image_file(data_dir: &Path, relative_path: &str) {
@@ -358,7 +411,20 @@ pub(crate) fn enforce_max_items(items: &mut Vec<ClipboardItem>, max_items: u32, 
         return;
     }
 
-    let pinned: Vec<_> = items.iter().filter(|i| i.is_pinned).cloned().collect();
+    let mut pinned: Vec<_> = items.iter().filter(|i| i.is_pinned).cloned().collect();
+    pinned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    // 置顶条目本身也可能多于上限（用户可以把上限调小），先按时间砍掉多的，
+    // 否则 items.len() 会永远大于 max_items，历史无上限增长。
+    // 被砍掉的置顶图片同样要删文件，不能只在非置顶分支里清理。
+    if pinned.len() > max {
+        for item in pinned.drain(max..) {
+            if item.item_type == "image" && !item.content.is_empty() {
+                delete_image_file(data_dir, &item.content);
+            }
+        }
+    }
+
     let mut non_pinned: Vec<_> = items.iter().filter(|i| !i.is_pinned).cloned().collect();
 
     non_pinned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -515,10 +581,7 @@ mod tests {
         let settings = load_settings(temp_dir.path());
         assert_eq!(settings.language, "zh");
         assert_eq!(settings.theme, "system");
-        #[cfg(target_os = "macos")]
         assert_eq!(settings.shortcut, "Cmd+Shift+V");
-        #[cfg(not(target_os = "macos"))]
-        assert_eq!(settings.shortcut, "Ctrl+Shift+V");
     }
 
     #[test]
@@ -800,5 +863,80 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].content, "newer");
         assert!(!image.exists(), "trimmed image file should be removed");
+    }
+
+    #[test]
+    fn test_cleanup_orphan_images_keeps_referenced() {
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("data");
+        let images_dir = data_dir.join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+
+        fs::write(images_dir.join("keep.png"), b"keep").unwrap();
+        fs::write(images_dir.join("orphan.png"), b"orphan").unwrap();
+        fs::write(images_dir.join("orphan2.png"), b"orphan2").unwrap();
+
+        let mut referenced = std::collections::HashSet::new();
+        referenced.insert("images/keep.png".to_string());
+
+        // 测试里文件都是刚写的，这里把年龄门槛设为 0，等价于「全部都可删」
+        let removed =
+            cleanup_orphan_images_older_than(&data_dir, &referenced, std::time::Duration::ZERO);
+
+        assert_eq!(removed, 2);
+        assert!(images_dir.join("keep.png").exists());
+        assert!(!images_dir.join("orphan.png").exists());
+        assert!(!images_dir.join("orphan2.png").exists());
+    }
+
+    #[test]
+    fn test_cleanup_orphan_images_skips_fresh_files() {
+        // 默认门槛是 5 分钟：刚写进来的新图不能删，否则会误删监控线程刚落盘的文件
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("data");
+        let images_dir = data_dir.join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+        fs::write(images_dir.join("fresh.png"), b"fresh").unwrap();
+
+        let removed = cleanup_orphan_images(&data_dir, &std::collections::HashSet::new());
+
+        assert_eq!(removed, 0);
+        assert!(images_dir.join("fresh.png").exists());
+    }
+
+    #[test]
+    fn test_cleanup_orphan_images_missing_dir_is_noop() {
+        let temp_dir = create_temp_dir();
+        let data_dir = temp_dir.path().join("no-images-here");
+
+        let removed =
+            cleanup_orphan_images_older_than(&data_dir, &std::collections::HashSet::new(), std::time::Duration::ZERO);
+
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn test_enforce_max_items_truncates_pinned_when_over_limit() {
+        // 置顶条目多于上限时也要截断，否则历史会无上限增长
+        let temp_dir = create_temp_dir();
+
+        let mut a = ClipboardItem::new("a".to_string(), "text");
+        a.is_pinned = true;
+        a.created_at = 1;
+        let mut b = ClipboardItem::new("b".to_string(), "text");
+        b.is_pinned = true;
+        b.created_at = 2;
+        let mut c = ClipboardItem::new("c".to_string(), "text");
+        c.is_pinned = true;
+        c.created_at = 3;
+
+        let mut items = vec![a, b, c];
+        enforce_max_items(&mut items, 2, temp_dir.path());
+
+        assert_eq!(items.len(), 2);
+        // 保留最新的两条
+        assert!(items.iter().any(|i| i.content == "b"));
+        assert!(items.iter().any(|i| i.content == "c"));
+        assert!(!items.iter().any(|i| i.content == "a"));
     }
 }

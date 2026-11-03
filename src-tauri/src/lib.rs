@@ -69,10 +69,22 @@ pub fn run() {
             let repo_flush = repo.clone();
             repo_flush.start_auto_flush(5);
 
+            // 后台清理没有被任何条目引用的图片文件。
+            // 旧版本的采集 bug 会留下大量重复文件，这里在启动时顺手收干净。
+            let repo_gc = repo.clone();
+            let data_dir_gc = data_dir.clone();
+            let _ = std::thread::Builder::new()
+                .name("image-gc".into())
+                .spawn(move || {
+                    let referenced = repo_gc.referenced_image_paths();
+                    storage::cleanup_orphan_images(&data_dir_gc, &referenced);
+                });
+
             app.manage(AppState {
                 repo,
                 data_dir,
                 settings: std::sync::Mutex::new(settings),
+                suppressed: std::sync::Mutex::new(std::collections::HashSet::new()),
             });
 
             // 设置托盘
@@ -104,11 +116,6 @@ pub fn run() {
                         );
                     }
                 }
-            }
-
-            #[cfg(not(target_os = "macos"))]
-            if let Some(window) = app.get_webview_window("quick-paste") {
-                let _ = window.set_visible_on_all_workspaces(true);
             }
 
             // 注册全局快捷键
@@ -143,10 +150,11 @@ pub fn run() {
             commands::update_clipboard_item,
             commands::clear_clipboard_items,
             commands::import_clipboard_items,
+            commands::get_image_data,
             commands::get_settings,
             commands::save_settings,
             commands::get_history_items,
-            commands::paste_clipboard,
+            commands::paste_item,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardItem {
     pub id: String,
+    /// 文本条目存原文；图片条目存相对 data_dir 的路径（如 `images/<uuid>.png`）
     pub content: String,
     #[serde(rename = "type")]
     pub item_type: String,
@@ -19,9 +20,13 @@ pub struct ClipboardItem {
     pub tags: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// 图片内容的 blake3 哈希，用于去重（文本条目为 None）
+    #[serde(rename = "imageHash", skip_serializing_if = "Option::is_none")]
+    pub image_hash: Option<String>,
 }
 
 // 应用状态
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -29,6 +34,11 @@ pub struct AppState {
     pub repo: Arc<crate::repository::ClipboardRepository>,
     pub data_dir: PathBuf,
     pub settings: Mutex<Settings>,
+    /// 用户主动删除/清空时记下的内容键（文本原文或图片哈希）。
+    ///
+    /// 剪贴板里可能还留着这条内容，如果不管它，下一轮轮询会立刻把它加回来——
+    /// 删除就成了摆设。这里记下这些键，等剪贴板内容真的变了再放开。
+    pub suppressed: Mutex<HashSet<String>>,
 }
 
 // 设置数据结构
@@ -49,10 +59,7 @@ impl Default for Settings {
             theme: "system".to_string(),
             autostart: false,
             max_items: 20,
-            #[cfg(target_os = "macos")]
             shortcut: "Cmd+Shift+V".to_string(),
-            #[cfg(not(target_os = "macos"))]
-            shortcut: "Ctrl+Shift+V".to_string(),
         }
     }
 }
@@ -69,7 +76,18 @@ impl ClipboardItem {
             is_pinned: false,
             tags: None,
             source: None,
+            image_hash: None,
         }
+    }
+
+    pub fn new_image(content: String, hash: String) -> Self {
+        let mut item = Self::new(content, "image");
+        item.image_hash = Some(hash);
+        item
+    }
+
+    pub fn is_image(&self) -> bool {
+        self.item_type == "image"
     }
 }
 
@@ -87,6 +105,18 @@ mod tests {
         assert!(!item.is_pinned);
         assert!(item.tags.is_none());
         assert!(item.source.is_none());
+        assert!(item.image_hash.is_none());
+        assert!(!item.is_image());
+    }
+
+    #[test]
+    fn test_clipboard_item_new_image() {
+        let item = ClipboardItem::new_image("images/a.png".to_string(), "abc123".to_string());
+
+        assert_eq!(item.item_type, "image");
+        assert_eq!(item.content, "images/a.png");
+        assert_eq!(item.image_hash.as_deref(), Some("abc123"));
+        assert!(item.is_image());
     }
 
     #[test]
@@ -117,10 +147,7 @@ mod tests {
         assert_eq!(settings.theme, "system");
         assert!(!settings.autostart);
         assert_eq!(settings.max_items, 20);
-        #[cfg(target_os = "macos")]
         assert_eq!(settings.shortcut, "Cmd+Shift+V");
-        #[cfg(not(target_os = "macos"))]
-        assert_eq!(settings.shortcut, "Ctrl+Shift+V");
     }
 
     #[test]
@@ -173,9 +200,41 @@ mod tests {
         let json = serde_json::to_string(&item).unwrap();
         assert!(json.contains("hello world"));
         assert!(json.contains("text"));
+        // 文本条目不应写出 imageHash
+        assert!(!json.contains("imageHash"));
 
         let decoded: ClipboardItem = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.content, "hello world");
         assert_eq!(decoded.item_type, "text");
+        assert!(decoded.image_hash.is_none());
+    }
+
+    #[test]
+    fn test_image_item_serialization_roundtrip() {
+        let item = ClipboardItem::new_image("images/x.png".to_string(), "deadbeef".to_string());
+
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("\"imageHash\":\"deadbeef\""));
+
+        let decoded: ClipboardItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.image_hash.as_deref(), Some("deadbeef"));
+        assert!(decoded.is_image());
+    }
+
+    #[test]
+    fn test_legacy_item_without_image_hash_deserializes() {
+        // 老版本写出的数据没有 imageHash 字段，必须仍能解析
+        let legacy = r#"{
+            "id": "1",
+            "content": "old",
+            "type": "text",
+            "createdAt": 1,
+            "updatedAt": 1,
+            "isPinned": false
+        }"#;
+
+        let decoded: ClipboardItem = serde_json::from_str(legacy).unwrap();
+        assert_eq!(decoded.content, "old");
+        assert!(decoded.image_hash.is_none());
     }
 }
