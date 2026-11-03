@@ -5,13 +5,19 @@ use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 use std::fs;
 
-/// 轮询间隔
-const POLL_INTERVAL: Duration = Duration::from_secs(1);
+/// 文本轮询间隔。
+///
+/// 1 秒太慢：连续复制几条内容（间隔 0.25 秒）时，中间那些会被整段漏掉——
+/// 用户看到的就是「复制了但历史里没有」。读文本本身很便宜，加密到 250ms 代价很小。
+const POLL_INTERVAL: Duration = Duration::from_millis(250);
+/// 位图探测间隔：`get_image` 每次都要把剪贴板内容解码成 RGBA，4K 截图的代价不小，
+/// 所以它单独限流，不跟着文本一起加密。
+const IMAGE_PROBE_INTERVAL: Duration = Duration::from_secs(1);
 /// 连续失败时的最大退避
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// 单条文本上限，避免把巨型文本塞进历史
@@ -33,6 +39,10 @@ struct MonitorState {
     /// 上一次处理过的图片文件：路径、大小、修改时间、哈希。
     /// 有了它，同一份文件在被覆盖之前不需要再解码一次。
     last_image_file: Option<ImageFileKey>,
+    /// 上一次因为超长而被跳过的文本长度，用来避免每秒刷同一条警告
+    last_skipped_len: Option<usize>,
+    /// 上一次尝试读取位图的时间（位图探测单独限流）
+    last_image_probe: Option<Instant>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -97,11 +107,32 @@ fn poll(app: &AppHandle, state: &mut MonitorState) -> Result<Option<ClipboardIte
     let mut clipboard =
         arboard::Clipboard::new().map_err(|e| format!("打开剪贴板失败: {}", e))?;
 
-    let text = clipboard
+    let raw_text = clipboard
         .get_text()
         .ok()
-        .filter(|t| !t.trim().is_empty())
-        .filter(|t| t.len() <= MAX_TEXT_BYTES);
+        .filter(|t| !t.trim().is_empty());
+
+    let text = raw_text
+        .as_ref()
+        .filter(|t| t.len() <= MAX_TEXT_BYTES)
+        .cloned();
+
+    // 超长文本会被丢弃，但必须留下痕迹——否则用户只会看到「复制了却没进历史」。
+    // 同一个超长内容会持续停留在剪贴板里，所以只在长度变化时记一次。
+    if let Some(raw) = raw_text.as_ref() {
+        if text.is_none() {
+            if state.last_skipped_len != Some(raw.len()) {
+                state.last_skipped_len = Some(raw.len());
+                log::warn!(
+                    "文本 {} KB 超过上限 {} KB，已跳过（不会出现在历史里）",
+                    raw.len() / 1024,
+                    MAX_TEXT_BYTES / 1024
+                );
+            }
+        } else {
+            state.last_skipped_len = None;
+        }
+    }
 
     // 1) 图片文件路径（截图工具、Finder 复制文件等场景）
     if let Some(t) = text.as_deref() {
@@ -110,7 +141,27 @@ fn poll(app: &AppHandle, state: &mut MonitorState) -> Result<Option<ClipboardIte
         }
     }
 
-    // 2) 剪贴板里的位图（截图直接进剪贴板）
+    // 2) 真正的文本优先于位图。
+    //    剪贴板里同时带文本和位图的情况并不罕见（浏览器复制图片会附带 URL/HTML，
+    //    Office/预览里复制内容也可能同时带上渲染图）。这时如果先取位图，
+    //    用户复制的文本就凭空消失了——所以只有「文本是 URL/HTML 这类副产物」时才让位给图片。
+    if let Some(t) = text.as_deref().filter(|t| !looks_like_url_or_markup(t)) {
+        return text_item(app, state, t.to_string());
+    }
+
+    // 3) 剪贴板里的位图（截图直接进剪贴板）。
+    //    解码位图比读文本贵得多，所以单独限流：最多每秒试一次。
+    let probe_due = state
+        .last_image_probe
+        .map(|t| t.elapsed() >= IMAGE_PROBE_INTERVAL)
+        .unwrap_or(true);
+    if !probe_due {
+        // 本轮跳过了位图探测，就别急着把 URL 之类当文本记下来——
+        // 那多半是「复制图片」的副产物，下一轮探测完再决定。
+        return Ok(None);
+    }
+
+    state.last_image_probe = Some(Instant::now());
     if let Ok(image) = clipboard.get_image() {
         return image_from_rgba(
             app,
@@ -121,11 +172,26 @@ fn poll(app: &AppHandle, state: &mut MonitorState) -> Result<Option<ClipboardIte
         );
     }
 
-    // 3) 普通文本
+    // 4) URL / HTML 片段：确实没有位图可记时，仍然按文本收下
     match text {
         Some(t) => text_item(app, state, t),
         None => Ok(None),
     }
+}
+
+/// URL、data URI、HTML 片段通常只是「复制图片」时附带的副产物，不是用户真正想要的内容。
+fn looks_like_url_or_markup(text: &str) -> bool {
+    let t = text.trim_start();
+    // 只认形如 "<tag ...>" 的标签；"<3" 这种还是当普通文本
+    (t.starts_with('<') && t.contains('>'))
+        || has_prefix_ci(t, "http://")
+        || has_prefix_ci(t, "https://")
+        || has_prefix_ci(t, "data:")
+}
+
+/// 前缀比较，不区分大小写（`HTTPS://` 也算了）。
+fn has_prefix_ci(text: &str, prefix: &str) -> bool {
+    text.len() >= prefix.len() && text.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
 
 /// 文本条目：历史里已有就提到顶部，没有就新增。
@@ -155,7 +221,7 @@ fn text_item(
         state.last_image_hash = None;
         state.last_image_file = None;
         // 剪贴板换成新内容了，之前对这条的抑制解除
-        unsuppress(&app_state, &text);
+        unsuppress_all(&app_state);
     }
 
     if let Some(existing) = repo.find_by_content(&text, "text") {
@@ -178,9 +244,11 @@ fn is_suppressed(state: &tauri::State<'_, AppState>, key: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn unsuppress(state: &tauri::State<'_, AppState>, key: &str) {
+fn unsuppress_all(state: &tauri::State<'_, AppState>) {
+    // 剪贴板换成别的内容后，之前被删掉的条目已经不可能「自己冒回来」，
+    // 抑制表可以整体清空。逐条 remove 会让旧键越积越多，也让语义变得难推理。
     if let Ok(mut set) = state.suppressed.lock() {
-        set.remove(key);
+        set.clear();
     }
 }
 
@@ -229,7 +297,7 @@ fn image_from_file(
 
     // 换了一张新图：解除对它之前可能存在的抑制
     if state.last_image_file.as_ref().map(|k| k.hash.as_str()) != Some(hash.as_str()) {
-        unsuppress(&app.state::<AppState>(), &hash);
+        unsuppress_all(&app.state::<AppState>());
     }
 
     state.last_image_file = Some(ImageFileKey {
@@ -279,7 +347,7 @@ fn image_from_rgba(
 
     // 换了一张新图：解除对它之前可能存在的抑制
     if state.last_image_hash.as_deref() != Some(hash.as_str()) {
-        unsuppress(&app.state::<AppState>(), &hash);
+        unsuppress_all(&app.state::<AppState>());
     }
 
     store_image(app, state, rgba, hash)
@@ -440,5 +508,30 @@ mod tests {
 
         let count = std::fs::read_dir(dir.path().join("images")).unwrap().count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_looks_like_url_or_markup() {
+        // 复制图片时附带的副产物：不该当成文本条目
+        assert!(looks_like_url_or_markup("https://example.com/a.png"));
+        assert!(looks_like_url_or_markup("HTTPS://EXAMPLE.COM/A.PNG"));
+        assert!(looks_like_url_or_markup("http://x"));
+        assert!(looks_like_url_or_markup("data:image/png;base64,AAAA"));
+        assert!(looks_like_url_or_markup("  <img src=\"a.png\">"));
+        assert!(looks_like_url_or_markup("<div>hi</div>"));
+
+        // 真正的文本：必须留下来
+        assert!(!looks_like_url_or_markup("hello world"));
+        assert!(!looks_like_url_or_markup("看一下这个 https://example.com 页面"));
+        assert!(!looks_like_url_or_markup("/tmp/a.png"));
+        assert!(!looks_like_url_or_markup("<3"));
+    }
+
+    #[test]
+    fn test_has_prefix_ci() {
+        assert!(has_prefix_ci("Hello", "hello"));
+        assert!(has_prefix_ci("https://x", "HTTPS://"));
+        assert!(!has_prefix_ci("http", "https://"));
+        assert!(!has_prefix_ci("", "a"));
     }
 }
