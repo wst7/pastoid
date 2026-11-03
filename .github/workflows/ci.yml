@@ -49,4 +49,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: bun run tauri build -- ${{ matrix.args }}
+        # 不要写成 `bun run tauri build -- $args`：bun 会把 `--` 一起传给 tauri，
+        # tauri 忽略 --target，产物落到 target/release，打包阶段再去 triple 目录找就报
+        # `No such file or directory (os error 2)`。
+        run: bun run tauri build ${{ matrix.args }}
