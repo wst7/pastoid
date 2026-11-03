@@ -41,5 +41,10 @@
   "close": "Close",
   "noMatches": "No matches",
   "emptyClipboard": "Clipboard is empty",
-  "imageItem": "Image"
+  "imageItem": "Image",
+  "filterAll": "All",
+  "filterText": "Text",
+  "filterImage": "Images",
+  "filterLink": "Links",
+  "clearSearch": "Clear search"
 }

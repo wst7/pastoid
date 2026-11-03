@@ -31,6 +31,7 @@ const languages = [
 ];
 
 const themes = (t: (key: string) => string) => [
+  { id: "system", name: t("system") },
   { id: "light", name: t("light") },
   { id: "dark", name: t("dark") },
 ];
@@ -55,12 +56,16 @@ export default function SettingsApp() {
   const [downloadProgress, setDownloadProgress] = useState(0);
 
   const applyTheme = (theme: string) => {
-    const isDark = theme === "dark";
+    // "system" 要跟随系统外观；之前这里只判断了 dark，
+    // 导致默认值 system 会被当成浅色，和系统深色外观不一致。
+    const isDark =
+      theme === "dark" ||
+      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     const html = document.documentElement;
 
     const currentWindow = getCurrentWindow();
-    if (typeof currentWindow.setTheme === 'function') {
-      currentWindow.setTheme(isDark ? 'dark' : 'light');
+    if (typeof currentWindow.setTheme === "function") {
+      currentWindow.setTheme(theme === "system" ? null : isDark ? "dark" : "light");
     }
 
     if (isDark) {

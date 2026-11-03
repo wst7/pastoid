@@ -41,5 +41,10 @@
   "close": "关闭",
   "noMatches": "没有匹配的内容",
   "emptyClipboard": "剪贴板为空",
-  "imageItem": "图片"
+  "imageItem": "图片",
+  "filterAll": "全部",
+  "filterText": "文本",
+  "filterImage": "图片",
+  "filterLink": "链接",
+  "clearSearch": "清空搜索"
 }
