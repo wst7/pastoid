@@ -9,8 +9,8 @@ import packageInfo from "../../package.json" with { type: "json" };
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check, Update } from "@tauri-apps/plugin-updater";
+import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
 import { Switch, Button, Spinner } from "@heroui/react";
@@ -65,29 +65,6 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
 }
 
-function applyTheme(theme: string) {
-  // "system" 要跟随系统外观；之前只判断了 dark，系统深色下会被当成浅色
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const html = document.documentElement;
-
-  const currentWindow = getCurrentWindow();
-  if (typeof currentWindow.setTheme === "function") {
-    currentWindow.setTheme(theme === "system" ? null : isDark ? "dark" : "light");
-  }
-
-  if (isDark) {
-    html.classList.add("dark");
-    html.classList.remove("light");
-    html.setAttribute("data-theme", "dark");
-  } else {
-    html.classList.remove("dark");
-    html.classList.add("light");
-    html.setAttribute("data-theme", "light");
-  }
-}
-
 /** 一行设置：左标签、右控件 */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -122,6 +99,8 @@ export default function SettingsApp() {
     shortcut: defaultShortcut,
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
+  // 系统明暗变化时要知道现在是不是「跟随系统」档
+  const themeRef = useRef<ThemePref>("system");
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -156,6 +135,13 @@ export default function SettingsApp() {
     };
   }, []);
 
+  // 系统外观变化（夜间自动变暗等）：只在「跟随系统」档响应
+  useEffect(() => {
+    return watchSystemTheme(() => {
+      if (themeRef.current === "system") paint("system");
+    });
+  }, []);
+
   const loadSettings = async () => {
     try {
       const data = await invoke<SettingsData>("get_settings");
@@ -166,7 +152,8 @@ export default function SettingsApp() {
         max_items: data.max_items ?? 20,
         shortcut: data.shortcut || defaultShortcut,
       });
-      applyTheme(data.theme || "light");
+      themeRef.current = (data.theme as ThemePref) || "system";
+      applyTheme(themeRef.current);
       if (data.language) {
         i18n.changeLanguage(data.language === "zh" ? "zh" : "en");
       }
@@ -180,7 +167,8 @@ export default function SettingsApp() {
   const saveSettings = async (newSettings: SettingsData) => {
     try {
       await invoke("save_settings", { settings: newSettings });
-      applyTheme(newSettings.theme);
+      themeRef.current = newSettings.theme as ThemePref;
+      applyTheme(themeRef.current);
     } catch (error) {
       console.error("Failed to save settings:", error);
     }

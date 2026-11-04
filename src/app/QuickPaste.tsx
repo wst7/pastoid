@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -34,22 +35,6 @@ const shiftLabel = isMac ? "⇧" : "Shift";
 const backspaceLabel = isMac ? "⌫" : "Backspace";
 const enterLabel = isMac ? "↵" : "Enter";
 const escLabel = isMac ? "esc" : "Esc";
-
-function applyTheme(theme: string) {
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const html = document.documentElement;
-  if (isDark) {
-    html.classList.add("dark");
-    html.classList.remove("light");
-    html.setAttribute("data-theme", "dark");
-  } else {
-    html.classList.remove("dark");
-    html.classList.add("light");
-    html.setAttribute("data-theme", "light");
-  }
-}
 
 /** 图片内容只拉一次，后续复用 data URL */
 const imageCache = new Map<string, string>();
@@ -107,6 +92,8 @@ export default function QuickPaste() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [language, setLanguage] = useState("zh");
+  // 跟随系统时，系统夜间切暗也要跟着变
+  const themeRef = useRef<ThemePref>("system");
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -216,9 +203,16 @@ export default function QuickPaste() {
   clearAllRef.current = clearAll;
 
   useEffect(() => {
+    return watchSystemTheme(() => {
+      if (themeRef.current === "system") paint("system");
+    });
+  }, []);
+
+  useEffect(() => {
     invoke<SettingsData>("get_settings")
       .then((data) => {
-        applyTheme(data.theme);
+        themeRef.current = (data.theme as ThemePref) || "system";
+        paint(themeRef.current);
         if (data.language) {
           setLanguage(data.language);
           // quick-paste 是独立窗口，i18n 初始化时用的是系统语言。
@@ -226,7 +220,7 @@ export default function QuickPaste() {
           void i18n.changeLanguage(data.language);
         }
       })
-      .catch(() => applyTheme("light"));
+      .catch(() => paint("light"));
 
     loadItems();
 
@@ -249,7 +243,8 @@ export default function QuickPaste() {
     });
 
     const unlistenTheme = listen<string>("theme-changed", (event) => {
-      applyTheme(event.payload);
+      themeRef.current = (event.payload as ThemePref) || "system";
+      paint(themeRef.current);
     });
 
     const unlistenChanged = listen("clipboard_changed", () => {
