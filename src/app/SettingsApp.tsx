@@ -23,6 +23,7 @@ interface StorageInfo {
   data_dir: string;
   default_dir: string;
   is_custom: boolean;
+  first_run: boolean;
   total_bytes: number;
   image_count: number;
 }
@@ -213,6 +214,15 @@ export default function SettingsApp() {
     }
   };
 
+  const handleUseDefaultDir = async () => {
+    try {
+      await invoke("mark_first_run_done");
+      await loadStorage();
+    } catch (error) {
+      console.error("Failed to mark first run:", error);
+    }
+  };
+
   const handleOpenDataDir = async () => {
     try {
       await invoke("open_data_dir");
@@ -281,6 +291,25 @@ export default function SettingsApp() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {storage?.first_run && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="w-[440px] space-y-4 rounded-xl border border-border bg-card p-6 shadow-xl">
+            <h2 className="text-base font-semibold">{t('firstRunTitle')}</h2>
+            <p className="text-sm leading-relaxed text-muted-foreground">{t('firstRunHint')}</p>
+            <p className="break-all rounded-lg bg-default px-3 py-2 font-mono text-xs text-muted-foreground">
+              {storage.default_dir}
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" onPress={handleUseDefaultDir}>
+                {t('firstRunDefault')}
+              </Button>
+              <Button variant="primary" onPress={handleChangeDataDir}>
+                {t('firstRunPick')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="sticky top-0 z-20 bg-background pt-[38px] text-foreground">
         <Tabs
           selectedKey={activeTab}

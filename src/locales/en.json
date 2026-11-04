@@ -55,5 +55,9 @@
   "dataDirPickTitle": "Choose data folder",
   "dataDirRestartNeeded": "Switched to the new folder. Restart Pastoid to apply.",
   "restartNow": "Restart now",
-  "later": "Later"
+  "later": "Later",
+  "firstRunTitle": "Choose where data lives",
+  "firstRunHint": "Pastoid keeps clipboard history and images on your machine. The default is on the system drive — pick another drive if space is tight. You can change this later in Settings → Data folder.",
+  "firstRunDefault": "Use default",
+  "firstRunPick": "Choose folder…"
 }

@@ -191,6 +191,20 @@ pub fn get_data_dir(app_handle: &tauri::AppHandle) -> (PathBuf, Vec<String>) {
     (default_dir, notes)
 }
 
+/// 首次运行标记：存在就说明已经问过用户「数据存哪里」了
+const FIRST_RUN_MARKER: &str = ".first-run-done";
+
+/// 是否首次运行：还没问过，且用户也没指定过目录
+pub fn is_first_run(data_dir: &Path) -> bool {
+    !data_dir.join(FIRST_RUN_MARKER).exists() && read_data_dir_pointer(data_dir).is_none()
+}
+
+pub fn mark_first_run_done(data_dir: &Path) {
+    if let Err(e) = fs::write(data_dir.join(FIRST_RUN_MARKER), b"1") {
+        log::warn!("写入首次运行标记失败: {}", e);
+    }
+}
+
 /// 返回（总字节数，图片文件数）
 pub fn dir_usage(dir: &Path) -> (u64, usize) {
     let mut bytes = 0u64;
@@ -1145,6 +1159,27 @@ mod tests {
         // 清除指针
         write_data_dir_pointer(&default_dir, None, None).unwrap();
         assert!(read_data_dir_pointer(&default_dir).is_none());
+    }
+
+    #[test]
+    fn test_first_run_detection() {
+        let temp = create_temp_dir();
+        let data_dir = temp.path().join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+
+        assert!(is_first_run(&data_dir));
+        mark_first_run_done(&data_dir);
+        assert!(!is_first_run(&data_dir));
+    }
+
+    #[test]
+    fn test_first_run_is_false_when_dir_is_customized() {
+        let temp = create_temp_dir();
+        let data_dir = temp.path().join("data");
+        fs::create_dir_all(&data_dir).unwrap();
+        // 用户已经指定过目录：不该再弹引导
+        write_data_dir_pointer(&data_dir, Some(&temp.path().join("custom")), None).unwrap();
+        assert!(!is_first_run(&data_dir));
     }
 
     #[test]

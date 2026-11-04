@@ -55,5 +55,9 @@
   "dataDirPickTitle": "选择数据目录",
   "dataDirRestartNeeded": "已切换到新目录，重启 Pastoid 后生效",
   "restartNow": "立即重启",
-  "later": "稍后"
+  "later": "稍后",
+  "firstRunTitle": "选择数据存放位置",
+  "firstRunHint": "Pastoid 把剪贴板历史和图片存在本地。默认位置在系统盘，空间紧张可以换到别的盘。以后在「设置 → 数据目录」里随时能改。",
+  "firstRunDefault": "使用默认位置",
+  "firstRunPick": "选择文件夹…"
 }

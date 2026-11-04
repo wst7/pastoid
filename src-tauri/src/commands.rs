@@ -180,6 +180,8 @@ pub struct StorageInfo {
     pub total_bytes: u64,
     /// 图片文件数
     pub image_count: usize,
+    /// 首次运行（还没问过数据目录）
+    pub first_run: bool,
 }
 
 #[tauri::command]
@@ -192,6 +194,7 @@ pub fn get_storage_info(
     let (total_bytes, image_count) = storage::dir_usage(&data_dir);
 
     Ok(StorageInfo {
+        first_run: storage::is_first_run(&data_dir),
         is_custom: data_dir != default_dir,
         data_dir: data_dir.to_string_lossy().to_string(),
         default_dir: default_dir.to_string_lossy().to_string(),
@@ -242,6 +245,13 @@ pub fn set_data_dir(
     storage::write_data_dir_pointer(&default_dir, Some(&target), Some(&current))?;
 
     log::info!("数据目录已指定为 {:?}，重启后迁移", target);
+    Ok(())
+}
+
+/// 用户选择「用默认位置」时调用，避免每次启动都弹引导
+#[tauri::command]
+pub fn mark_first_run_done(state: tauri::State<AppState>) -> Result<(), String> {
+    storage::mark_first_run_done(&state.data_dir);
     Ok(())
 }
 

@@ -81,12 +81,23 @@ pub fn run() {
                     storage::cleanup_orphan_images(&data_dir_gc, &referenced);
                 });
 
+            // manage 会把 data_dir 移走，首次运行判断得提前算好
+            let first_run = storage::is_first_run(&data_dir);
+
             app.manage(AppState {
                 repo,
                 data_dir,
                 settings: std::sync::Mutex::new(settings),
                 suppressed: std::sync::Mutex::new(std::collections::HashSet::new()),
             });
+
+            // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪
+            if first_run {
+                if let Some(window) = app.get_webview_window("settings") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
 
             // 数据目录相关的启动提示（logger 已就绪）
             for note in &startup_notes {
@@ -165,6 +176,7 @@ pub fn run() {
             commands::import_clipboard_items,
             commands::get_image_data,
         commands::get_storage_info,
+        commands::mark_first_run_done,
         commands::set_data_dir,
         commands::open_data_dir,
         commands::restart_app,

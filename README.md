@@ -66,7 +66,7 @@ History and images live in a single folder:
 | macOS | `~/Library/Application Support/com.wst7.pastoid` |
 | Windows | `%LOCALAPPDATA%\com.wst7.pastoid` |
 
-**It is configurable.** Settings → General → Data folder → **Change…**, pick any location (e.g. `D:\PastoidData`). Pastoid restarts, moves the existing history over, and keeps working. If the target drive is unavailable at startup (an unplugged external disk, say), it falls back to the default folder instead of failing, and the data is left untouched.
+**It is configurable.** On first launch Pastoid asks where to keep its data — accept the default or pick another drive (e.g. `D:\PastoidData`). You can change it later in Settings → Data folder. Pastoid restarts, moves the existing history over, and keeps working. If the target drive is unavailable at startup (an unplugged external disk, say), it falls back to the default folder instead of failing, and the data is left untouched.
 
 Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100) caps it: items beyond the limit are dropped and their image files are deleted, so the folder does not grow without bound.
 
