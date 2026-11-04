@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.0](https://github.com/wst7/pastoid/compare/v1.8.1...v1.9.0) (2026-11-04)
+
+### ✨ Features | 新功能
+
+* restore Windows support ([80058eb](https://github.com/wst7/pastoid/commit/80058eb06f50d57c06e5fb858d9fc50a8febd429))
+
 ## [1.8.1](https://github.com/wst7/pastoid/compare/v1.8.0...v1.8.1) (2026-11-04)
 
 ### 🐛 Bug Fixes | Bug 修复
