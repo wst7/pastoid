@@ -166,6 +166,96 @@ pub fn get_image_data(filename: String, state: tauri::State<AppState>) -> Result
     Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
 }
 
+// === 数据目录 ===
+
+#[derive(serde::Serialize)]
+pub struct StorageInfo {
+    /// 当前实际使用的目录
+    pub data_dir: String,
+    /// 平台默认目录（Windows 为 %LOCALAPPDATA%，macOS 为 Application Support）
+    pub default_dir: String,
+    /// 是否用户自定义过
+    pub is_custom: bool,
+    /// 历史 + 图片占用字节数
+    pub total_bytes: u64,
+    /// 图片文件数
+    pub image_count: usize,
+}
+
+#[tauri::command]
+pub fn get_storage_info(
+    state: tauri::State<AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<StorageInfo, String> {
+    let data_dir = state.data_dir.clone();
+    let default_dir = storage::default_data_dir(&app_handle);
+    let (total_bytes, image_count) = storage::dir_usage(&data_dir);
+
+    Ok(StorageInfo {
+        is_custom: data_dir != default_dir,
+        data_dir: data_dir.to_string_lossy().to_string(),
+        default_dir: default_dir.to_string_lossy().to_string(),
+        total_bytes,
+        image_count,
+    })
+}
+
+/// 指定新的数据目录。写入指针文件，真正搬迁发生在下次启动时
+/// （仓库、图片目录、监控线程都持有旧路径，运行中切换没有意义）。
+#[tauri::command]
+pub fn set_data_dir(
+    path: String,
+    state: tauri::State<AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("数据目录不能为空".to_string());
+    }
+
+    let target = std::path::PathBuf::from(trimmed);
+    if !target.is_absolute() {
+        return Err("请填写绝对路径（例如 D:\\PastoidData）".to_string());
+    }
+
+    let current = state.data_dir.clone();
+    if target == current {
+        return Ok(());
+    }
+
+    // 互相嵌套会出事：搬进子目录相当于递归，搬到父目录会把整个 AppData 卷进来
+    if target.starts_with(&current) || current.starts_with(&target) {
+        return Err("不能选择当前数据目录的子目录或其上级目录".to_string());
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&target) {
+        return Err(format!("无法创建该目录: {}", e));
+    }
+    let probe = target.join(".pastoid-write-probe");
+    let writable = std::fs::write(&probe, b"ok").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    if !writable {
+        return Err("该目录不可写，请换一个位置".to_string());
+    }
+
+    let default_dir = storage::default_data_dir(&app_handle);
+    storage::write_data_dir_pointer(&default_dir, Some(&target), Some(&current))?;
+
+    log::info!("数据目录已指定为 {:?}，重启后迁移", target);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_data_dir(state: tauri::State<AppState>) -> Result<(), String> {
+    open::that(&state.data_dir).map_err(|e| format!("打开目录失败: {}", e))
+}
+
+#[tauri::command]
+pub fn restart_app(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // restart 内部会 exit 并拉起新进程，正常不会返回
+    app_handle.restart();
+}
+
 // === 设置 ===
 
 #[tauri::command]

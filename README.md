@@ -57,6 +57,19 @@ Images are captured too — screenshots and copied image files show up as thumbn
 
 Pastoid stores your clipboard history locally on your machine. No cloud, no account, no tracking. Your data stays yours.
 
+## Data Storage
+
+History and images live in a single folder:
+
+| Platform | Path |
+| --- | --- |
+| macOS | `~/Library/Application Support/com.wst7.pastoid` |
+| Windows | `%LOCALAPPDATA%\com.wst7.pastoid` |
+
+**It is configurable.** Settings → General → Data folder → **Change…**, pick any location (e.g. `D:\PastoidData`). Pastoid restarts, moves the existing history over, and keeps working. If the target drive is unavailable at startup (an unplugged external disk, say), it falls back to the default folder instead of failing, and the data is left untouched.
+
+Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100) caps it: items beyond the limit are dropped and their image files are deleted, so the folder does not grow without bound.
+
 ## Installation
 
 ### macOS

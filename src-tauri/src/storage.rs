@@ -9,17 +9,211 @@ use tauri::Manager;
 
 const OLD_APP_IDENTIFIER: &str = "com.pastoid.app";
 
-pub fn get_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
-    let app_dir = app_handle
-        .path()
-        .app_data_dir()
-        .expect("Failed to get app data dir");
+/// 记录「自定义数据目录」的指针文件，放在默认目录里。
+/// 位置必须固定，否则自定义目录本身就无从查起。
+const DATA_DIR_POINTER: &str = "location.txt";
 
-    if !app_dir.exists() {
-        fs::create_dir_all(&app_dir).expect("Failed to create app data dir");
+/// 平台默认数据目录。
+///
+/// Windows 用 `%LOCALAPPDATA%` 而不是 `%APPDATA%`：Roaming 会被漫游配置文件一起同步，
+/// 几百 MB 的图片走网络拷贝，域环境下非常难受。
+pub fn default_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
+    let resolved = if cfg!(target_os = "windows") {
+        app_handle.path().app_local_data_dir()
+    } else {
+        app_handle.path().app_data_dir()
+    };
+    resolved.expect("Failed to get app data dir")
+}
+
+fn data_dir_pointer_path(default_dir: &Path) -> PathBuf {
+    default_dir.join(DATA_DIR_POINTER)
+}
+
+/// 指针文件内容：第一行是最终目录，可选第二行 `from=<旧目录>` 表示
+/// 「下次启动时把数据从旧目录搬过来」。切换目录总是发生在重启后，
+/// 所以搬迁必须延后到下次启动、在仓库和监控线程初始化之前完成。
+struct DataDirPointer {
+    target: PathBuf,
+    move_from: Option<PathBuf>,
+}
+
+fn read_data_dir_pointer(default_dir: &Path) -> Option<DataDirPointer> {
+    let raw = fs::read_to_string(data_dir_pointer_path(default_dir)).ok()?;
+    let mut lines = raw.lines().map(str::trim).filter(|l| !l.is_empty());
+
+    let target = lines.next()?;
+    let move_from = lines
+        .next()
+        .and_then(|line| line.strip_prefix("from="))
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from);
+
+    Some(DataDirPointer {
+        target: PathBuf::from(target),
+        move_from,
+    })
+}
+
+/// 写入（或清除）自定义目录指针
+pub fn write_data_dir_pointer(
+    default_dir: &Path,
+    target: Option<&Path>,
+    move_from: Option<&Path>,
+) -> Result<(), String> {
+    let pointer = data_dir_pointer_path(default_dir);
+    match target {
+        Some(dir) => {
+            let mut content = dir.to_string_lossy().to_string();
+            if let Some(from) = move_from {
+                content.push_str(&format!("\nfrom={}", from.to_string_lossy()));
+            }
+            fs::write(&pointer, content).map_err(|e| format!("写入数据目录指针失败: {}", e))
+        }
+        None => {
+            if pointer.exists() {
+                fs::remove_file(&pointer).map_err(|e| format!("清除数据目录指针失败: {}", e))?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// 目录存在、能创建、能写入
+fn dir_is_usable(dir: &Path) -> bool {
+    if fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let probe = dir.join(".pastoid-write-probe");
+    let ok = fs::write(&probe, b"ok").is_ok();
+    let _ = fs::remove_file(&probe);
+    ok
+}
+
+/// 移动单个文件/目录；跨卷 rename 会失败，退化成复制 + 删除
+fn move_entry(src: &Path, dst: &Path) -> Result<(), String> {
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    if src.is_dir() {
+        copy_dir_recursive(src, dst);
+        fs::remove_dir_all(src).map_err(|e| format!("删除源目录失败: {}", e))
+    } else {
+        fs::copy(src, dst).map_err(|e| format!("复制文件失败: {}", e))?;
+        fs::remove_file(src).map_err(|e| format!("删除源文件失败: {}", e))
+    }
+}
+
+/// 把 `from` 里的内容搬到 `to`（目标已有同名项则跳过，不覆盖）
+fn move_children(from: &Path, to: &Path) -> Result<(), String> {
+    let entries = match fs::read_dir(from) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()), // 源目录不存在，没什么可搬的
+    };
+    fs::create_dir_all(to).map_err(|e| format!("创建目标目录失败: {}", e))?;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let src = entry.path();
+        let dst = to.join(&name);
+        if dst.exists() || name == DATA_DIR_POINTER {
+            continue;
+        }
+        if let Err(e) = move_entry(&src, &dst) {
+            log::warn!("迁移 {:?} -> {:?} 失败: {}", src, dst, e);
+        }
+    }
+    Ok(())
+}
+
+/// 目标目录还没有任何数据时，才把源目录搬过去
+fn migrate_if_empty(from: &Path, to: &Path) {
+    if from == to || !from.exists() {
+        return;
+    }
+    if to.join("settings.json").exists() || to.join("clipboard_data.json").exists() {
+        return;
+    }
+    log::info!("迁移数据目录: {:?} -> {:?}", from, to);
+    if let Err(e) = move_children(from, to) {
+        log::error!("迁移数据目录失败: {}", e);
+    }
+}
+
+/// 老版本 Windows 把数据放在 Roaming，升级后要搬到 Local
+#[cfg(target_os = "windows")]
+fn legacy_roaming_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("com.wst7.pastoid"))
+}
+
+/// 解析本次启动要用的数据目录。
+///
+/// 返回 `(目录, 告警)`：这个函数在 logger 初始化之前执行，直接 log 会被丢掉，
+/// 所以把要提示的信息带回去，等 logger 就绪后再打。
+pub fn get_data_dir(app_handle: &tauri::AppHandle) -> (PathBuf, Vec<String>) {
+    let mut notes = Vec::new();
+    let default_dir = default_data_dir(app_handle);
+    if let Err(e) = fs::create_dir_all(&default_dir) {
+        notes.push(format!("创建默认数据目录失败: {}", e));
     }
 
-    app_dir
+    // 1) 用户自定义目录优先
+    if let Some(pointer) = read_data_dir_pointer(&default_dir) {
+        if pointer.target == default_dir {
+            // 指向默认目录等于没自定义，把指针清掉免得以后换默认目录时被带偏
+            let _ = write_data_dir_pointer(&default_dir, None, None);
+        } else if dir_is_usable(&pointer.target) {
+            if let Some(from) = pointer.move_from.as_deref() {
+                migrate_if_empty(from, &pointer.target);
+                // 搬完了就把 from 那行去掉，避免每次启动都重试
+                let _ = write_data_dir_pointer(&default_dir, Some(&pointer.target), None);
+            }
+            notes.push(format!("使用自定义数据目录: {}", pointer.target.display()));
+            return (pointer.target, notes);
+        } else {
+            notes.push(format!(
+                "自定义数据目录不可用（{}），本次回落到默认目录",
+                pointer.target.display()
+            ));
+        }
+    }
+
+    // 2) Windows：把 Roaming 里的旧数据搬到 Local
+    #[cfg(target_os = "windows")]
+    if let Some(legacy) = legacy_roaming_dir() {
+        if legacy != default_dir && legacy.exists() {
+            notes.push(format!("检测到旧的 Roaming 数据目录: {}", legacy.display()));
+            migrate_if_empty(&legacy, &default_dir);
+        }
+    }
+
+    (default_dir, notes)
+}
+
+/// 返回（总字节数，图片文件数）
+pub fn dir_usage(dir: &Path) -> (u64, usize) {
+    let mut bytes = 0u64;
+    let mut images = 0usize;
+
+    for file in ["clipboard_data.json", "settings.json"] {
+        if let Ok(meta) = fs::metadata(dir.join(file)) {
+            bytes += meta.len();
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(dir.join("images")) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    bytes += meta.len();
+                    images += 1;
+                }
+            }
+        }
+    }
+
+    (bytes, images)
 }
 
 const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024; // 5 MB
@@ -231,13 +425,8 @@ pub fn init_logger(data_dir: &Path) -> Result<(), String> {
 
 /// 如果 identifier 变更导致 data_dir 改变，自动将旧目录数据迁移到新目录
 pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
-    let new_dir = match app_handle.path().app_data_dir() {
-        Ok(d) => d,
-        Err(e) => {
-            log::error!("Migration: failed to get new app data dir: {}", e);
-            return;
-        }
-    };
+    // 必须和 get_data_dir 用同一个默认目录，否则 Windows 上会把数据搬进 Roaming
+    let new_dir = default_data_dir(app_handle);
 
     // 如果新目录已有数据，说明不是首次启动，跳过迁移
     let new_settings = new_dir.join("settings.json");
@@ -252,9 +441,17 @@ pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
             .join("Application Support")
             .join(OLD_APP_IDENTIFIER)
     } else if cfg!(target_os = "windows") {
-        dirs::data_dir()
+        // 老版本（Roaming）和新版本（Local）都找一遍，谁有数据算谁
+        let roaming = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("%APPDATA%"))
-            .join(OLD_APP_IDENTIFIER)
+            .join(OLD_APP_IDENTIFIER);
+        if roaming.exists() {
+            roaming
+        } else {
+            dirs::data_local_dir()
+                .unwrap_or_else(|| PathBuf::from("%LOCALAPPDATA%"))
+                .join(OLD_APP_IDENTIFIER)
+        }
     } else {
         dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("~/.local/share"))
@@ -931,6 +1128,71 @@ mod tests {
             cleanup_orphan_images_older_than(&data_dir, &std::collections::HashSet::new(), std::time::Duration::ZERO);
 
         assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn test_data_dir_pointer_roundtrip() {
+        let temp = create_temp_dir();
+        let default_dir = temp.path().join("default");
+        fs::create_dir_all(&default_dir).unwrap();
+        let target = temp.path().join("custom");
+
+        write_data_dir_pointer(&default_dir, Some(&target), Some(Path::new("/old/dir"))).unwrap();
+        let pointer = read_data_dir_pointer(&default_dir).unwrap();
+        assert_eq!(pointer.target, target);
+        assert_eq!(pointer.move_from.as_deref(), Some(Path::new("/old/dir")));
+
+        // 清除指针
+        write_data_dir_pointer(&default_dir, None, None).unwrap();
+        assert!(read_data_dir_pointer(&default_dir).is_none());
+    }
+
+    #[test]
+    fn test_migrate_if_empty_moves_everything() {
+        let temp = create_temp_dir();
+        let from = temp.path().join("from");
+        let to = temp.path().join("to");
+        fs::create_dir_all(from.join("images")).unwrap();
+        fs::write(from.join("clipboard_data.json"), "[]").unwrap();
+        fs::write(from.join("images/a.png"), b"png").unwrap();
+
+        migrate_if_empty(&from, &to);
+
+        assert!(to.join("clipboard_data.json").exists());
+        assert!(to.join("images/a.png").exists());
+        // 源目录里的数据已经被搬走
+        assert!(!from.join("clipboard_data.json").exists());
+    }
+
+    #[test]
+    fn test_migrate_if_empty_keeps_target_data() {
+        let temp = create_temp_dir();
+        let from = temp.path().join("from");
+        let to = temp.path().join("to");
+        fs::create_dir_all(&from).unwrap();
+        fs::create_dir_all(&to).unwrap();
+        fs::write(from.join("clipboard_data.json"), "[1]").unwrap();
+        // 目标已有数据：不能覆盖
+        fs::write(to.join("clipboard_data.json"), "[2]").unwrap();
+
+        migrate_if_empty(&from, &to);
+
+        assert_eq!(fs::read_to_string(to.join("clipboard_data.json")).unwrap(), "[2]");
+        assert!(from.join("clipboard_data.json").exists());
+    }
+
+    #[test]
+    fn test_dir_usage_counts_images_and_json() {
+        let temp = create_temp_dir();
+        let data_dir = temp.path().join("data");
+        fs::create_dir_all(data_dir.join("images")).unwrap();
+        fs::write(data_dir.join("clipboard_data.json"), "[]").unwrap();
+        fs::write(data_dir.join("images/a.png"), b"12345").unwrap();
+        fs::write(data_dir.join("images/b.png"), b"123").unwrap();
+
+        let (bytes, images) = dir_usage(&data_dir);
+        assert_eq!(images, 2);
+        assert_eq!(bytes, 2 + 5 + 3);
     }
 
     #[test]

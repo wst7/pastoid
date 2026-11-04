@@ -46,5 +46,14 @@
   "filterText": "Text",
   "filterImage": "Images",
   "filterLink": "Links",
-  "clearSearch": "Clear search"
+  "clearSearch": "Clear search",
+  "dataDir": "Data folder",
+  "dataDirHint": "History and images live here. After changing it, existing data is moved on restart.",
+  "dataDirUsage": "{size} used, {count} images",
+  "dataDirChange": "Change…",
+  "dataDirOpen": "Open",
+  "dataDirPickTitle": "Choose data folder",
+  "dataDirRestartNeeded": "Switched to the new folder. Restart Pastoid to apply.",
+  "restartNow": "Restart now",
+  "later": "Later"
 }

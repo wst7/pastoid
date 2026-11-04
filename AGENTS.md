@@ -116,7 +116,7 @@ npm run release:major     # 0.1.0 -> 1.0.0
 | 面板窗口 | `tauri-nspanel` 转 NSPanel，浮在全屏应用之上 | 普通 always-on-top 窗口 + 所有虚拟桌面可见 |
 | 托盘图标 | `icons/tray/32x32.png`，`icon_as_template(true)` | `icons/tray-dark/32x32.png`，模板图标不反色 |
 | 面板底部留白 | 110pt（避开 Dock） | 60pt（避开任务栏） |
-| 数据目录 | `~/Library/Application Support/<id>` | `%APPDATA%\<id>` |
+| 数据目录 | `~/Library/Application Support/<id>` | `%LOCALAPPDATA%\<id>`（不用 Roaming，避免漫游同步图片） |
 | 安装包 | `.dmg` | `.msi` / NSIS `.exe` |
 
 Windows 上「复制文件」会以多行路径（有时带引号）出现在剪贴板文本里，
@@ -126,3 +126,11 @@ Windows 上「复制文件」会以多行路径（有时带引号）出现在剪
 降级成「文本输入」（`queue_char`），Ctrl 和字符变成两条独立事件，应用收不到 Ctrl+V，
 表现是回车粘贴没反应、或者往编辑器里插了个 `v`。Windows 必须用平台专属的虚拟键
 （`Key::V` / `Key::A` …），它们带 `#[cfg(target_os = "windows")]`，用 cfg 分平台取。
+
+**数据目录与迁移**：
+- 默认目录由 `storage::default_data_dir` 决定；用户可在设置里改成任意路径，
+  记录方式是默认目录下的 `location.txt`（第一行目标路径，可选第二行 `from=<旧目录>`）
+- 切换目录一律延后到下次启动：仓库、图片目录、监控线程都持有旧路径，运行中切换没有意义
+- 启动时 `get_data_dir` 先解析指针，再把 `from=` 指定的旧目录搬过去，然后清掉 `from=` 那行
+- 自定义目录不可用（移动硬盘没插）时回落默认目录，指针保留，等磁盘插回来再切回去
+- `get_data_dir` 在 logger 初始化之前执行，所以它把要打的提示作为返回值带出来，别在里面直接 log

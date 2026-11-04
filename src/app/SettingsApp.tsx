@@ -8,14 +8,36 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { check, Update } from "@tauri-apps/plugin-updater";
+import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
 import { Tabs, Label, ListBox, Select, Switch, Button, Spinner } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
-import { Settings, Info, RefreshCw } from "lucide-react";
+import { Settings, Info, RefreshCw, FolderOpen } from "lucide-react";
 
 interface UpdateStatus {
   update: Update | null;
   current_version: string;
+}
+
+interface StorageInfo {
+  data_dir: string;
+  default_dir: string;
+  is_custom: boolean;
+  total_bytes: number;
+  image_count: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
 }
 
 interface SettingsData {
@@ -49,6 +71,8 @@ export default function SettingsApp() {
     shortcut: defaultShortcut,
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [pendingDataDir, setPendingDataDir] = useState(false);
   const oldShortcutRef = useRef(settings.shortcut);
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -86,6 +110,7 @@ export default function SettingsApp() {
 
   useEffect(() => {
     loadSettings();
+    loadStorage();
   }, []);
 
   useEffect(() => {
@@ -160,6 +185,40 @@ export default function SettingsApp() {
     const newSettings = { ...settings, max_items };
     setSettings(newSettings);
     await saveSettings(newSettings);
+  };
+
+  const loadStorage = async () => {
+    try {
+      setStorage(await invoke<StorageInfo>("get_storage_info"));
+    } catch (error) {
+      console.error("Failed to load storage info:", error);
+    }
+  };
+
+  const handleChangeDataDir = async () => {
+    try {
+      const picked = await openDialog({
+        directory: true,
+        multiple: false,
+        title: t("dataDirPickTitle"),
+      });
+      if (typeof picked !== "string") return;
+
+      await invoke("set_data_dir", { path: picked });
+      setPendingDataDir(true);
+      await loadStorage();
+    } catch (error) {
+      console.error("Failed to set data dir:", error);
+      await message(String(error), { title: "Pastoid", kind: "error" });
+    }
+  };
+
+  const handleOpenDataDir = async () => {
+    try {
+      await invoke("open_data_dir");
+    } catch (error) {
+      console.error("Failed to open data dir:", error);
+    }
   };
 
   const handleShortcutChange = (shortcut: string) => {
@@ -326,6 +385,48 @@ export default function SettingsApp() {
                 disabled={loadingSettings}
                 className="w-40 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <div className="flex flex-row items-center justify-between">
+                <Label>{t('dataDir')}</Label>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onPress={handleOpenDataDir} isDisabled={loadingSettings}>
+                    <FolderOpen size={14} />
+                    {t('dataDirOpen')}
+                  </Button>
+                  <Button size="sm" variant="ghost" onPress={handleChangeDataDir} isDisabled={loadingSettings}>
+                    {t('dataDirChange')}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs font-mono break-all text-muted-foreground">
+                {storage?.data_dir ?? "…"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t('dataDirHint')}
+                {storage
+                  ? ` · ${t('dataDirUsage', {
+                      size: formatBytes(storage.total_bytes),
+                      count: storage.image_count,
+                    })}`
+                  : ""}
+              </p>
+              {pendingDataDir && (
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 px-3 py-2">
+                  <span className="text-xs text-amber-700 dark:text-amber-300">
+                    {t('dataDirRestartNeeded')}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button size="sm" variant="primary" onPress={() => invoke("restart_app")}>
+                      {t('restartNow')}
+                    </Button>
+                    <Button size="sm" variant="ghost" onPress={() => setPendingDataDir(false)}>
+                      {t('later')}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-row items-center justify-between">

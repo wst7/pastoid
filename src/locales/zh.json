@@ -46,5 +46,14 @@
   "filterText": "文本",
   "filterImage": "图片",
   "filterLink": "链接",
-  "clearSearch": "清空搜索"
+  "clearSearch": "清空搜索",
+  "dataDir": "数据目录",
+  "dataDirHint": "历史与图片都存这里。换目录后现有数据会在重启时搬过去。",
+  "dataDirUsage": "已占用 {size}，图片 {count} 张",
+  "dataDirChange": "更改…",
+  "dataDirOpen": "打开",
+  "dataDirPickTitle": "选择数据目录",
+  "dataDirRestartNeeded": "已切换到新目录，重启 Pastoid 后生效",
+  "restartNow": "立即重启",
+  "later": "稍后"
 }

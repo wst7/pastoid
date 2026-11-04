@@ -21,6 +21,7 @@ use tauri_nspanel::WebviewWindowExt;
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
@@ -37,7 +38,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            let data_dir = storage::get_data_dir(&app.handle());
+            // 数据目录要在 logger 之前确定，所以它把告警带回来，logger 就绪后再打
+            let (data_dir, startup_notes) = storage::get_data_dir(&app.handle());
 
             // 初始化日志
             if let Err(e) = storage::init_logger(&data_dir) {
@@ -85,6 +87,11 @@ pub fn run() {
                 settings: std::sync::Mutex::new(settings),
                 suppressed: std::sync::Mutex::new(std::collections::HashSet::new()),
             });
+
+            // 数据目录相关的启动提示（logger 已就绪）
+            for note in &startup_notes {
+                log::info!("{}", note);
+            }
 
             // 设置托盘
             tray::setup_tray(app)?;
@@ -157,6 +164,10 @@ pub fn run() {
             commands::clear_clipboard_items,
             commands::import_clipboard_items,
             commands::get_image_data,
+        commands::get_storage_info,
+        commands::set_data_dir,
+        commands::open_data_dir,
+        commands::restart_app,
             commands::get_settings,
             commands::save_settings,
             commands::get_history_items,
