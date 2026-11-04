@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/wst7/pastoid/compare/v1.9.0...v1.10.0) (2026-11-04)
+
+### ✨ Features | 新功能
+
+* ask where to keep data on first launch ([eb0d19a](https://github.com/wst7/pastoid/commit/eb0d19a595dc148ae84b5a1596d39311b2a32198))
+* make the data folder configurable ([22ee28a](https://github.com/wst7/pastoid/commit/22ee28a486f23ee0497c9b6d8841a1fc68d78801))
+* **ui:** regroup settings into sections with a persistent footer ([4278bd3](https://github.com/wst7/pastoid/commit/4278bd399814c148898eee73a3f75d9880f9887d))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* make paste and shortcut UI actually work on Windows ([e4e3563](https://github.com/wst7/pastoid/commit/e4e3563699ab889acd5c2e862f441304a778c6f8))
+
 ## [1.9.0](https://github.com/wst7/pastoid/compare/v1.8.1...v1.9.0) (2026-11-04)
 
 ### ✨ Features | 新功能
