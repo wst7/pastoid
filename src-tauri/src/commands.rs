@@ -361,14 +361,23 @@ pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String
             .key(Key::Meta, Direction::Release)
             .map_err(|e| format!("enigo: {}", e))?;
     } else {
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        // Windows：必须发虚拟键 VK_V。enigo 对 Key::Unicode 在 Windows 上只能降级成
+        // 「文本输入」（它会打一条 warn 然后走 queue_char），那样 Ctrl 和 v 是两条独立事件，
+        // 应用根本收不到 Ctrl+V —— 表现就是按回车没反应、或直接往编辑器里插了个 v。
+        #[cfg(target_os = "windows")]
+        let v_key = Key::V;
+        #[cfg(not(target_os = "windows"))]
+        let v_key = Key::Unicode('v');
+
+        // 面板隐藏后要把焦点还给原窗口，Windows 上这一下比 macOS 慢一些
+        std::thread::sleep(std::time::Duration::from_millis(250));
 
         // Ctrl+V 粘贴
         enigo
             .key(Key::Control, Direction::Press)
             .map_err(|e| format!("enigo: {}", e))?;
         enigo
-            .key(Key::Unicode('v'), Direction::Click)
+            .key(v_key, Direction::Click)
             .map_err(|e| format!("enigo: {}", e))?;
         enigo
             .key(Key::Control, Direction::Release)

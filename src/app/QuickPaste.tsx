@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
+import { isMac, modKeyLabel } from "@/lib/platform";
 import type { ClipboardItem, ClipboardFilter } from "@/types/clipboard";
 import {
   formatRelativeTime,
@@ -28,14 +29,11 @@ interface SettingsData {
 }
 
 /** 平台相关的按键显示：macOS 用符号，Windows 用文字 */
-const isMacPlatform =
-  typeof navigator !== "undefined" &&
-  (navigator.userAgent.includes("Mac") || /Mac/i.test(navigator.platform ?? ""));
-const modKey = isMacPlatform ? "⌘" : "Ctrl";
-const shiftLabel = isMacPlatform ? "⇧" : "Shift";
-const backspaceLabel = isMacPlatform ? "⌫" : "Backspace";
-const enterLabel = isMacPlatform ? "↵" : "Enter";
-const escLabel = isMacPlatform ? "esc" : "Esc";
+const modKey = modKeyLabel;
+const shiftLabel = isMac ? "⇧" : "Shift";
+const backspaceLabel = isMac ? "⌫" : "Backspace";
+const enterLabel = isMac ? "↵" : "Enter";
+const escLabel = isMac ? "esc" : "Esc";
 
 function applyTheme(theme: string) {
   const isDark =

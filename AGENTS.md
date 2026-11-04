@@ -112,7 +112,7 @@ npm run release:major     # 0.1.0 -> 1.0.0
 | 关注点 | macOS | Windows |
 | --- | --- | --- |
 | 默认快捷键 | `Cmd+Shift+V` | `Ctrl+Shift+V`（`normalize_shortcut` 负责 Cmd→Ctrl） |
-| 粘贴 | Cmd+Tab 切回原应用后 Cmd+V | 直接 Ctrl+V（不要用 Ctrl+Tab） |
+| 粘贴 | Cmd+Tab 切回原应用后 `Key::Unicode('v')` | 直接 Ctrl+V，且必须用 `Key::V`（见下） |
 | 面板窗口 | `tauri-nspanel` 转 NSPanel，浮在全屏应用之上 | 普通 always-on-top 窗口 + 所有虚拟桌面可见 |
 | 托盘图标 | `icons/tray/32x32.png`，`icon_as_template(true)` | `icons/tray-dark/32x32.png`，模板图标不反色 |
 | 面板底部留白 | 110pt（避开 Dock） | 60pt（避开任务栏） |
@@ -121,3 +121,8 @@ npm run release:major     # 0.1.0 -> 1.0.0
 
 Windows 上「复制文件」会以多行路径（有时带引号）出现在剪贴板文本里，
 `clipboard::first_image_path` 负责逐行去引号后识别，别退化回「整段当路径」。
+
+**enigo 的坑**：Windows 上 `Key::Unicode(c)` 无法映射成虚拟键，enigo 会打一条 warn 后
+降级成「文本输入」（`queue_char`），Ctrl 和字符变成两条独立事件，应用收不到 Ctrl+V，
+表现是回车粘贴没反应、或者往编辑器里插了个 `v`。Windows 必须用平台专属的虚拟键
+（`Key::V` / `Key::A` …），它们带 `#[cfg(target_os = "windows")]`，用 cfg 分平台取。

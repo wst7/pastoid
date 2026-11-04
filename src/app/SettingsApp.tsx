@@ -10,6 +10,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { Tabs, Label, ListBox, Select, Switch, Button, Spinner } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
+import { defaultShortcut } from "@/lib/platform";
 import { Settings, Info, RefreshCw } from "lucide-react";
 
 interface UpdateStatus {
@@ -45,7 +46,7 @@ export default function SettingsApp() {
     theme: "system",
     autostart: false,
     max_items: 20,
-    shortcut: "Cmd+Shift+V",
+    shortcut: defaultShortcut,
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
   const oldShortcutRef = useRef(settings.shortcut);
@@ -107,7 +108,7 @@ export default function SettingsApp() {
         theme: data.theme || "light",
         autostart: data.autostart ?? false,
         max_items: data.max_items ?? 20,
-        shortcut: data.shortcut || "Cmd+Shift+V",
+        shortcut: data.shortcut || defaultShortcut,
       });
       applyTheme(data.theme || "light");
       if (data.language) {

@@ -38,13 +38,18 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 
 Press your configured shortcut (default: `Cmd+Shift+V` on macOS, `Ctrl+Shift+V` on Windows) anywhere to instantly summon the quick paste panel. It appears over any app — even full-screen games or videos — so you can paste without breaking your flow.
 
-Inside the panel:
-- **← →** to navigate
-- **↵** to paste
-- **⌘P** to pin or unpin
-- **⌘⌫** to delete an item
-- **⌘⇧X** to clear all history
-- **Esc** to close
+Inside the panel (same actions, platform-specific keys):
+
+| Action | macOS | Windows |
+| --- | --- | --- |
+| Navigate | `←` `→` | `←` `→` |
+| Paste | `↵` | `Enter` |
+| Pin / unpin | `⌘P` | `Ctrl+P` |
+| Delete item | `⌘⌫` | `Ctrl+Backspace` |
+| Clear all history | `⌘⇧X` | `Ctrl+Shift+X` |
+| Close panel | `Esc` | `Esc` |
+
+> On Windows the panel pastes with the system `Ctrl+V` and skips the macOS-style "switch back to the previous app" step — hiding the panel already returns focus.
 
 Images are captured too — screenshots and copied image files show up as thumbnails and paste back as images.
 

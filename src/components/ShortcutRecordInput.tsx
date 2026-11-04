@@ -1,13 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Kbd } from "@heroui/react";
+import { isMac } from "@/lib/platform";
 
 interface Props {
   value: string;
   onChange: (shortcut: string) => void;
   disabled?: boolean;
 }
-
-const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
 function shortcutToDisplay(s: string): string {
   return s
@@ -138,14 +137,16 @@ export default function ShortcutRecordInput({ value, onChange, disabled }: Props
         </span>
       ) : (
         <span className="flex items-center gap-1">
-          {shortcutToDisplay(value).split("").map((ch, i) => (
-            <Kbd
-              key={i}
-              className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs px-1.5 py-0.5"
-            >
-              {ch}
-            </Kbd>
-          ))}
+          {(isMac ? shortcutToDisplay(value).split("") : shortcutToDisplay(value).split("+")).map(
+            (part, i) => (
+              <Kbd
+                key={i}
+                className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs px-1.5 py-0.5"
+              >
+                {part}
+              </Kbd>
+            )
+          )}
         </span>
       )}
     </button>
