@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/wst7/pastoid/compare/v1.8.0...v1.8.1) (2026-11-04)
+
+### 🐛 Bug Fixes | Bug 修复
+
+* **ci:** pass --target to tauri build without the extra -- ([0f98bce](https://github.com/wst7/pastoid/commit/0f98bcecc2f46dd68041159228180355b75e0199))
+* stop silently dropping copied content ([b5472bb](https://github.com/wst7/pastoid/commit/b5472bb6814ae70d6f3333b95b9db72ef4703bb8))
+
 ## [1.8.0](https://github.com/wst7/pastoid/compare/v1.7.0...v1.8.0) (2026-11-03)
 
 ### ✨ Features | 新功能
