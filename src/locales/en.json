@@ -68,5 +68,7 @@
   "storageUsage": "{{items}}/{{max}} items · {{size}}",
   "storageImages": "{{count}} images",
   "updateAvailable": "Version {{version}} available",
-  "closePanel": "Close"
+  "closePanel": "Close",
+  "restarting": "Installed, restarting…",
+  "updateFailed": "Update failed"
 }

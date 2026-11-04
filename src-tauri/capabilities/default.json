@@ -26,6 +26,7 @@
     "core:window:allow-set-theme",
     "core:window:allow-center",
     "dialog:allow-open",
-    "dialog:allow-message"
+    "dialog:allow-message",
+    "process:allow-restart"
   ]
 }

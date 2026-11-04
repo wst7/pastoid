@@ -68,5 +68,7 @@
   "storageUsage": "{{items}}/{{max}} 条 · {{size}}",
   "storageImages": "{{count}} 张图片",
   "updateAvailable": "有新版本 {{version}}",
-  "closePanel": "关闭"
+  "closePanel": "关闭",
+  "restarting": "已安装，正在重启…",
+  "updateFailed": "更新失败"
 }

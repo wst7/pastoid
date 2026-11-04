@@ -24,7 +24,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build());
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
 
     // NSPanel 只有 macOS 有，用 shadowing 而不是 mut，Windows 上就不会有 unused_mut
     #[cfg(target_os = "macos")]

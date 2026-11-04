@@ -11,6 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check, Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
 import { Switch, Button, Spinner } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
@@ -129,6 +130,8 @@ export default function SettingsApp() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [installed, setInstalled] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const oldShortcutRef = useRef(settings.shortcut);
 
@@ -314,8 +317,13 @@ export default function SettingsApp() {
             break;
         }
       });
+      // 新版已经解包替换到磁盘，但当前进程跑的仍是旧代码，必须重启才生效
+      setInstalled(true);
+      await new Promise((r) => setTimeout(r, 800));
+      await relaunch();
     } catch (error) {
       console.error("Download or install failed:", error);
+      setUpdateError(String(error));
     } finally {
       setIsDownloading(false);
     }
@@ -414,7 +422,11 @@ export default function SettingsApp() {
                           {updateStatus.update.version}
                         </span>
                       </div>
-                      {isDownloading ? (
+                      {installed ? (
+                        <p className="text-center text-sm text-muted-foreground">
+                          {t("restarting")}
+                        </p>
+                      ) : isDownloading ? (
                         <div className="space-y-1.5">
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
                             <div
@@ -434,6 +446,11 @@ export default function SettingsApp() {
                         >
                           {t("downloadUpdate")}
                         </Button>
+                      )}
+                      {updateError && (
+                        <p className="text-xs text-red-500 break-words">
+                          {t("updateFailed")}: {updateError}
+                        </p>
                       )}
                     </>
                   ) : (

@@ -481,9 +481,11 @@ export default function QuickPaste() {
                         {formatRelativeTime(item.createdAt, language)}
                       </span>
                       {item.isPinned && (
+                        // 悬浮按钮就覆盖在右上角，两个图层会叠在一起，
+                        // 所以悬浮时把这枚图钉淡出，交给按钮接管这块空间
                         <Pin
                           size={10}
-                          className="ml-auto text-amber-500 shrink-0"
+                          className="ml-auto text-amber-500 shrink-0 transition-opacity group-hover:opacity-0"
                           fill="currentColor"
                         />
                       )}
