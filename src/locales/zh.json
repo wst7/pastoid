@@ -49,7 +49,7 @@
   "clearSearch": "清空搜索",
   "dataDir": "数据目录",
   "dataDirHint": "历史与图片都存这里。换目录后现有数据会在重启时搬过去。",
-  "dataDirUsage": "已占用 {size}，图片 {count} 张",
+  "dataDirUsage": "已占用 {{size}}，图片 {{count}} 张",
   "dataDirChange": "更改…",
   "dataDirOpen": "打开",
   "dataDirPickTitle": "选择数据目录",
@@ -59,5 +59,14 @@
   "firstRunTitle": "选择数据存放位置",
   "firstRunHint": "Pastoid 把剪贴板历史和图片存在本地。默认位置在系统盘，空间紧张可以换到别的盘。以后在「设置 → 数据目录」里随时能改。",
   "firstRunDefault": "使用默认位置",
-  "firstRunPick": "选择文件夹…"
+  "firstRunPick": "选择文件夹…",
+  "settingsSubtitle": "剪贴板历史与偏好",
+  "sectionAppearance": "外观",
+  "sectionClipboard": "剪贴板",
+  "sectionShortcut": "快捷键",
+  "shortcutAction": "呼出粘贴面板",
+  "storageUsage": "{{items}}/{{max}} 条 · {{size}}",
+  "storageImages": "{{count}} 张图片",
+  "updateAvailable": "有新版本 {{version}}",
+  "closePanel": "关闭"
 }

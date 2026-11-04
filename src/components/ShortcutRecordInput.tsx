@@ -5,6 +5,8 @@ import { isMac } from "@/lib/platform";
 interface Props {
   value: string;
   onChange: (shortcut: string) => void;
+  /** 录制开始/结束通知：调用方据此暂停全局热键，否则按下的组合会先被热键抢走 */
+  onRecordingChange?: (recording: boolean) => void;
   disabled?: boolean;
 }
 
@@ -33,7 +35,7 @@ function codeToKey(code: string): string {
   return code;
 }
 
-export default function ShortcutRecordInput({ value, onChange, disabled }: Props) {
+export default function ShortcutRecordInput({ value, onChange, onRecordingChange, disabled }: Props) {
   const [recording, setRecording] = useState(false);
   const [pendingDisplay, setPendingDisplay] = useState("");
   const keysRef = useRef<{ modifiers: string[]; key: string | null }>({
@@ -64,6 +66,7 @@ export default function ShortcutRecordInput({ value, onChange, disabled }: Props
         setRecording(false);
         setPendingDisplay("");
         keysRef.current = { modifiers: [], key: null };
+        onRecordingChange?.(false);
         return;
       }
 
@@ -103,13 +106,23 @@ export default function ShortcutRecordInput({ value, onChange, disabled }: Props
       }
     };
 
+    // 录制中窗口失去焦点（切走、点别处）也要收尾，否则全局热键会一直停着
+    const handleBlur = () => {
+      setRecording(false);
+      setPendingDisplay("");
+      keysRef.current = { modifiers: [], key: null };
+      onRecordingChange?.(false);
+    };
+
     window.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("blur", handleBlur);
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp, true);
+      window.removeEventListener("blur", handleBlur);
     };
-  }, [recording, finishRecording]);
+  }, [recording, finishRecording, onRecordingChange]);
 
   return (
     <button
@@ -119,14 +132,15 @@ export default function ShortcutRecordInput({ value, onChange, disabled }: Props
         if (!disabled && !recording) {
           setRecording(true);
           setPendingDisplay("");
+          onRecordingChange?.(true);
         }
       }}
-      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors select-none ${
+      className={`inline-flex select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm transition-colors ${
         disabled
-          ? "border-zinc-200 dark:border-zinc-700 text-zinc-400 cursor-not-allowed"
+          ? "cursor-not-allowed text-zinc-400"
           : recording
-            ? "border-blue-400 ring-2 ring-blue-400/30 bg-blue-50 dark:bg-blue-500/10 text-blue-600"
-            : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 cursor-pointer text-zinc-700 dark:text-zinc-300"
+            ? "bg-blue-500/10 text-blue-600 ring-2 ring-blue-400/40"
+            : "cursor-pointer hover:bg-default"
       }`}
     >
       {recording ? (
@@ -141,7 +155,7 @@ export default function ShortcutRecordInput({ value, onChange, disabled }: Props
             (part, i) => (
               <Kbd
                 key={i}
-                className="bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs px-1.5 py-0.5"
+                className="bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700 dark:bg-white/10 dark:text-zinc-200"
               >
                 {part}
               </Kbd>

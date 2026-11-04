@@ -178,6 +178,7 @@ pub fn run() {
         commands::get_storage_info,
         commands::mark_first_run_done,
         commands::set_data_dir,
+        commands::set_global_shortcut_enabled,
         commands::open_data_dir,
         commands::restart_app,
             commands::get_settings,

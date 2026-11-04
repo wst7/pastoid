@@ -1,22 +1,33 @@
 /**
  * 设置窗口应用
+ *
+ * 版式：单列分组卡片（外观 / 剪贴板 / 快捷键）+ 常驻页脚。
+ * 不分页签——只有六项设置，标签页反而把「是否最新」这种状态藏了起来。
  */
 import { useEffect, useRef, useState } from "react";
-import packageInfo from '../../package.json' with { type: 'json' };
+import packageInfo from "../../package.json" with { type: "json" };
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
-import { Tabs, Label, ListBox, Select, Switch, Button, Spinner } from "@heroui/react";
+import { Switch, Button, Spinner } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
-import { Settings, Info, RefreshCw, FolderOpen } from "lucide-react";
+import { ChevronDown, FolderOpen, RefreshCw, X } from "lucide-react";
 
 interface UpdateStatus {
   update: Update | null;
   current_version: string;
+}
+
+interface SettingsData {
+  language: string;
+  theme: string;
+  autostart: boolean;
+  max_items: number;
+  shortcut: string;
 }
 
 interface StorageInfo {
@@ -26,7 +37,19 @@ interface StorageInfo {
   first_run: boolean;
   total_bytes: number;
   image_count: number;
+  item_count: number;
 }
+
+const languages = [
+  { id: "zh", name: "简体中文" },
+  { id: "en", name: "English" },
+];
+
+const themes = (t: (key: string) => string) => [
+  { id: "system", name: t("system") },
+  { id: "light", name: t("light") },
+  { id: "dark", name: t("dark") },
+];
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
@@ -41,29 +64,55 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
 }
 
-interface SettingsData {
-  language: string;
-  theme: string;
-  autostart: boolean;
-  max_items: number;
-  shortcut: string;
+function applyTheme(theme: string) {
+  // "system" 要跟随系统外观；之前只判断了 dark，系统深色下会被当成浅色
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const html = document.documentElement;
+
+  const currentWindow = getCurrentWindow();
+  if (typeof currentWindow.setTheme === "function") {
+    currentWindow.setTheme(theme === "system" ? null : isDark ? "dark" : "light");
+  }
+
+  if (isDark) {
+    html.classList.add("dark");
+    html.classList.remove("light");
+    html.setAttribute("data-theme", "dark");
+  } else {
+    html.classList.remove("dark");
+    html.classList.add("light");
+    html.setAttribute("data-theme", "light");
+  }
 }
 
-const languages = [
-  { id: "zh", name: "简体中文" },
-  { id: "en", name: "English" },
-];
+/** 一行设置：左标签、右控件 */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-[42px] items-center justify-between gap-3 border-b border-zinc-200/70 px-3 last:border-b-0 dark:border-white/10">
+      <span className="text-[13px] text-foreground">{label}</span>
+      <div className="flex items-center gap-1.5">{children}</div>
+    </div>
+  );
+}
 
-const themes = (t: (key: string) => string) => [
-  { id: "system", name: t("system") },
-  { id: "light", name: t("light") },
-  { id: "dark", name: t("dark") },
-];
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-3">
+      <h2 className="mb-1.5 px-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
+        {title}
+      </h2>
+      <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+        {children}
+      </div>
+    </section>
+  );
+}
 
 export default function SettingsApp() {
   const { t, i18n } = useTranslation();
 
-  const [activeTab, setActiveTab] = useState("settings");
   const [settings, setSettings] = useState<SettingsData>({
     language: "zh",
     theme: "system",
@@ -74,40 +123,14 @@ export default function SettingsApp() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState(false);
-  const oldShortcutRef = useRef(settings.shortcut);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
 
-  const applyTheme = (theme: string) => {
-    // "system" 要跟随系统外观；之前这里只判断了 dark，
-    // 导致默认值 system 会被当成浅色，和系统深色外观不一致。
-    const isDark =
-      theme === "dark" ||
-      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    const html = document.documentElement;
-
-    const currentWindow = getCurrentWindow();
-    if (typeof currentWindow.setTheme === "function") {
-      currentWindow.setTheme(theme === "system" ? null : isDark ? "dark" : "light");
-    }
-
-    if (isDark) {
-      html.classList.add("dark");
-      html.classList.remove("light");
-      html.setAttribute("data-theme", "dark");
-    } else {
-      html.classList.remove("dark");
-      html.classList.add("light");
-      html.setAttribute("data-theme", "light");
-    }
-  };
-
-  useEffect(() => {
-    applyTheme(settings.theme);
-  }, [settings.theme]);
+  const oldShortcutRef = useRef(settings.shortcut);
 
   useEffect(() => {
     loadSettings();
@@ -122,8 +145,12 @@ export default function SettingsApp() {
         ...prev,
         shortcut: oldShortcutRef.current,
       }));
-    }).then((fn) => { unlisten = fn; });
-    return () => { if (unlisten) unlisten(); };
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   const loadSettings = async () => {
@@ -156,20 +183,22 @@ export default function SettingsApp() {
     }
   };
 
-  const handleLanguageChange = (key: React.Key | null) => {
-    if (!key) return;
-    const language = key as string;
+  const loadStorage = async () => {
+    try {
+      setStorage(await invoke<StorageInfo>("get_storage_info"));
+    } catch (error) {
+      console.error("Failed to load storage info:", error);
+    }
+  };
+
+  const handleLanguageChange = (language: string) => {
     const newSettings = { ...settings, language };
     setSettings(newSettings);
     i18n.changeLanguage(language === "zh" ? "zh" : "en");
     saveSettings(newSettings);
   };
 
-  const handleThemeChange = (key: React.Key | null) => {
-    if (!key) return;
-    // HeroUI Select 可能传递 Set，需要提取第一个值
-    const selectedKey = (key as unknown) instanceof Set ? Array.from(key as unknown as Set<React.Key>)[0] : key;
-    const theme = String(selectedKey);
+  const handleThemeChange = (theme: string) => {
     const newSettings = { ...settings, theme };
     setSettings(newSettings);
     saveSettings(newSettings);
@@ -186,14 +215,6 @@ export default function SettingsApp() {
     const newSettings = { ...settings, max_items };
     setSettings(newSettings);
     await saveSettings(newSettings);
-  };
-
-  const loadStorage = async () => {
-    try {
-      setStorage(await invoke<StorageInfo>("get_storage_info"));
-    } catch (error) {
-      console.error("Failed to load storage info:", error);
-    }
   };
 
   const handleChangeDataDir = async () => {
@@ -231,11 +252,28 @@ export default function SettingsApp() {
     }
   };
 
-  const handleShortcutChange = (shortcut: string) => {
+  /**
+   * 录制期间全局热键是停掉的（否则按下的组合会先被全局监听抢走），
+   * 所以这里每条退出路径都要把它恢复回去。
+   */
+  const handleShortcutRecordingChange = (recording: boolean) => {
+    invoke("set_global_shortcut_enabled", { enabled: !recording }).catch((error) =>
+      console.error("Failed to toggle shortcut:", error)
+    );
+  };
+
+  const handleShortcutChange = async (shortcut: string) => {
     oldShortcutRef.current = settings.shortcut;
+
+    // 录到的和当前一样：没有变更可保存，把刚才停掉的热键直接恢复
+    if (shortcut === settings.shortcut) {
+      await handleShortcutRecordingChange(false);
+      return;
+    }
+
     const newSettings = { ...settings, shortcut };
     setSettings(newSettings);
-    saveSettings(newSettings);
+    await saveSettings(newSettings);
   };
 
   const checkForUpdate = async () => {
@@ -257,27 +295,25 @@ export default function SettingsApp() {
     if (!updateStatus?.update) return;
 
     setIsDownloading(true);
-    setDownloadProgress(0);
-
     try {
+      let downloaded = 0;
+      let contentLength = 0;
       await updateStatus.update.downloadAndInstall((event) => {
         switch (event.event) {
-          case 'Started':
-            setDownloadProgress(0);
+          case "Started":
+            contentLength = event.data.contentLength || 0;
             break;
-          case 'Progress':
-            // event.data.chunkLength 是当前块大小，需要手动累加计算百分比
-            setDownloadProgress((prev) => {
-              const newProgress = prev + (event.data.chunkLength / 1024 / 1024);
-              return Math.min(newProgress, 100);
-            });
+          case "Progress":
+            downloaded += event.data.chunkLength;
+            if (contentLength > 0) {
+              setDownloadProgress(Math.round((downloaded / contentLength) * 100));
+            }
             break;
-          case 'Finished':
+          case "Finished":
             setDownloadProgress(100);
             break;
         }
       });
-      // 安装完成后会自动重启
     } catch (error) {
       console.error("Download or install failed:", error);
     } finally {
@@ -285,273 +321,321 @@ export default function SettingsApp() {
     }
   };
 
-  const selectedLanguage = languages.find((l) => l.id === settings.language);
   const themeOptions = themes(t);
-  const selectedTheme = themeOptions.find((th) => th.id === settings.theme);
+
+  const maxItems = settings.max_items || 20;
+  const itemCount = storage?.item_count ?? 0;
+  const usageRatio = Math.min(100, Math.round((itemCount / maxItems) * 100));
+
+  const hasUpdate = Boolean(updateStatus?.update);
+  const statusDot = !updateStatus
+    ? "bg-zinc-400"
+    : hasUpdate
+      ? "bg-amber-500"
+      : "bg-green-500";
+  const statusLabel = !updateStatus
+    ? ""
+    : hasUpdate
+      ? t("updateAvailable", { version: updateStatus.update?.version ?? "" })
+      : t("upToDate");
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="flex h-screen flex-col bg-background text-foreground">
       {storage?.first_run && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="w-[440px] space-y-4 rounded-xl border border-border bg-card p-6 shadow-xl">
-            <h2 className="text-base font-semibold">{t('firstRunTitle')}</h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">{t('firstRunHint')}</p>
+            <h2 className="text-base font-semibold">{t("firstRunTitle")}</h2>
+            <p className="text-sm leading-relaxed text-muted-foreground">{t("firstRunHint")}</p>
             <p className="break-all rounded-lg bg-default px-3 py-2 font-mono text-xs text-muted-foreground">
               {storage.default_dir}
             </p>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="ghost" onPress={handleUseDefaultDir}>
-                {t('firstRunDefault')}
+                {t("firstRunDefault")}
               </Button>
               <Button variant="primary" onPress={handleChangeDataDir}>
-                {t('firstRunPick')}
+                {t("firstRunPick")}
               </Button>
             </div>
           </div>
         </div>
       )}
-      <div className="sticky top-0 z-20 bg-background pt-[38px] text-foreground">
-        <Tabs
-          selectedKey={activeTab}
-          onSelectionChange={(key) => setActiveTab(String(key))}
-          className="px-4"
+
+      {aboutOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
+          onClick={() => setAboutOpen(false)}
         >
-          <Tabs.ListContainer>
-            <Tabs.List aria-label="Navigation">
-              <Tabs.Tab id="settings">
-                <div className="flex items-center gap-2">
-                  <Settings className="size-4" />
-                  <span>{t('settings')}</span>
-                </div>
-                <Tabs.Indicator />
-              </Tabs.Tab>
-              <Tabs.Tab id="about">
-                <div className="flex items-center gap-2">
-                  <Info className="size-4" />
-                  <span>{t('about')}</span>
-                </div>
-                <Tabs.Indicator />
-              </Tabs.Tab>
-            </Tabs.List>
-          </Tabs.ListContainer>
-        </Tabs>
-      </div>
-
-      <main className="flex-1 overflow-hidden">
-        {activeTab === "settings" && (
-          <div className="h-full overflow-y-auto p-4 space-y-6">
-            <div className="grid gap-1.5">
-              <Label>{t('language')}</Label>
-              <Select
-                selectedKey={settings.language}
-                onSelectionChange={handleLanguageChange}
-                isDisabled={loadingSettings}
-              >
-                <Select.Trigger>
-                  <Select.Value>
-                    {selectedLanguage?.name || t('selectLanguage')}
-                  </Select.Value>
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {languages.map((lang) => (
-                      <ListBox.Item key={lang.id} id={lang.id} textValue={lang.name}>
-                        {lang.name}
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>{t('theme')}</Label>
-              <Select
-                selectedKey={settings.theme}
-                onSelectionChange={handleThemeChange}
-                isDisabled={loadingSettings}
-              >
-                <Select.Trigger>
-                  <Select.Value>
-                    {selectedTheme?.name || t('selectTheme')}
-                  </Select.Value>
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    {themeOptions.map((theme) => (
-                      <ListBox.Item key={theme.id} id={theme.id} textValue={theme.name}>
-                        {theme.name}
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-            </div>
-
-            <div className="flex flex-row items-center justify-between">
-              <Label>{t('autoStart')}</Label>
-              <Switch
-                isSelected={settings.autostart}
-                onChange={handleAutostartChange}
-                isDisabled={loadingSettings}
-              >
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-              </Switch>
-            </div>
-
-            <div className="flex flex-row items-center justify-between">
-              <Label>{t('maxItems')}</Label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={String(settings.max_items)}
-                onChange={(e) => handleMaxItemsChange(e.target.value)}
-                disabled={loadingSettings}
-                className="w-40 px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            <div className="space-y-1.5 pt-1">
-              <div className="flex flex-row items-center justify-between">
-                <Label>{t('dataDir')}</Label>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="ghost" onPress={handleOpenDataDir} isDisabled={loadingSettings}>
-                    <FolderOpen size={14} />
-                    {t('dataDirOpen')}
-                  </Button>
-                  <Button size="sm" variant="ghost" onPress={handleChangeDataDir} isDisabled={loadingSettings}>
-                    {t('dataDirChange')}
-                  </Button>
+          <div
+            className="w-[400px] space-y-4 rounded-2xl bg-card p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <img src="/logo.svg" alt="Pastoid" className="h-12 w-12 rounded-[13px]" />
+                <div>
+                  <h2 className="text-lg font-semibold leading-tight">{t("appName")}</h2>
+                  <p className="text-xs text-muted-foreground">v{packageInfo.version}</p>
                 </div>
               </div>
-              <p className="text-xs font-mono break-all text-muted-foreground">
-                {storage?.data_dir ?? "…"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {t('dataDirHint')}
-                {storage
-                  ? ` · ${t('dataDirUsage', {
-                      size: formatBytes(storage.total_bytes),
-                      count: storage.image_count,
-                    })}`
-                  : ""}
-              </p>
-              {pendingDataDir && (
-                <div className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 px-3 py-2">
-                  <span className="text-xs text-amber-700 dark:text-amber-300">
-                    {t('dataDirRestartNeeded')}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button size="sm" variant="primary" onPress={() => invoke("restart_app")}>
-                      {t('restartNow')}
-                    </Button>
-                    <Button size="sm" variant="ghost" onPress={() => setPendingDataDir(false)}>
-                      {t('later')}
-                    </Button>
+              <button
+                onClick={() => setAboutOpen(false)}
+                aria-label={t("closePanel")}
+                className="rounded-md p-1 text-muted-foreground hover:bg-default"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-sm leading-relaxed text-muted-foreground">{t("description")}</p>
+
+            <div className="space-y-2 rounded-xl bg-default/60 p-3">
+              {!updateStatus ? (
+                <Button
+                  onPress={checkForUpdate}
+                  isDisabled={checkingUpdate}
+                  variant="primary"
+                  className="w-full"
+                >
+                  {checkingUpdate ? <Spinner size="sm" /> : <RefreshCw className="h-4 w-4" />}
+                  {checkingUpdate ? t("checking") : t("checkUpdate")}
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t("currentVersion")}</span>
+                    <span className="font-medium">{updateStatus.current_version}</span>
                   </div>
+                  {updateStatus.update ? (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-green-500">{t("newVersion")}</span>
+                        <span className="font-medium text-green-500">
+                          {updateStatus.update.version}
+                        </span>
+                      </div>
+                      {isDownloading ? (
+                        <div className="space-y-1.5">
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                              style={{ width: `${Math.min(downloadProgress, 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-center text-xs text-muted-foreground">
+                            {t("downloading")}...
+                          </p>
+                        </div>
+                      ) : (
+                        <Button
+                          onPress={handleDownloadAndInstall}
+                          variant="primary"
+                          className="w-full"
+                        >
+                          {t("downloadUpdate")}
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="py-1 text-center text-sm text-muted-foreground">
+                      {t("upToDate")}
+                    </div>
+                  )}
+                  <Button
+                    variant="ghost"
+                    onPress={() => {
+                      setUpdateStatus(null);
+                      setDownloadProgress(0);
+                    }}
+                    className="w-full"
+                  >
+                    {t("recheck")}
+                  </Button>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-row items-center justify-between">
-              <Label>{t('shortcutLabel')}</Label>
-              <ShortcutRecordInput
-                value={settings.shortcut}
-                onChange={handleShortcutChange}
+            <p className="text-center text-[11px] text-muted-foreground">
+              © 2026 Pastoid. All rights reserved.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <header className="flex flex-none items-center gap-2.5 px-4 pb-2 pt-[38px]">
+        <img src="/logo.svg" alt="" className="h-9 w-9 rounded-[9px]" />
+        <div className="min-w-0">
+          <h1 className="text-[15px] font-semibold leading-tight">{t("settings")}</h1>
+          <p className="truncate text-[11.5px] text-muted-foreground">{t("settingsSubtitle")}</p>
+        </div>
+        <span className="ml-auto shrink-0 rounded-full bg-default px-2 py-0.5 text-[11px] text-muted-foreground">
+          v{packageInfo.version}
+        </span>
+      </header>
+
+      <main className="flex-1 overflow-y-auto px-4 pb-1">
+        <Section title={t("sectionAppearance")}>
+          <Row label={t("language")}>
+            <div className="relative flex items-center">
+              <select
+                value={settings.language}
+                onChange={(e) => handleLanguageChange(e.target.value)}
                 disabled={loadingSettings}
-              />
+                className="appearance-none bg-transparent pr-5 text-[13px] text-muted-foreground outline-none"
+              >
+                {languages.map((lang) => (
+                  <option key={lang.id} value={lang.id}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={13} className="pointer-events-none absolute right-0 text-muted-foreground" />
             </div>
-          </div>
-        )}
+          </Row>
 
-        {activeTab === "about" && (
-          <div className="h-full overflow-y-auto">
-            <div className="max-w-sm mx-auto p-6 space-y-8">
-              <div className="text-center">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-2xl overflow-hidden shadow-sm">
-                  <img src="/logo.svg" alt="Pastoid" className="w-full h-full" />
-                </div>
-                <h2 className="text-2xl font-bold">{t('appName')}</h2>
-                <p className="text-muted-foreground mt-1">v{packageInfo.version}</p>
-                <p className="text-sm text-muted-foreground mt-2">{t('description')}</p>
+          <Row label={t("theme")}>
+            <div className="relative flex items-center">
+              <select
+                value={settings.theme}
+                onChange={(e) => handleThemeChange(e.target.value)}
+                disabled={loadingSettings}
+                className="appearance-none bg-transparent pr-5 text-[13px] text-muted-foreground outline-none"
+              >
+                {themeOptions.map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={13} className="pointer-events-none absolute right-0 text-muted-foreground" />
+            </div>
+          </Row>
+
+          <Row label={t("autoStart")}>
+            <Switch
+              isSelected={settings.autostart}
+              onChange={handleAutostartChange}
+              isDisabled={loadingSettings}
+              style={
+                {
+                  "--color-accent": "var(--primary)",
+                  "--accent-foreground": "#ffffff",
+                } as React.CSSProperties
+              }
+            >
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch>
+          </Row>
+        </Section>
+
+        <Section title={t("sectionClipboard")}>
+          <Row label={t("maxItems")}>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={String(settings.max_items)}
+              onChange={(e) => handleMaxItemsChange(e.target.value)}
+              disabled={loadingSettings}
+              className="h-7 w-14 rounded-md border border-zinc-200 bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-white/15"
+            />
+          </Row>
+
+          <div className="border-t border-zinc-200/70 px-3 py-2.5 dark:border-white/10">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13px]">{t("dataDir")}</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onPress={handleOpenDataDir}
+                  isDisabled={loadingSettings}
+                >
+                  <FolderOpen size={14} />
+                  {t("dataDirOpen")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onPress={handleChangeDataDir}
+                  isDisabled={loadingSettings}
+                >
+                  {t("dataDirChange")}
+                </Button>
               </div>
+            </div>
 
-              <div className="bg-card rounded-xl p-4 shadow-sm border border-border">
-                <h3 className="font-medium mb-3">{t('checkUpdate')}</h3>
-                {!updateStatus ? (
-                  <Button
-                    onPress={checkForUpdate}
-                    isDisabled={checkingUpdate}
-                    variant="primary"
-                    className="w-full"
-                  >
-                    {checkingUpdate ? <Spinner size="sm" /> : <RefreshCw className="w-4 h-4" />}
-                    {checkingUpdate ? t('checking') : t('checkUpdate')}
+            <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
+              {storage?.data_dir ?? "…"}
+            </p>
+
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-white/10">
+                <div
+                  className="h-full rounded-full bg-blue-500 transition-all"
+                  style={{ width: `${usageRatio}%` }}
+                />
+              </div>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {t("storageUsage", {
+                  items: itemCount,
+                  max: maxItems,
+                  size: formatBytes(storage?.total_bytes ?? 0),
+                })}
+                {" · "}
+                {t("storageImages", { count: storage?.image_count ?? 0 })}
+              </span>
+            </div>
+
+            {pendingDataDir && (
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5">
+                <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                  {t("dataDirRestartNeeded")}
+                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button size="sm" variant="primary" onPress={() => invoke("restart_app")}>
+                    {t("restartNow")}
                   </Button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">{t('currentVersion')}</span>
-                      <span className="font-medium">{updateStatus.current_version}</span>
-                    </div>
-                    {updateStatus.update ? (
-                      <>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-green-500">{t('newVersion')}</span>
-                          <span className="font-medium text-green-500">{updateStatus.update.version}</span>
-                        </div>
-
-                        {isDownloading ? (
-                          <div className="space-y-2">
-                            <div className="w-full bg-muted rounded-full h-2">
-                              <div
-                                className="bg-primary h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${Math.min(downloadProgress, 100)}%` }}
-                              />
-                            </div>
-                            <p className="text-xs text-center text-muted-foreground">
-                              {t('downloading')}...
-                            </p>
-                          </div>
-                        ) : (
-                          <Button
-                            onPress={handleDownloadAndInstall}
-                            variant="primary"
-                            className="w-full"
-                          >
-                            {t('downloadUpdate')}
-                          </Button>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-center text-sm text-muted-foreground py-2">{t('upToDate')}</div>
-                    )}
-                    <Button
-                      variant="ghost"
-                      onPress={() => {
-                        setUpdateStatus(null);
-                        setDownloadProgress(0);
-                      }}
-                      className="w-full"
-                    >
-                      {t('recheck')}
-                    </Button>
-                  </div>
-                )}
+                  <Button size="sm" variant="ghost" onPress={() => setPendingDataDir(false)}>
+                    {t("later")}
+                  </Button>
+                </div>
               </div>
-
-              <div className="text-center text-xs text-muted-foreground pt-4">
-                <p>© 2026 Pastoid. All rights reserved.</p>
-              </div>
-            </div>
+            )}
           </div>
-        )}
+        </Section>
+
+        <Section title={t("sectionShortcut")}>
+          <Row label={t("shortcutAction")}>
+            <ShortcutRecordInput
+              value={settings.shortcut}
+              onChange={handleShortcutChange}
+              onRecordingChange={handleShortcutRecordingChange}
+              disabled={loadingSettings}
+            />
+          </Row>
+        </Section>
       </main>
+
+      <footer className="flex flex-none items-center gap-2 px-4 py-2 text-[11px] text-muted-foreground">
+        <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
+        <span className="truncate">{statusLabel || t("currentVersion") + " " + packageInfo.version}</span>
+        <button
+          onClick={checkForUpdate}
+          disabled={checkingUpdate}
+          className="ml-1 rounded-md border border-zinc-200 px-2 py-[1px] transition-colors hover:bg-default disabled:opacity-50 dark:border-white/15"
+        >
+          {checkingUpdate ? t("checking") : t("checkUpdate")}
+        </button>
+        <button
+          onClick={() => setAboutOpen(true)}
+          className="ml-auto rounded px-1.5 py-0.5 hover:bg-default"
+        >
+          {t("about")}
+        </button>
+      </footer>
     </div>
   );
 }

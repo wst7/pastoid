@@ -180,6 +180,8 @@ pub struct StorageInfo {
     pub total_bytes: u64,
     /// 图片文件数
     pub image_count: usize,
+    /// 历史条目数
+    pub item_count: usize,
     /// 首次运行（还没问过数据目录）
     pub first_run: bool,
 }
@@ -200,6 +202,7 @@ pub fn get_storage_info(
         default_dir: default_dir.to_string_lossy().to_string(),
         total_bytes,
         image_count,
+        item_count: state.repo.len(),
     })
 }
 
@@ -253,6 +256,34 @@ pub fn set_data_dir(
 pub fn mark_first_run_done(state: tauri::State<AppState>) -> Result<(), String> {
     storage::mark_first_run_done(&state.data_dir);
     Ok(())
+}
+
+/// 录制新快捷键期间把全局热键停掉：否则按下的组合会先被全局监听抢走，
+/// 面板弹出来、焦点跑掉，录制就中断了（用户看到的是「设置快捷键时卡住/没反应」）。
+#[tauri::command]
+pub fn set_global_shortcut_enabled(
+    enabled: bool,
+    state: tauri::State<AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let shortcut = state
+        .settings
+        .lock()
+        .map_err(|e| e.to_string())?
+        .shortcut
+        .clone();
+
+    if enabled {
+        match crate::shortcut::register(&app_handle, &shortcut) {
+            Ok(()) => Ok(()),
+            // 已经注册过（保存流程刚注册完）不算错误
+            Err(e) if e.contains("already") => Ok(()),
+            Err(e) => Err(e),
+        }
+    } else {
+        let _ = crate::shortcut::unregister(&app_handle, &shortcut);
+        Ok(())
+    }
 }
 
 #[tauri::command]
