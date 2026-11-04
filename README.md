@@ -9,7 +9,7 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
-Pastoid is a lightweight, fast clipboard manager for macOS. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
+Pastoid is a lightweight, fast clipboard manager for macOS and Windows. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
 
 ## Why Pastoid?
 
@@ -36,7 +36,7 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 
 ## Quick Paste Panel
 
-Press your configured shortcut (default: `Cmd+Shift+V`) anywhere to instantly summon the quick paste panel. It appears over any app — even full-screen games or videos — so you can paste without breaking your flow.
+Press your configured shortcut (default: `Cmd+Shift+V` on macOS, `Ctrl+Shift+V` on Windows) anywhere to instantly summon the quick paste panel. It appears over any app — even full-screen games or videos — so you can paste without breaking your flow.
 
 Inside the panel:
 - **← →** to navigate
@@ -65,3 +65,11 @@ Pastoid stores your clipboard history locally on your machine. No cloud, no acco
    ```
 
 4. Open Pastoid from your Applications folder. You may need to go to **System Settings → Privacy & Security** and click **Open Anyway** on the first launch.
+
+### Windows
+
+1. Download the `.msi` or `.exe` installer from the [latest release](https://github.com/wst7/pastoid/releases/latest).
+2. Run the installer and follow the prompts.
+3. Pastoid runs quietly in the system tray; press `Ctrl+Shift+V` to summon the quick paste panel.
+
+> On first launch Windows SmartScreen may warn that the app is unsigned — click **More info → Run anyway**.

@@ -11,12 +11,16 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = build_tray_menu(app_handle)?;
 
-    // macOS 菜单栏用模板图标，跟随系统明暗自动反色
+    // macOS 菜单栏用模板图标（跟随系统明暗自动反色）；
+    // Windows 托盘用深色图标——模板图标在 Windows 上不会反色，深色任务栏下会糊成一团。
+    #[cfg(target_os = "macos")]
+    let icon_bytes: &[u8] = include_bytes!("../icons/tray/32x32.png");
+    #[cfg(not(target_os = "macos"))]
+    let icon_bytes: &[u8] = include_bytes!("../icons/tray-dark/32x32.png");
+
     let _tray = TrayIconBuilder::with_id("main")
-        .icon(Image::from_bytes(include_bytes!(
-            "../icons/tray/32x32.png"
-        ))?)
-        .icon_as_template(true)
+        .icon(Image::from_bytes(icon_bytes)?)
+        .icon_as_template(cfg!(target_os = "macos"))
         .menu(&menu)
         .tooltip("Pastoid")
         .show_menu_on_left_click(true)
@@ -97,9 +101,13 @@ fn build_tray_menu(app_handle: &AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn s
 }
 
 /// 将 global_hotkey 格式的快捷键字符串转换为 Tauri accelerator 格式。
-/// 本项目只面向 macOS，两者格式一致，直接透传。
+/// 设置里统一用 macOS 写法，其它平台映射成 Ctrl/Alt。
 fn shortcut_to_accelerator(shortcut: &str) -> String {
-    shortcut.to_string()
+    if cfg!(target_os = "macos") {
+        shortcut.to_string()
+    } else {
+        shortcut.replace("Cmd", "Ctrl").replace("Option", "Alt")
+    }
 }
 
 fn clear_all_items(app_handle: &AppHandle) {

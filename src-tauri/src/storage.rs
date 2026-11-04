@@ -245,11 +245,21 @@ pub fn migrate_data_if_needed(app_handle: &tauri::AppHandle) {
         return;
     }
 
-    // 构建旧目录路径（基于旧 identifier）。本项目只面向 macOS。
-    let old_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join("Application Support")
-        .join(OLD_APP_IDENTIFIER);
+    // 构建旧目录路径（基于旧 identifier），按平台惯例拼。
+    let old_dir = if cfg!(target_os = "macos") {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("~"))
+            .join("Application Support")
+            .join(OLD_APP_IDENTIFIER)
+    } else if cfg!(target_os = "windows") {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("%APPDATA%"))
+            .join(OLD_APP_IDENTIFIER)
+    } else {
+        dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("~/.local/share"))
+            .join(OLD_APP_IDENTIFIER)
+    };
 
     if !old_dir.exists() {
         return;
@@ -501,7 +511,15 @@ pub fn load_settings(data_dir: &Path) -> Settings {
 
     match fs::read_to_string(&settings_file) {
         Ok(content) => match serde_json::from_str::<Settings>(&content) {
-            Ok(settings) => settings,
+            Ok(mut settings) => {
+                // 老数据（或从 macOS 同步过来的设置）里存的是 Cmd/Option 写法，
+                // 在 Windows 上展示成 Ctrl/Alt 才对得上用户实际按的键
+                if !cfg!(target_os = "macos") {
+                    settings.shortcut =
+                        settings.shortcut.replace("Cmd", "Ctrl").replace("Option", "Alt");
+                }
+                settings
+            }
             Err(e) => {
                 log::error!("Failed to parse settings: {}", e);
                 Settings::default()
@@ -581,7 +599,7 @@ mod tests {
         let settings = load_settings(temp_dir.path());
         assert_eq!(settings.language, "zh");
         assert_eq!(settings.theme, "system");
-        assert_eq!(settings.shortcut, "Cmd+Shift+V");
+        assert_eq!(settings.shortcut, crate::models::default_shortcut());
     }
 
     #[test]

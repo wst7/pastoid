@@ -19,16 +19,15 @@ use tauri_nspanel::WebviewWindowExt;
 
 
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build());
 
+    // NSPanel 只有 macOS 有，用 shadowing 而不是 mut，Windows 上就不会有 unused_mut
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_nspanel::init());
-    }
+    let builder = builder.plugin(tauri_nspanel::init());
 
     builder
         .plugin(tauri_plugin_autostart::init(
@@ -116,6 +115,13 @@ pub fn run() {
                         );
                     }
                 }
+            }
+
+            // Windows / Linux：普通窗口即可，但要让面板在所有虚拟桌面可见，
+            // 否则切了桌面按快捷键呼出来会「看不见」
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window("quick-paste") {
+                let _ = window.set_visible_on_all_workspaces(true);
             }
 
             // 注册全局快捷键

@@ -108,8 +108,8 @@ fn position_panel(window: &tauri::WebviewWindow) {
         Err(_) => return,
     };
 
-    // 距离屏幕底部留一点余量，避免贴着 Dock
-    let bottom_margin = 110.0;
+    // 距离屏幕底部留一点余量：macOS 避开 Dock，Windows 避开任务栏（矮得多）
+    let bottom_margin = if cfg!(target_os = "macos") { 110.0 } else { 60.0 };
     let x = ((screen.width - win_width) / 2.0).max(0.0);
     let y = (screen.height - win_height - bottom_margin).max(0.0);
 
@@ -122,9 +122,15 @@ pub fn get_last_trigger_time() -> u64 {
 }
 
 /// 将快捷键字符串转换为当前平台有效的格式。
-/// 本项目只面向 macOS，global-hotkey 的写法与设置里存的写法一致，原样返回。
+///
+/// 设置里统一用 macOS 的写法存（`Cmd` / `Option`），其它平台注册前映射成
+/// global-hotkey 能识别的 `Ctrl` / `Alt`。
 pub fn normalize_shortcut(shortcut: &str) -> String {
-    shortcut.to_string()
+    if cfg!(target_os = "macos") {
+        shortcut.to_string()
+    } else {
+        shortcut.replace("Cmd", "Ctrl").replace("Option", "Alt")
+    }
 }
 
 pub fn register(app: &AppHandle, shortcut: &str) -> Result<(), String> {
@@ -232,8 +238,13 @@ mod tests {
 
     #[test]
     fn test_normalize_shortcut() {
-        assert_eq!(normalize_shortcut("Cmd+Shift+V"), "Cmd+Shift+V");
-        assert_eq!(normalize_shortcut("Option+K"), "Option+K");
+        if cfg!(target_os = "macos") {
+            assert_eq!(normalize_shortcut("Cmd+Shift+V"), "Cmd+Shift+V");
+            assert_eq!(normalize_shortcut("Option+K"), "Option+K");
+        } else {
+            assert_eq!(normalize_shortcut("Cmd+Shift+V"), "Ctrl+Shift+V");
+            assert_eq!(normalize_shortcut("Option+K"), "Alt+K");
+        }
     }
 
     #[test]

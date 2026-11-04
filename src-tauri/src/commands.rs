@@ -188,7 +188,13 @@ pub fn save_settings(
     if settings.autostart {
         if let Err(e) = autostart.enable() {
             log::error!("Failed to enable autostart: {}", e);
-            return Err(format!("开启自启动失败: {}。请确保应用已安装到 /Applications/ 目录", e));
+            if cfg!(target_os = "macos") {
+                return Err(format!(
+                    "开启自启动失败: {}。请确保应用已安装到 /Applications/ 目录",
+                    e
+                ));
+            }
+            return Err(format!("开启自启动失败: {}", e));
         }
     } else {
         // 关闭时忽略错误（可能登录项本来就不存在）
@@ -328,29 +334,46 @@ pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String
     let mut enigo = Enigo::new(&Settings::default())
         .map_err(|e| format!("Failed to init enigo: {}", e))?;
 
-    // Cmd+Tab 回到上一个应用，让 Cmd+V 落在用户原本的窗口里
-    enigo
-        .key(Key::Meta, Direction::Press)
-        .map_err(|e| format!("enigo: {}", e))?;
-    enigo
-        .key(Key::Tab, Direction::Click)
-        .map_err(|e| format!("enigo: {}", e))?;
-    enigo
-        .key(Key::Meta, Direction::Release)
-        .map_err(|e| format!("enigo: {}", e))?;
+    // macOS：先 Cmd+Tab 回到上一个应用，再 Cmd+V，保证粘贴落在用户原本的窗口里。
+    // Windows：面板隐藏后焦点本身就会回到原窗口，直接 Ctrl+V 即可（不要用 Ctrl+Tab，
+    // 那会把浏览器/编辑器的标签页切花）。
+    if cfg!(target_os = "macos") {
+        enigo
+            .key(Key::Meta, Direction::Press)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo
+            .key(Key::Tab, Direction::Click)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo
+            .key(Key::Meta, Direction::Release)
+            .map_err(|e| format!("enigo: {}", e))?;
 
-    std::thread::sleep(std::time::Duration::from_millis(300));
+        std::thread::sleep(std::time::Duration::from_millis(300));
 
-    // Cmd+V 粘贴
-    enigo
-        .key(Key::Meta, Direction::Press)
-        .map_err(|e| format!("enigo: {}", e))?;
-    enigo
-        .key(Key::Unicode('v'), Direction::Click)
-        .map_err(|e| format!("enigo: {}", e))?;
-    enigo
-        .key(Key::Meta, Direction::Release)
-        .map_err(|e| format!("enigo: {}", e))?;
+        // Cmd+V 粘贴
+        enigo
+            .key(Key::Meta, Direction::Press)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo
+            .key(Key::Unicode('v'), Direction::Click)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo
+            .key(Key::Meta, Direction::Release)
+            .map_err(|e| format!("enigo: {}", e))?;
+    } else {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+
+        // Ctrl+V 粘贴
+        enigo
+            .key(Key::Control, Direction::Press)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo
+            .key(Key::Unicode('v'), Direction::Click)
+            .map_err(|e| format!("enigo: {}", e))?;
+        enigo
+            .key(Key::Control, Direction::Release)
+            .map_err(|e| format!("enigo: {}", e))?;
+    }
 
     // Restore original clipboard content
     std::thread::sleep(std::time::Duration::from_millis(150));

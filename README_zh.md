@@ -9,7 +9,7 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
-Pastoid 是一款轻量、快速的 macOS 剪贴板管理器。基于 Tauri 和 React 构建，后台静默运行，剪贴板历史触手可及。
+Pastoid 是一款轻量、快速的剪贴板管理器，支持 macOS 和 Windows。基于 Tauri 和 React 构建，后台静默运行，剪贴板历史触手可及。
 
 ## 为什么选择 Pastoid？
 
@@ -23,7 +23,7 @@ Pastoid 是一款轻量、快速的 macOS 剪贴板管理器。基于 Tauri 和 
 - **🌙 主题切换** — 支持浅色、深色，或跟随系统自动切换。
 - **🌍 双语界面** — 完整支持中文和英文界面。
 - **🚀 开机启动** — 可选开机自启动，随时待命。
-- **⌨️ 键盘优先** — 全局快捷键呼出快速粘贴面板，方向键导航，鼠标不用碰。
+- **⌨️ 键盘优先** — 全局快捷键（macOS `Cmd+Shift+V` / Windows `Ctrl+Shift+V`）呼出快速粘贴面板，方向键导航，鼠标不用碰。
 - **⚙️ 历史条数可调** — 设置保留条数（1–100 条），灵活平衡历史深度与性能。
 
 ## 截图
@@ -66,3 +66,11 @@ Pastoid 将剪贴板历史存储在本地机器上。无云端、无账号、无
    ```
 
 4. 从应用程序文件夹打开 Pastoid。首次启动可能需要在 **系统设置 → 隐私与安全性** 中点击「仍然打开」。
+
+### Windows
+
+1. 从 [最新发布页](https://github.com/wst7/pastoid/releases/latest) 下载 `.msi` 或 `.exe` 安装包。
+2. 运行安装程序，按提示完成安装。
+3. 安装后 Pastoid 会在托盘区静默运行，按 `Ctrl+Shift+V` 呼出快速粘贴面板。
+
+> Windows 首次运行可能弹出 SmartScreen 提示（应用未做代码签名），点击「更多信息 → 仍要运行」即可。

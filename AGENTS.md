@@ -1,8 +1,9 @@
 # AGENTS.md
 
 ## 项目概览
-Pastoid - Tauri + React + TypeScript 构建的轻量级剪贴板管理器，**只面向 macOS**。
-其它平台的条件编译分支已经清掉，新增代码不需要再考虑 Windows/Linux。
+Pastoid - Tauri + React + TypeScript 构建的轻量级剪贴板管理器，支持 **macOS 和 Windows**。
+两端共用同一套前端与数据格式；平台差异集中在快捷键写法、粘贴按键、托盘图标和面板窗口上。
+新增平台相关代码请沿用 `cfg!(target_os = "macos")` 的方式，保持单文件可读，不要再拆出整套 cfg 分支。
 
 ## 常用命令
 
@@ -98,9 +99,25 @@ npm run release:major     # 0.1.0 -> 1.0.0
 
 ## 构建产物
 - macOS: `.app` + `.dmg`（x64 + aarch64 双架构分别构建）
+- Windows: `.msi` + `.exe`（NSIS）
 - 更新包: `.tar.gz` + `.sig` 签名文件
 
 ## 代码约定
 - TypeScript strict 模式
 - Rust edition 2021
 - 使用 Git 提交信息规范（conventional commits）
+
+## 平台差异速查
+
+| 关注点 | macOS | Windows |
+| --- | --- | --- |
+| 默认快捷键 | `Cmd+Shift+V` | `Ctrl+Shift+V`（`normalize_shortcut` 负责 Cmd→Ctrl） |
+| 粘贴 | Cmd+Tab 切回原应用后 Cmd+V | 直接 Ctrl+V（不要用 Ctrl+Tab） |
+| 面板窗口 | `tauri-nspanel` 转 NSPanel，浮在全屏应用之上 | 普通 always-on-top 窗口 + 所有虚拟桌面可见 |
+| 托盘图标 | `icons/tray/32x32.png`，`icon_as_template(true)` | `icons/tray-dark/32x32.png`，模板图标不反色 |
+| 面板底部留白 | 110pt（避开 Dock） | 60pt（避开任务栏） |
+| 数据目录 | `~/Library/Application Support/<id>` | `%APPDATA%\<id>` |
+| 安装包 | `.dmg` | `.msi` / NSIS `.exe` |
+
+Windows 上「复制文件」会以多行路径（有时带引号）出现在剪贴板文本里，
+`clipboard::first_image_path` 负责逐行去引号后识别，别退化回「整段当路径」。

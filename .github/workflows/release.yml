@@ -20,8 +20,13 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+            targets: 'aarch64-apple-darwin'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
+            targets: 'x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+            targets: ''
 
     steps:
       - name: Checkout repository
@@ -43,7 +48,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          targets: ${{ matrix.targets }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2

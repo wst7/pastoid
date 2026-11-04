@@ -59,8 +59,17 @@ impl Default for Settings {
             theme: "system".to_string(),
             autostart: false,
             max_items: 20,
-            shortcut: "Cmd+Shift+V".to_string(),
+            shortcut: default_shortcut().to_string(),
         }
+    }
+}
+
+/// 默认快捷键：macOS 用 Cmd，其它平台用 Ctrl。
+pub fn default_shortcut() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Cmd+Shift+V"
+    } else {
+        "Ctrl+Shift+V"
     }
 }
 
@@ -147,7 +156,7 @@ mod tests {
         assert_eq!(settings.theme, "system");
         assert!(!settings.autostart);
         assert_eq!(settings.max_items, 20);
-        assert_eq!(settings.shortcut, "Cmd+Shift+V");
+        assert_eq!(settings.shortcut, crate::models::default_shortcut());
     }
 
     #[test]

@@ -27,6 +27,16 @@ interface SettingsData {
   language: string;
 }
 
+/** 平台相关的按键显示：macOS 用符号，Windows 用文字 */
+const isMacPlatform =
+  typeof navigator !== "undefined" &&
+  (navigator.userAgent.includes("Mac") || /Mac/i.test(navigator.platform ?? ""));
+const modKey = isMacPlatform ? "⌘" : "Ctrl";
+const shiftLabel = isMacPlatform ? "⇧" : "Shift";
+const backspaceLabel = isMacPlatform ? "⌫" : "Backspace";
+const enterLabel = isMacPlatform ? "↵" : "Enter";
+const escLabel = isMacPlatform ? "esc" : "Esc";
+
 function applyTheme(theme: string) {
   const isDark =
     theme === "dark" ||
@@ -519,15 +529,15 @@ export default function QuickPaste() {
           )}
         </div>
 
-        {/* 底部：快捷键提示 */}
+        {/* 底部：快捷键提示（按平台显示 ⌘ 还是 Ctrl） */}
         <div className="shrink-0 flex items-center gap-3 px-3 h-8 border-t border-zinc-100 dark:border-white/[0.06] text-[10.5px] text-zinc-400 dark:text-zinc-500">
           <Hint keys={["←", "→"]} label={t("nav")} />
-          <Hint keys={["↵"]} label={t("paste")} />
-          <Hint keys={["⌘", "P"]} label={t("pin")} />
-          <Hint keys={["⌘", "⌫"]} label={t("delete")} />
-          <Hint keys={["⌘", "⇧", "X"]} label={t("clearAll")} />
+          <Hint keys={[enterLabel]} label={t("paste")} />
+          <Hint keys={[modKey, "P"]} label={t("pin")} />
+          <Hint keys={[modKey, backspaceLabel]} label={t("delete")} />
+          <Hint keys={[modKey, shiftLabel, "X"]} label={t("clearAll")} />
           <span className="ml-auto flex items-center gap-1">
-            <Hint keys={["esc"]} label={t("close")} />
+            <Hint keys={[escLabel]} label={t("close")} />
           </span>
         </div>
       </div>

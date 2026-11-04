@@ -134,11 +134,9 @@ fn poll(app: &AppHandle, state: &mut MonitorState) -> Result<Option<ClipboardIte
         }
     }
 
-    // 1) 图片文件路径（截图工具、Finder 复制文件等场景）
-    if let Some(t) = text.as_deref() {
-        if is_image_path(t) && Path::new(t).is_file() {
-            return image_from_file(app, state, Path::new(t));
-        }
+    // 1) 图片文件路径（截图工具、Finder / 资源管理器复制文件等场景）
+    if let Some(path) = text.as_deref().and_then(first_image_path) {
+        return image_from_file(app, state, &path);
     }
 
     // 2) 真正的文本优先于位图。
@@ -439,6 +437,25 @@ fn write_png(data_dir: &Path, image: &DecodedImage, hash: &str) -> Result<String
     Ok(format!("images/{}", file_name))
 }
 
+/// 从剪贴板文本里挑出第一个真实存在的图片路径。
+///
+/// Windows 上「复制文件」的形态和 macOS 不一样：
+/// - 资源管理器复制图片文件时，剪贴板文本里可能出现多行路径
+/// - 右键「复制为路径」会给路径套上双引号
+/// 所以这里逐行去引号后再判断，而不是把整段文本当成一个路径。
+fn first_image_path(text: &str) -> Option<PathBuf> {
+    // 粘贴一整段文本时不该逐行去 stat 文件，限制扫描行数
+    const MAX_LINES: usize = 32;
+
+    text.lines()
+        .take(MAX_LINES)
+        .map(|line| line.trim().trim_matches('"'))
+        .find(|candidate| {
+            !candidate.is_empty() && is_image_path(candidate) && Path::new(candidate).is_file()
+        })
+        .map(PathBuf::from)
+}
+
 /// 判断路径是否为常见图片扩展名。
 ///
 /// 显式排除 URL 与 data URI：它们同样以 `.png` 之类结尾，但不是本地文件路径，
@@ -525,6 +542,24 @@ mod tests {
         assert!(!looks_like_url_or_markup("看一下这个 https://example.com 页面"));
         assert!(!looks_like_url_or_markup("/tmp/a.png"));
         assert!(!looks_like_url_or_markup("<3"));
+    }
+
+    #[test]
+    fn test_first_image_path_handles_windows_forms() {
+        let dir = tempfile::tempdir().unwrap();
+        let img = dir.path().join("shot.png");
+        std::fs::write(&img, b"x").unwrap();
+
+        // 「复制为路径」会带引号
+        let quoted = format!("\"{}\"", img.display());
+        assert_eq!(first_image_path(&quoted), Some(img.clone()));
+
+        // 资源管理器复制文件时可能是多行路径
+        let multi = format!("C:\\a.txt\n{}\n", img.display());
+        assert_eq!(first_image_path(&multi), Some(img.clone()));
+
+        assert_eq!(first_image_path("just some text"), None);
+        assert_eq!(first_image_path("/no/such/file.png"), None);
     }
 
     #[test]
