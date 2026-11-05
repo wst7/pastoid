@@ -26,6 +26,8 @@ export function Select({ value, options, onChange, disabled, minWidth = 132 }: S
   const [active, setActive] = useState(0);
   const [pos, setPos] = useState({ top: 0, left: 0, width: minWidth });
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const activeRef = useRef(0);
+  activeRef.current = active;
   const menuRef = useRef<HTMLDivElement>(null);
 
   const current = options.find((o) => o.id === value) ?? options[0];
@@ -49,9 +51,16 @@ export function Select({ value, options, onChange, disabled, minWidth = 132 }: S
     if (open) place();
   }, [open, place]);
 
+  // 打开时把高亮定位到当前选中项。这个 effect 绝不能依赖 active：
+  // 否则每次 hover 改 active 都会重新跑一遍，把高亮又打回选中项。
   useEffect(() => {
     if (!open) return;
-    setActive(Math.max(0, options.findIndex((o) => o.id === value)));
+    const index = options.findIndex((o) => o.id === value);
+    setActive(index < 0 ? 0 : index);
+  }, [open, options, value]);
+
+  useEffect(() => {
+    if (!open) return;
 
     const onPointerDown = (e: MouseEvent) => {
       const t = e.target as Node;
@@ -71,7 +80,7 @@ export function Select({ value, options, onChange, disabled, minWidth = 132 }: S
         setActive((i) => (i - 1 + options.length) % options.length);
       } else if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        const picked = options[active];
+        const picked = options[activeRef.current];
         if (picked) {
           onChange(picked.id);
           setOpen(false);
@@ -91,7 +100,7 @@ export function Select({ value, options, onChange, disabled, minWidth = 132 }: S
       window.removeEventListener("resize", onScroll);
       window.removeEventListener("scroll", onScroll, true);
     };
-  }, [open, active, options, onChange, value]);
+  }, [open, options, onChange]);
 
   return (
     <>

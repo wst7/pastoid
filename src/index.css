@@ -23,6 +23,8 @@
   --border: #e5e5e5;
   --input: #e5e5e5;
   --ring: #3b82f6;
+  /* 中性悬浮底色：用于 hover:bg-default 这类轻量高亮 */
+  --default: #f1f2f4;
 }
 
 .dark {
@@ -45,6 +47,7 @@
   --border: #45475a;
   --input: #45475a;
   --ring: #60a5fa;
+  --default: #383a52;
 }
 
 @theme inline {
@@ -67,6 +70,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-default: var(--default);
 }
 
 @layer base {
