@@ -390,6 +390,7 @@ pub fn save_settings(
     }
 
     // 记录快捷键变更（随后在后台线程异步执行重注册，避免阻塞 UI）
+    let language_changed = current_settings.language != settings.language;
     let shortcut_changed = current_settings.shortcut != settings.shortcut;
     let old_shortcut = current_settings.shortcut.clone();
     let new_shortcut = settings.shortcut.clone();
@@ -410,6 +411,13 @@ pub fn save_settings(
 
     // ⚠️ 关键修复：在启动后台线程前释放锁，避免死锁
     drop(current_settings);
+
+    // 托盘菜单的文案是在构建时用 t!() 取的，换语言后必须重建，否则菜单还是旧语言
+    if language_changed {
+        if let Err(e) = crate::tray::update_tray_menu(&app_handle) {
+            log::error!("Failed to rebuild tray menu after language change: {}", e);
+        }
+    }
 
     if shortcut_changed {
         let app = app_handle.clone();
