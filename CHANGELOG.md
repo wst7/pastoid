@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.2](https://github.com/wst7/pastoid/compare/v1.10.1...v1.10.2) (2026-11-05)
+
+### ✨ Features | 新功能
+
+* **ui:** custom dropdown instead of native select ([d3c7ce2](https://github.com/wst7/pastoid/commit/d3c7ce2fedf883652ed7d8fad04be3ec28b9cc8d))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* keep pinned pin amber in the popup hover actions ([8273d2c](https://github.com/wst7/pastoid/commit/8273d2ccdd52a0efe179a441b14ca81beb214ac6))
+* stop failing silently, and stop blocking the UI thread ([6202ba5](https://github.com/wst7/pastoid/commit/6202ba5f121f0f466bbf97519c191919b60a61ef))
+* surface update download in the footer, and show the real data folder ([bd7a00c](https://github.com/wst7/pastoid/commit/bd7a00c016c4d1a38b39e0be3575cc6302e55b14))
+
 ## [1.10.1](https://github.com/wst7/pastoid/compare/v1.10.0...v1.10.1) (2026-11-05)
 
 ### ✨ Features | 新功能
