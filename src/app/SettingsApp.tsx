@@ -17,7 +17,8 @@ import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
 import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
-import { ChevronDown, FolderOpen, X } from "lucide-react";
+import { FolderOpen, X } from "lucide-react";
+import { Select } from "@/components/Select";
 
 interface UpdateStatus {
   update: Update | null;
@@ -432,37 +433,25 @@ export default function SettingsApp() {
         <Section title={t("sectionAppearance")}>
           <Row label={t("language")}>
             <div className="relative flex items-center">
-              <select
+              <Select
                 value={settings.language}
-                onChange={(e) => handleLanguageChange(e.target.value)}
+                options={languages}
+                onChange={handleLanguageChange}
                 disabled={loadingSettings}
-                className="appearance-none bg-transparent pr-5 text-[13px] text-muted-foreground outline-none"
-              >
-                {languages.map((lang) => (
-                  <option key={lang.id} value={lang.id}>
-                    {lang.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} className="pointer-events-none absolute right-0 text-muted-foreground" />
+                minWidth={140}
+              />
             </div>
           </Row>
 
           <Row label={t("theme")}>
             <div className="relative flex items-center">
-              <select
+              <Select
                 value={settings.theme}
-                onChange={(e) => handleThemeChange(e.target.value)}
+                options={themeOptions}
+                onChange={handleThemeChange}
                 disabled={loadingSettings}
-                className="appearance-none bg-transparent pr-5 text-[13px] text-muted-foreground outline-none"
-              >
-                {themeOptions.map((theme) => (
-                  <option key={theme.id} value={theme.id}>
-                    {theme.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} className="pointer-events-none absolute right-0 text-muted-foreground" />
+                minWidth={120}
+              />
             </div>
           </Row>
 
