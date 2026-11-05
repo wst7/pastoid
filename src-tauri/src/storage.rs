@@ -56,6 +56,12 @@ fn read_data_dir_pointer(default_dir: &Path) -> Option<DataDirPointer> {
     })
 }
 
+/// 读取「下次启动要迁移到」的目标目录（没有待处理变更时返回 None）。
+/// 设置页用它把用户刚选的路径显示出来，而不是干等重启。
+pub fn pending_data_dir(default_dir: &Path) -> Option<PathBuf> {
+    read_data_dir_pointer(default_dir).map(|p| p.target)
+}
+
 /// 写入（或清除）自定义目录指针
 pub fn write_data_dir_pointer(
     default_dir: &Path,

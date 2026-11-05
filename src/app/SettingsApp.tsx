@@ -39,6 +39,8 @@ interface StorageInfo {
   total_bytes: number;
   image_count: number;
   item_count: number;
+  /** 已选好、还没重启生效的目录 */
+  pending_dir?: string | null;
 }
 
 const languages = [
@@ -102,6 +104,7 @@ export default function SettingsApp() {
   // 系统明暗变化时要知道现在是不是「跟随系统」档
   const themeRef = useRef<ThemePref>("system");
   const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -177,8 +180,10 @@ export default function SettingsApp() {
   const loadStorage = async () => {
     try {
       setStorage(await invoke<StorageInfo>("get_storage_info"));
+      setStorageError(null);
     } catch (error) {
       console.error("Failed to load storage info:", error);
+      setStorageError(String(error));
     }
   };
 
@@ -572,9 +577,23 @@ export default function SettingsApp() {
               </div>
             </div>
 
-            <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
-              {storage?.data_dir ?? "…"}
-            </p>
+            <div className="mt-1 space-y-0.5">
+              <p
+                className="break-all font-mono text-[11px] leading-relaxed text-muted-foreground"
+                title={storage?.data_dir ?? ""}
+              >
+                {storage?.data_dir ??
+                  (storageError ? `${t("dataDirLoadFailed")}: ${storageError}` : t("loading"))}
+              </p>
+              {storage?.pending_dir && (
+                <p
+                  className="break-all font-mono text-[11px] leading-relaxed text-amber-600 dark:text-amber-400"
+                  title={storage.pending_dir}
+                >
+                  {t("dataDirPending")}: {storage.pending_dir}
+                </p>
+              )}
+            </div>
 
             <div className="mt-2 flex items-center gap-2">
               <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-white/10">
@@ -594,7 +613,7 @@ export default function SettingsApp() {
               </span>
             </div>
 
-            {pendingDataDir && (
+            {(pendingDataDir || Boolean(storage?.pending_dir)) && (
               <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5">
                 <span className="text-[11px] text-amber-700 dark:text-amber-300">
                   {t("dataDirRestartNeeded")}
@@ -627,13 +646,28 @@ export default function SettingsApp() {
       <footer className="flex flex-none items-center gap-2 px-4 py-2 text-[11px] text-muted-foreground">
         <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
         <span className="truncate">{statusLabel || t("currentVersion") + " " + packageInfo.version}</span>
-        <button
-          onClick={checkForUpdate}
-          disabled={checkingUpdate}
-          className="ml-1 rounded-md border border-zinc-200 px-2 py-[1px] transition-colors hover:bg-default disabled:opacity-50 dark:border-white/15"
-        >
-          {checkingUpdate ? t("checking") : t("checkUpdate")}
-        </button>
+        {hasUpdate ? (
+          // 查到新版本后，下载入口必须在同一处，不能让用户再去「关于」里找
+          <button
+            onClick={handleDownloadAndInstall}
+            disabled={isDownloading || installed}
+            className="ml-1 rounded-md border border-blue-500/40 bg-blue-500/10 px-2 py-[1px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 disabled:opacity-60 dark:text-blue-300"
+          >
+            {installed
+              ? t("restarting")
+              : isDownloading
+                ? `${downloadProgress}%`
+                : t("downloadUpdate")}
+          </button>
+        ) : (
+          <button
+            onClick={checkForUpdate}
+            disabled={checkingUpdate}
+            className="ml-1 rounded-md border border-zinc-200 px-2 py-[1px] transition-colors hover:bg-default disabled:opacity-50 dark:border-white/15"
+          >
+            {checkingUpdate ? t("checking") : t("checkUpdate")}
+          </button>
+        )}
         <button
           onClick={() => setAboutOpen(true)}
           className="ml-auto rounded px-1.5 py-0.5 hover:bg-default"

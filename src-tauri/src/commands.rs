@@ -182,6 +182,8 @@ pub struct StorageInfo {
     pub image_count: usize,
     /// 历史条目数
     pub item_count: usize,
+    /// 已选好、但还没重启生效的目标目录
+    pub pending_dir: Option<String>,
     /// 首次运行（还没问过数据目录）
     pub first_run: bool,
 }
@@ -203,6 +205,9 @@ pub fn get_storage_info(
         total_bytes,
         image_count,
         item_count: state.repo.len(),
+        pending_dir: storage::pending_data_dir(&default_dir)
+            .filter(|p| p != &data_dir)
+            .map(|p| p.to_string_lossy().to_string()),
     })
 }
 

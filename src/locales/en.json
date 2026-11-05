@@ -70,5 +70,8 @@
   "updateAvailable": "Version {{version}} available",
   "closePanel": "Close",
   "restarting": "Installed, restarting…",
-  "updateFailed": "Update failed"
+  "updateFailed": "Update failed",
+  "loading": "Loading…",
+  "dataDirLoadFailed": "Could not read folder",
+  "dataDirPending": "Will move to"
 }

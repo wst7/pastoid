@@ -70,5 +70,8 @@
   "updateAvailable": "有新版本 {{version}}",
   "closePanel": "关闭",
   "restarting": "已安装，正在重启…",
-  "updateFailed": "更新失败"
+  "updateFailed": "更新失败",
+  "loading": "读取中…",
+  "dataDirLoadFailed": "目录读取失败",
+  "dataDirPending": "重启后迁移到"
 }
