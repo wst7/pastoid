@@ -114,7 +114,7 @@ npm run release:major     # 0.1.0 -> 1.0.0
 | 默认快捷键 | `Cmd+Shift+V` | `Ctrl+Shift+V`（`normalize_shortcut` 负责 Cmd→Ctrl） |
 | 粘贴 | Cmd+Tab 切回原应用后 `Key::Unicode('v')` | 直接 Ctrl+V，且必须用 `Key::V`（见下） |
 | 面板窗口 | `tauri-nspanel` 转 NSPanel，浮在全屏应用之上 | 普通 always-on-top 窗口 + 所有虚拟桌面可见 |
-| 托盘图标 | `icons/tray/32x32.png`，彩色品牌图标，`icon_as_template(false)` | 同一张彩色图标 |
+| 托盘图标 | `icons/tray-template/32x32.png`（纯黑模板图，`icon_as_template(true)`，深色菜单栏自动变白） | `icons/tray/32x32.png`（彩色品牌图标，模板图在 Windows 不反色） |
 | 面板底部留白 | 110pt（避开 Dock） | 60pt（避开任务栏） |
 | 数据目录 | `~/Library/Application Support/<id>` | `%LOCALAPPDATA%\<id>`（不用 Roaming，避免漫游同步图片） |
 | 安装包 | `.dmg` | `.msi` / NSIS `.exe` |
@@ -137,6 +137,8 @@ Windows 上「复制文件」会以多行路径（有时带引号）出现在剪
 - 首次运行会弹出数据目录引导（标记文件 `.first-run-done`；已指定过目录则不再问），
   并在 `lib.rs` 里把设置窗口叫出来
 
-**托盘图标必须是彩色版**：紫色剪贴板剪影，`icon_as_template(false)`。
-如果把 template 打开，系统只取 alpha，紫色会被染成单色、图案整个消失只剩方块（试过，见 git 历史）。
-设成 16px 时仍然清晰，是因为图形是实心剪影 + 镂空，不是细描边。
+**托盘图标分平台**：
+- macOS 用模板图（纯黑 + alpha，`icon_as_template(true)`），系统按菜单栏明暗染色——深色栏白、浅色栏黑。
+- Windows 用彩色版（`icon_as_template(false)`），模板图在 Windows 不会反色。
+- 不要把彩色图开 template：系统只取 alpha，紫色会被染成单色、图案整个消失只剩色块（试过，见 git 历史）。
+- 两种图都能在 16px 立住，是因为图形是实心剪影 + 镂空，不是细描边。

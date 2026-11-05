@@ -11,12 +11,18 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = build_tray_menu(app_handle)?;
 
-    // 彩色品牌图标（紫色剪贴板），两端共用。
-    // 注意：macOS 必须关掉 template——模板图只取 alpha，彩色会被系统染成单色，
-    // 紫色图案会整个消失，只剩一个色块。
+    // 两个平台按各自的惯例来：
+    // - macOS 菜单栏用模板图（纯黑 + alpha），系统按菜单栏明暗自动染色，
+    //   深色菜单栏下就是白色，浅色下是黑色，和系统图标一致。
+    // - Windows 托盘保留彩色品牌图标（模板图在 Windows 上不会反色）。
+    #[cfg(target_os = "macos")]
+    let icon_bytes: &[u8] = include_bytes!("../icons/tray-template/32x32.png");
+    #[cfg(not(target_os = "macos"))]
+    let icon_bytes: &[u8] = include_bytes!("../icons/tray/32x32.png");
+
     let _tray = TrayIconBuilder::with_id("main")
-        .icon(Image::from_bytes(include_bytes!("../icons/tray/32x32.png"))?)
-        .icon_as_template(false)
+        .icon(Image::from_bytes(icon_bytes)?)
+        .icon_as_template(cfg!(target_os = "macos"))
         .menu(&menu)
         .tooltip("Pastoid")
         .show_menu_on_left_click(true)
