@@ -73,5 +73,7 @@
   "updateFailed": "更新失败",
   "loading": "读取中…",
   "dataDirLoadFailed": "目录读取失败",
-  "dataDirPending": "重启后迁移到"
+  "dataDirPending": "重启后迁移到",
+  "aboutSource": "查看源码",
+  "aboutFeedback": "问题反馈"
 }

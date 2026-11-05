@@ -11,12 +11,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
-import { Switch, Button, Spinner } from "@heroui/react";
+import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
-import { ChevronDown, FolderOpen, RefreshCw, X } from "lucide-react";
+import { ChevronDown, FolderOpen, X } from "lucide-react";
 
 interface UpdateStatus {
   update: Update | null;
@@ -329,16 +330,20 @@ export default function SettingsApp() {
   const usageRatio = Math.min(100, Math.round((itemCount / maxItems) * 100));
 
   const hasUpdate = Boolean(updateStatus?.update);
-  const statusDot = !updateStatus
-    ? "bg-zinc-400"
-    : hasUpdate
-      ? "bg-amber-500"
-      : "bg-green-500";
-  const statusLabel = !updateStatus
-    ? ""
-    : hasUpdate
-      ? t("updateAvailable", { version: updateStatus.update?.version ?? "" })
-      : t("upToDate");
+  const statusDot = updateError
+    ? "bg-red-500"
+    : !updateStatus
+      ? "bg-zinc-400"
+      : hasUpdate
+        ? "bg-amber-500"
+        : "bg-green-500";
+  const statusLabel = updateError
+    ? `${t("updateFailed")}（${updateError}）`
+    : !updateStatus
+      ? ""
+      : hasUpdate
+        ? t("updateAvailable", { version: updateStatus.update?.version ?? "" })
+        : t("upToDate");
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -390,79 +395,19 @@ export default function SettingsApp() {
 
             <p className="text-sm leading-relaxed text-muted-foreground">{t("description")}</p>
 
-            <div className="space-y-2 rounded-xl bg-default/60 p-3">
-              {!updateStatus ? (
-                <Button
-                  onPress={checkForUpdate}
-                  isDisabled={checkingUpdate}
-                  variant="primary"
-                  className="w-full"
-                >
-                  {checkingUpdate ? <Spinner size="sm" /> : <RefreshCw className="h-4 w-4" />}
-                  {checkingUpdate ? t("checking") : t("checkUpdate")}
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t("currentVersion")}</span>
-                    <span className="font-medium">{updateStatus.current_version}</span>
-                  </div>
-                  {updateStatus.update ? (
-                    <>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-green-500">{t("newVersion")}</span>
-                        <span className="font-medium text-green-500">
-                          {updateStatus.update.version}
-                        </span>
-                      </div>
-                      {installed ? (
-                        <p className="text-center text-sm text-muted-foreground">
-                          {t("restarting")}
-                        </p>
-                      ) : isDownloading ? (
-                        <div className="space-y-1.5">
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
-                            <div
-                              className="h-full rounded-full bg-blue-500 transition-all duration-300"
-                              style={{ width: `${Math.min(downloadProgress, 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-center text-xs text-muted-foreground">
-                            {t("downloading")}...
-                          </p>
-                        </div>
-                      ) : (
-                        <Button
-                          onPress={handleDownloadAndInstall}
-                          variant="primary"
-                          className="w-full"
-                        >
-                          {t("downloadUpdate")}
-                        </Button>
-                      )}
-                      {updateError && (
-                        <p className="text-xs text-red-500 break-words">
-                          {t("updateFailed")}: {updateError}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <div className="py-1 text-center text-sm text-muted-foreground">
-                      {t("upToDate")}
-                    </div>
-                  )}
-                  <Button
-                    variant="ghost"
-                    onPress={() => {
-                      setUpdateStatus(null);
-                      setDownloadProgress(0);
-                    }}
-                    className="w-full"
-                  >
-                    {t("recheck")}
-                  </Button>
-                </div>
-              )}
+            <div className="flex items-center justify-center gap-4 text-xs">
+              <button
+                onClick={() => openUrl("https://github.com/wst7/pastoid")}
+                className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {t("aboutSource")}
+              </button>
+              <button
+                onClick={() => openUrl("https://github.com/wst7/pastoid/issues")}
+                className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {t("aboutFeedback")}
+              </button>
             </div>
 
             <p className="text-center text-[11px] text-muted-foreground">

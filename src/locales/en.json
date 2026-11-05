@@ -73,5 +73,7 @@
   "updateFailed": "Update failed",
   "loading": "Loading…",
   "dataDirLoadFailed": "Could not read folder",
-  "dataDirPending": "Will move to"
+  "dataDirPending": "Will move to",
+  "aboutSource": "Source",
+  "aboutFeedback": "Report an issue"
 }
