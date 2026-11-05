@@ -107,6 +107,7 @@ export default function SettingsApp() {
   const themeRef = useRef<ThemePref>("system");
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -169,14 +170,27 @@ export default function SettingsApp() {
     }
   };
 
-  const saveSettings = async (newSettings: SettingsData) => {
+  const saveSettings = async (newSettings: SettingsData): Promise<boolean> => {
     try {
       await invoke("save_settings", { settings: newSettings });
       themeRef.current = newSettings.theme as ThemePref;
       applyTheme(themeRef.current);
+      setSaveError(null);
+      return true;
     } catch (error) {
       console.error("Failed to save settings:", error);
+      setSaveError(String(error));
+      return false;
     }
+  };
+
+  /** 乐观更新失败时把界面退回旧值，否则用户会以为改成功了 */
+  const persist = async (newSettings: SettingsData) => {
+    const previous = settings;
+    setSettings(newSettings);
+    const ok = await saveSettings(newSettings);
+    if (!ok) setSettings(previous);
+    return ok;
   };
 
   const loadStorage = async () => {
@@ -189,30 +203,22 @@ export default function SettingsApp() {
     }
   };
 
-  const handleLanguageChange = (language: string) => {
-    const newSettings = { ...settings, language };
-    setSettings(newSettings);
-    i18n.changeLanguage(language === "zh" ? "zh" : "en");
-    saveSettings(newSettings);
+  const handleLanguageChange = async (language: string) => {
+    const ok = await persist({ ...settings, language });
+    if (ok) i18n.changeLanguage(language === "zh" ? "zh" : "en");
   };
 
-  const handleThemeChange = (theme: string) => {
-    const newSettings = { ...settings, theme };
-    setSettings(newSettings);
-    saveSettings(newSettings);
+  const handleThemeChange = async (theme: string) => {
+    await persist({ ...settings, theme });
   };
 
-  const handleAutostartChange = (isSelected: boolean) => {
-    const newSettings = { ...settings, autostart: isSelected };
-    setSettings(newSettings);
-    saveSettings(newSettings);
+  const handleAutostartChange = async (isSelected: boolean) => {
+    await persist({ ...settings, autostart: isSelected });
   };
 
   const handleMaxItemsChange = async (value: string) => {
     const max_items = Math.max(1, Math.min(100, parseInt(value) || 20));
-    const newSettings = { ...settings, max_items };
-    setSettings(newSettings);
-    await saveSettings(newSettings);
+    await persist({ ...settings, max_items });
   };
 
   const handleChangeDataDir = async () => {
@@ -239,6 +245,16 @@ export default function SettingsApp() {
       await loadStorage();
     } catch (error) {
       console.error("Failed to mark first run:", error);
+      await message(String(error), { title: "Pastoid", kind: "error" });
+    }
+  };
+
+  const handleRestart = async () => {
+    try {
+      await invoke("restart_app");
+    } catch (error) {
+      console.error("Failed to restart:", error);
+      await message(`${t("restartFailed")}: ${String(error)}`, { title: "Pastoid", kind: "error" });
     }
   };
 
@@ -247,6 +263,7 @@ export default function SettingsApp() {
       await invoke("open_data_dir");
     } catch (error) {
       console.error("Failed to open data dir:", error);
+      await message(`${t("openDataDirFailed")}: ${String(error)}`, { title: "Pastoid", kind: "error" });
     }
   };
 
@@ -430,6 +447,11 @@ export default function SettingsApp() {
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 pb-1">
+        {saveError && (
+          <div className="mt-2 rounded-lg bg-red-500/10 px-3 py-1.5 text-[11.5px] text-red-600 dark:text-red-400">
+            {t("saveFailed")}: {saveError}
+          </div>
+        )}
         <Section title={t("sectionAppearance")}>
           <Row label={t("language")}>
             <div className="relative flex items-center">
@@ -553,7 +575,7 @@ export default function SettingsApp() {
                   {t("dataDirRestartNeeded")}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button size="sm" variant="primary" onPress={() => invoke("restart_app")}>
+                  <Button size="sm" variant="primary" onPress={handleRestart}>
                     {t("restartNow")}
                   </Button>
                   <Button size="sm" variant="ghost" onPress={() => setPendingDataDir(false)}>

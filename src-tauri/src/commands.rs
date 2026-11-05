@@ -143,15 +143,18 @@ pub fn import_clipboard_items(
 
 /// 读取历史里某张图片的内容，返回可直接塞进 <img src> 的 data URL。
 #[tauri::command]
-pub fn get_image_data(filename: String, state: tauri::State<AppState>) -> Result<String, String> {
+pub async fn get_image_data(
+    filename: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
     // 只允许读取 data_dir 内部的文件
     if filename.contains("..") || filename.starts_with('/') {
         return Err("非法的图片路径".to_string());
     }
 
-    let path = state.data_dir.join(&filename);
-    let base = state
-        .data_dir
+    let data_dir = state.data_dir.clone();
+    let path = data_dir.join(&filename);
+    let base = data_dir
         .canonicalize()
         .map_err(|e| format!("无法解析数据目录: {}", e))?;
     let canonical = path
@@ -162,8 +165,32 @@ pub fn get_image_data(filename: String, state: tauri::State<AppState>) -> Result
         return Err("非法的图片路径".to_string());
     }
 
-    let bytes = std::fs::read(&canonical).map_err(|e| format!("无法读取图片: {}", e))?;
-    Ok(format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
+    // 原图可能几 MB（4K 截图），直接 base64 塞给 webview 会卡。
+    // 这里在阻塞线程池里缩到长边 512，只回缩略图。
+    tauri::async_runtime::spawn_blocking(move || thumbnail_data_url(&canonical, 512))
+        .await
+        .map_err(|e| format!("缩略图任务失败: {}", e))?
+}
+
+/// 读图 → 按长边缩放 → 编码 PNG → data URL
+fn thumbnail_data_url(path: &std::path::Path, max_edge: u32) -> Result<String, String> {
+    let img = image::open(path).map_err(|e| format!("无法解码图片: {}", e))?;
+    let (w, h) = (img.width(), img.height());
+    let thumb = if w.max(h) > max_edge {
+        img.resize(max_edge, max_edge, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+
+    let mut buf: Vec<u8> = Vec::new();
+    thumb
+        .write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)
+        .map_err(|e| format!("无法编码缩略图: {}", e))?;
+
+    Ok(format!(
+        "data:image/png;base64,{}",
+        STANDARD.encode(&buf)
+    ))
 }
 
 // === 数据目录 ===
@@ -189,13 +216,31 @@ pub struct StorageInfo {
 }
 
 #[tauri::command]
-pub fn get_storage_info(
-    state: tauri::State<AppState>,
+pub async fn get_storage_info(
+    state: tauri::State<'_, AppState>,
     app_handle: tauri::AppHandle,
 ) -> Result<StorageInfo, String> {
     let data_dir = state.data_dir.clone();
     let default_dir = storage::default_data_dir(&app_handle);
-    let (total_bytes, image_count) = storage::dir_usage(&data_dir);
+
+    // 图片目录可能有几万个文件，全量 stat 很慢；60 秒内复用上次结果
+    let cached = state.usage_cache.lock().ok().and_then(|g| *g);
+    let (total_bytes, image_count) = match cached {
+        Some((at, bytes, images)) if at.elapsed() < std::time::Duration::from_secs(60) => {
+            (bytes, images)
+        }
+        _ => {
+            let dir = data_dir.clone();
+            let (bytes, images) =
+                tauri::async_runtime::spawn_blocking(move || storage::dir_usage(&dir))
+                    .await
+                    .map_err(|e| format!("统计目录失败: {}", e))?;
+            if let Ok(mut guard) = state.usage_cache.lock() {
+                *guard = Some((std::time::Instant::now(), bytes, images));
+            }
+            (bytes, images)
+        }
+    };
 
     Ok(StorageInfo {
         first_run: storage::is_first_run(&data_dir),

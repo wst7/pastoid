@@ -75,5 +75,10 @@
   "dataDirLoadFailed": "目录读取失败",
   "dataDirPending": "重启后迁移到",
   "aboutSource": "查看源码",
-  "aboutFeedback": "问题反馈"
+  "aboutFeedback": "问题反馈",
+  "saveFailed": "保存失败，已恢复原设置",
+  "openDataDirFailed": "打开数据目录失败",
+  "loadFailed": "加载失败",
+  "retry": "重试",
+  "restartFailed": "重启失败"
 }

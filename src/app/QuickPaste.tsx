@@ -12,6 +12,7 @@ import {
   Image as ImageIcon,
   Link2,
   Type,
+  AlertCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -90,6 +91,7 @@ export default function QuickPaste() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ClipboardFilter>("all");
   const [items, setItems] = useState<ClipboardItem[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [language, setLanguage] = useState("zh");
   // 跟随系统时，系统夜间切暗也要跟着变
@@ -108,8 +110,11 @@ export default function QuickPaste() {
     try {
       const data: ClipboardItem[] = await invoke("get_clipboard_items");
       setItems(sortItems(data));
+      setLoadError(null);
     } catch (e) {
       console.error("Failed to load items:", e);
+      // 出错和「剪贴板是空的」长得一样，必须区分，否则用户以为记录丢了
+      setLoadError(String(e));
     }
   }, []);
 
@@ -445,12 +450,27 @@ export default function QuickPaste() {
           className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {filteredItems.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center gap-2 text-zinc-400">
-              <Clipboard size={26} strokeWidth={1.5} />
-              <span className="text-[12.5px]">
-                {search ? t("noMatches") : t("emptyClipboard")}
-              </span>
-            </div>
+            loadError ? (
+              <div className="h-full flex flex-col items-center justify-center gap-2 text-red-500/80">
+                <AlertCircle size={24} strokeWidth={1.5} />
+                <span className="max-w-[420px] px-4 text-center text-[12.5px]">
+                  {t("loadFailed")}: {loadError}
+                </span>
+                <button
+                  onClick={() => void loadItems()}
+                  className="rounded-md border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-red-500/10"
+                >
+                  {t("retry")}
+                </button>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center gap-2 text-zinc-400">
+                <Clipboard size={26} strokeWidth={1.5} />
+                <span className="text-[12.5px]">
+                  {search ? t("noMatches") : t("emptyClipboard")}
+                </span>
+              </div>
+            )
           ) : (
             <div className="flex gap-2.5 h-full items-stretch py-0.5">
               {filteredItems.map((item, idx) => {

@@ -75,5 +75,10 @@
   "dataDirLoadFailed": "Could not read folder",
   "dataDirPending": "Will move to",
   "aboutSource": "Source",
-  "aboutFeedback": "Report an issue"
+  "aboutFeedback": "Report an issue",
+  "saveFailed": "Could not save, reverted",
+  "openDataDirFailed": "Could not open the data folder",
+  "loadFailed": "Could not load",
+  "retry": "Retry",
+  "restartFailed": "Could not restart"
 }

@@ -39,6 +39,10 @@ pub struct AppState {
     /// 剪贴板里可能还留着这条内容，如果不管它，下一轮轮询会立刻把它加回来——
     /// 删除就成了摆设。这里记下这些键，等剪贴板内容真的变了再放开。
     pub suppressed: Mutex<HashSet<String>>,
+    /// 目录占用缓存：(计算时间, 字节数, 图片数)。
+    /// 图片目录可能有几万个文件，每打开一次设置都全量 stat 一遍太慢，
+    /// 60 秒内的重复请求直接复用。
+    pub usage_cache: Mutex<Option<(std::time::Instant, u64, usize)>>,
 }
 
 // 设置数据结构

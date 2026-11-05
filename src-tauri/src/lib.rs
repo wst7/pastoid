@@ -90,6 +90,7 @@ pub fn run() {
                 data_dir,
                 settings: std::sync::Mutex::new(settings),
                 suppressed: std::sync::Mutex::new(std::collections::HashSet::new()),
+                usage_cache: std::sync::Mutex::new(None),
             });
 
             // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪
