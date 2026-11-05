@@ -497,7 +497,9 @@ export default function QuickPaste() {
                           e.stopPropagation();
                           togglePin(item);
                         }}
-                        className="w-5 h-5 flex items-center justify-center rounded-md bg-white/90 dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-300"
+                        className={`w-5 h-5 flex items-center justify-center rounded-md bg-white/90 dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
+                          item.isPinned ? "text-amber-500" : "text-zinc-500 dark:text-zinc-300"
+                        }`}
                         aria-label={item.isPinned ? t("unpin") : t("pin")}
                       >
                         <Pin size={10} fill={item.isPinned ? "currentColor" : "none"} />
