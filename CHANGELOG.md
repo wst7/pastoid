@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.1](https://github.com/wst7/pastoid/compare/v1.10.0...v1.10.1) (2026-11-05)
+
+### ✨ Features | 新功能
+
+* colored tray icon ([b234efc](https://github.com/wst7/pastoid/commit/b234efc82d607b832dff57f0c6fda97a7faa5147))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* follow system appearance when switching back to system theme ([89abb56](https://github.com/wst7/pastoid/commit/89abb56246a1091e83a98763bfe0b402e8b4e840))
+* hide pin badge under hover actions; relaunch after update ([024c7ff](https://github.com/wst7/pastoid/commit/024c7ff6eab5429b805599e912cc9cf81d8835db))
+
 ## [1.10.0](https://github.com/wst7/pastoid/compare/v1.9.0...v1.10.0) (2026-11-04)
 
 ### ✨ Features | 新功能

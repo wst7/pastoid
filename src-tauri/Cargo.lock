@@ -3313,7 +3313,7 @@ dependencies = [
 
 [[package]]
 name = "pastoid"
-version = "1.10.0"
+version = "1.10.1"
 dependencies = [
  "arboard",
  "base64 0.22.1",
