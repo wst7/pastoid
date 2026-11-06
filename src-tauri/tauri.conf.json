@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Pastoid",
-  "version": "1.10.5",
+  "version": "1.10.6",
   "identifier": "com.wst7.pastoid",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -58,7 +58,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNERUVCQUM5MjkzMzA1NTcKUldSWEJUTXB5YnJ1UFRnaklhWTZNRjdHb0hVcDV1VzdWV1V2Tm93ZnN4RjZGTytTRTZQbFU5MVoK",
       "endpoints": [
-        "https://github.com/wst7/pastoid/releases/latest/download/latest.json"
+        "https://github.com/wst7/pastoid/releases/latest/download/latest.json?dl=2"
       ]
     }
   },

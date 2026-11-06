@@ -19,6 +19,8 @@
   "currentVersion": "Current version",
   "newVersion": "New version available",
   "download": "Download",
+  "downloadVersion": "Get v{{version}}",
+  "openReleases": "Open releases",
   "upToDate": "Already up to date",
   "recheck": "Check again",
   "selectLanguage": "Select language",

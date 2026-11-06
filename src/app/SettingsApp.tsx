@@ -117,6 +117,8 @@ export default function SettingsApp() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [installed, setInstalled] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  // 插件没报错、但远端确实有更新时，给一个手动下载的兜底（平台 key 不匹配等静默失败）
+  const [manualUpdate, setManualUpdate] = useState<string | null>(null);
 
   const oldShortcutRef = useRef(settings.shortcut);
 
@@ -291,16 +293,48 @@ export default function SettingsApp() {
     await saveSettings(newSettings);
   };
 
+  /** a > b 返回正数 */
+  const compareVersion = (a: string, b: string) => {
+    const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+      const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  };
+
   const checkForUpdate = async () => {
     setCheckingUpdate(true);
+    setUpdateError(null);
+    setManualUpdate(null);
     try {
       const update = await check();
       setUpdateStatus({
         update: update || null,
         current_version: packageInfo.version,
       });
+      // 插件说没更新时，自己再对一次版本号：把「静默失败」变成看得见的结果
+      if (!update) {
+        try {
+          const res = await fetch(
+            "https://github.com/wst7/pastoid/releases/latest/download/latest.json?dl=2",
+            { cache: "no-store" },
+          );
+          const remote = (await res.json()) as { version?: string };
+          if (remote.version && compareVersion(remote.version, packageInfo.version) > 0) {
+            setManualUpdate(remote.version);
+          }
+        } catch (e) {
+          console.warn("version probe failed", e);
+        }
+      }
     } catch (error) {
+      // 网络失败、被墙、证书问题都会走到这里；必须告诉用户，别装成「已是最新」
       console.error("Failed to check update:", error);
+      const msg = error instanceof Error ? error.message : String(error ?? "unknown");
+      setUpdateError(msg.length > 70 ? msg.slice(0, 70) + "…" : msg);
+      setUpdateStatus(null);
     } finally {
       setCheckingUpdate(false);
     }
@@ -602,7 +636,21 @@ export default function SettingsApp() {
       <footer className="flex flex-none items-center gap-2 px-4 py-2 text-[11px] text-muted-foreground">
         <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
         <span className="truncate">{statusLabel || t("currentVersion") + " " + packageInfo.version}</span>
-        {hasUpdate ? (
+        {manualUpdate && !hasUpdate ? (
+          <button
+            onClick={() => openUrl("https://github.com/wst7/pastoid/releases/latest")}
+            className="ml-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-[1px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+          >
+            {t("downloadVersion", { version: manualUpdate })}
+          </button>
+        ) : updateError ? (
+          <button
+            onClick={() => openUrl("https://github.com/wst7/pastoid/releases/latest")}
+            className="ml-1 rounded-md border border-zinc-200 px-2 py-[1px] transition-colors hover:bg-default dark:border-white/15"
+          >
+            {t("openReleases")}
+          </button>
+        ) : hasUpdate ? (
           // 查到新版本后，下载入口必须在同一处，不能让用户再去「关于」里找
           <button
             onClick={handleDownloadAndInstall}

@@ -20,6 +20,8 @@
   "currentVersion": "当前版本",
   "newVersion": "发现新版本",
   "download": "下载更新",
+  "downloadVersion": "下载 v{{version}}",
+  "openReleases": "打开下载页",
   "upToDate": "已是最新版本",
   "recheck": "重新检查",
   "selectLanguage": "选择语言",
