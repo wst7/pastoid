@@ -1,6 +1,6 @@
 [package]
 name = "pastoid"
-version = "1.10.4"
+version = "1.10.5"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
