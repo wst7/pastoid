@@ -396,7 +396,7 @@ export default function SettingsApp() {
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <img src="/logo.svg" alt="Pastoid" className="h-12 w-12 rounded-[13px]" />
+                <img src="/logo.png" alt="Pastoid" className="h-12 w-12 object-contain" />
                 <div>
                   <h2 className="text-lg font-semibold leading-tight">{t("appName")}</h2>
                   <p className="text-xs text-muted-foreground">v{packageInfo.version}</p>
@@ -436,7 +436,7 @@ export default function SettingsApp() {
       )}
 
       <header className="flex flex-none items-center gap-2.5 px-4 pb-2 pt-[38px]">
-        <img src="/logo.svg" alt="" className="h-9 w-9 rounded-[9px]" />
+        <img src="/logo.png" alt="" className="h-9 w-9 object-contain" />
         <div className="min-w-0">
           <h1 className="text-[15px] font-semibold leading-tight">{t("settings")}</h1>
           <p className="truncate text-[11.5px] text-muted-foreground">{t("settingsSubtitle")}</p>
