@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.3](https://github.com/wst7/pastoid/compare/v1.10.2...v1.10.3) (2026-11-06)
+
+### ✨ Features | 新功能
+
+* macOS tray uses a template icon ([f1bcbf1](https://github.com/wst7/pastoid/commit/f1bcbf15bf62fa02ac618604f8f19c46b7364b6f))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* rebuild tray menu after switching language ([1660eda](https://github.com/wst7/pastoid/commit/1660edab6b96474a8ca7ba5f4f43f0d3f84bc18c))
+* **ui:** dropdown hover highlight ([1a26132](https://github.com/wst7/pastoid/commit/1a26132cbd6e4c68d29fbf52c910a2b8b3a3568b)), closes [#f1f2f4](https://github.com/wst7/pastoid/issues/f1f2f4)
+
 ## [1.10.2](https://github.com/wst7/pastoid/compare/v1.10.1...v1.10.2) (2026-11-05)
 
 ### ✨ Features | 新功能
