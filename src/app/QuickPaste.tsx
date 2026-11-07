@@ -486,8 +486,12 @@ export default function QuickPaste() {
                     onMouseEnter={() => setActiveIndex(idx)}
                     className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-all duration-150 ${
                       isActive
-                        ? "border-primary/80 ring-2 ring-primary/30 bg-card shadow-sm"
-                        : "border-border bg-card/70 hover:border-border/80"
+                        ? item.isPinned
+                          ? "border-warning/60 ring-2 ring-primary/30 bg-warning/[0.10] shadow-sm"
+                          : "border-primary/80 ring-2 ring-primary/30 bg-card shadow-sm"
+                        : item.isPinned
+                          ? "border-warning/30 bg-warning/[0.06] hover:border-warning/50"
+                          : "border-border bg-card/70 hover:border-border/80"
                     }`}
                   >
                     <div className="shrink-0 flex items-center gap-1.5 px-2.5 pt-2 pb-1">
