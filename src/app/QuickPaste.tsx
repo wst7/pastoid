@@ -64,7 +64,7 @@ function ImageThumb({ filename }: { filename: string }) {
 
   if (!src) {
     return (
-      <div className="w-full h-full flex items-center justify-center text-zinc-400">
+      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
         <ImageIcon size={20} strokeWidth={1.5} />
       </div>
     );
@@ -83,7 +83,7 @@ function ImageThumb({ filename }: { filename: string }) {
 function KindIcon({ kind }: { kind: "image" | "link" | "text" }) {
   if (kind === "image") return <ImageIcon size={12} className="text-violet-400" />;
   if (kind === "link") return <Link2 size={12} className="text-sky-400" />;
-  return <Type size={12} className="text-zinc-400" />;
+  return <Type size={12} className="text-muted-foreground" />;
 }
 
 export default function QuickPaste() {
@@ -364,7 +364,7 @@ export default function QuickPaste() {
   const renderPreview = (item: ClipboardItem) => {
     if (item.type === "image") {
       return (
-        <div className="w-full h-full overflow-hidden rounded-lg bg-zinc-100 dark:bg-white/5">
+        <div className="w-full h-full overflow-hidden rounded-lg bg-default">
           <ImageThumb filename={item.content} />
         </div>
       );
@@ -376,7 +376,7 @@ export default function QuickPaste() {
           <span className="text-[11px] font-medium text-sky-600 dark:text-sky-400 truncate">
             {linkDomain(item.content)}
           </span>
-          <span className="text-[12px] leading-snug text-zinc-500 dark:text-zinc-400 line-clamp-4 break-all">
+          <span className="text-[12px] leading-snug text-muted-foreground line-clamp-4 break-all">
             {item.content}
           </span>
         </div>
@@ -384,7 +384,7 @@ export default function QuickPaste() {
     }
 
     return (
-      <p className="text-[12.5px] leading-[1.45] text-zinc-700 dark:text-zinc-200 line-clamp-5 whitespace-pre-wrap break-words">
+      <p className="text-[12.5px] leading-[1.45] text-card-foreground line-clamp-5 whitespace-pre-wrap break-words">
         {item.content}
       </p>
     );
@@ -392,25 +392,25 @@ export default function QuickPaste() {
 
   return (
     <div className="h-screen w-screen p-2">
-      <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white/85 dark:bg-[#1c1c21]/90 backdrop-blur-2xl shadow-xl shadow-black/10">
+      <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur-2xl shadow-xl shadow-black/10">
         {/* 顶部：搜索 + 分类 */}
         <div className="shrink-0 flex items-center gap-2 px-3 pt-3 pb-2">
-          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-zinc-100/80 dark:bg-white/[0.06] ring-1 ring-transparent focus-within:ring-blue-400/50 transition-shadow">
-            <Search size={15} className="text-zinc-400 shrink-0" />
+          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-default ring-1 ring-transparent focus-within:ring-ring/50 transition-shadow">
+            <Search size={15} className="text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("search")}
-              className="flex-1 min-w-0 bg-transparent text-[13px] text-zinc-800 dark:text-zinc-100 outline-none placeholder:text-zinc-400"
+              className="flex-1 min-w-0 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
               autoFocus
               spellCheck={false}
             />
             {search ? (
               <button
                 onClick={() => setSearch("")}
-                className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
                 aria-label={t("clearSearch")}
               >
                 <X size={13} />
@@ -451,20 +451,20 @@ export default function QuickPaste() {
         >
           {filteredItems.length === 0 ? (
             loadError ? (
-              <div className="h-full flex flex-col items-center justify-center gap-2 text-red-500/80">
+              <div className="h-full flex flex-col items-center justify-center gap-2 text-destructive/80">
                 <AlertCircle size={24} strokeWidth={1.5} />
                 <span className="max-w-[420px] px-4 text-center text-[12.5px]">
                   {t("loadFailed")}: {loadError}
                 </span>
                 <button
                   onClick={() => void loadItems()}
-                  className="rounded-md border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-red-500/10"
+                  className="rounded-md border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-destructive/10"
                 >
                   {t("retry")}
                 </button>
               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center gap-2 text-zinc-400">
+              <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Clipboard size={26} strokeWidth={1.5} />
                 <span className="text-[12.5px]">
                   {search ? t("noMatches") : t("emptyClipboard")}
@@ -486,13 +486,13 @@ export default function QuickPaste() {
                     onMouseEnter={() => setActiveIndex(idx)}
                     className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-all duration-150 ${
                       isActive
-                        ? "border-blue-400/80 ring-2 ring-blue-400/30 bg-white dark:bg-white/[0.09] shadow-sm"
-                        : "border-zinc-200/80 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.03] hover:border-zinc-300 dark:hover:border-white/20"
+                        ? "border-primary/80 ring-2 ring-primary/30 bg-card shadow-sm"
+                        : "border-border bg-card/70 hover:border-border/80"
                     }`}
                   >
                     <div className="shrink-0 flex items-center gap-1.5 px-2.5 pt-2 pb-1">
                       <KindIcon kind={kind} />
-                      <span className="text-[10.5px] text-zinc-400 dark:text-zinc-500 truncate">
+                      <span className="text-[10.5px] text-muted-foreground truncate">
                         {formatRelativeTime(item.createdAt, language)}
                       </span>
                       {item.isPinned && (
@@ -500,7 +500,7 @@ export default function QuickPaste() {
                         // 所以悬浮时把这枚图钉淡出，交给按钮接管这块空间
                         <Pin
                           size={10}
-                          className="ml-auto text-amber-500 shrink-0 transition-opacity group-hover:opacity-0"
+                          className="ml-auto text-warning shrink-0 transition-opacity group-hover:opacity-0"
                           fill="currentColor"
                         />
                       )}
@@ -517,8 +517,8 @@ export default function QuickPaste() {
                           e.stopPropagation();
                           togglePin(item);
                         }}
-                        className={`w-5 h-5 flex items-center justify-center rounded-md bg-white/90 dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
-                          item.isPinned ? "text-amber-500" : "text-zinc-500 dark:text-zinc-300"
+                        className={`w-5 h-5 flex items-center justify-center rounded-md bg-card/90 hover:bg-default ${
+                          item.isPinned ? "text-warning" : "text-muted-foreground hover:text-foreground"
                         }`}
                         aria-label={item.isPinned ? t("unpin") : t("pin")}
                       >
@@ -533,7 +533,7 @@ export default function QuickPaste() {
                             Math.max(0, Math.min(prev, filteredItems.length - 2))
                           );
                         }}
-                        className="w-5 h-5 flex items-center justify-center rounded-md bg-white/90 dark:bg-zinc-800/90 hover:bg-red-50 dark:hover:bg-red-500/20 text-zinc-500 hover:text-red-500"
+                        className="w-5 h-5 flex items-center justify-center rounded-md bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                         aria-label={t("delete")}
                       >
                         <Trash2 size={10} />
@@ -547,7 +547,7 @@ export default function QuickPaste() {
         </div>
 
         {/* 底部：快捷键提示（按平台显示 ⌘ 还是 Ctrl） */}
-        <div className="shrink-0 flex items-center gap-3 px-3 h-8 border-t border-zinc-100 dark:border-white/[0.06] text-[10.5px] text-zinc-400 dark:text-zinc-500">
+        <div className="shrink-0 flex items-center gap-3 px-3 h-8 border-t border-border/60 text-[10.5px] text-muted-foreground">
           <Hint keys={["←", "→"]} label={t("nav")} />
           <Hint keys={[enterLabel]} label={t("paste")} />
           <Hint keys={[modKey, "P"]} label={t("pin")} />
@@ -568,7 +568,7 @@ function Hint({ keys, label }: { keys: string[]; label: string }) {
       {keys.map((k) => (
         <kbd
           key={k}
-          className="px-1 py-[1px] rounded border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/[0.06] text-[9.5px] leading-none text-zinc-500 dark:text-zinc-300"
+          className="px-1 py-[1px] rounded border border-border bg-default text-[9.5px] leading-none text-muted-foreground"
         >
           {k}
         </kbd>

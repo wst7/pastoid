@@ -126,7 +126,7 @@ export function Select({ value, options, onChange, disabled, minWidth = 132 }: S
             ref={menuRef}
             role="listbox"
             style={{ top: pos.top, left: pos.left, width: pos.width }}
-            className="fixed z-[60] rounded-xl border border-zinc-200/80 bg-card p-1 shadow-xl ring-1 ring-black/5 dark:border-white/10 dark:ring-white/10"
+            className="fixed z-[60] rounded-xl border border-border bg-card p-1 shadow-xl ring-1 ring-black/5 dark:ring-white/10"
           >
             {options.map((option, index) => {
               const selected = option.id === value;
@@ -149,7 +149,7 @@ export function Select({ value, options, onChange, disabled, minWidth = 132 }: S
                   }`}
                 >
                   <span className="truncate">{option.name}</span>
-                  {selected && <Check size={13} className="shrink-0 text-blue-500" />}
+                  {selected && <Check size={13} className="shrink-0 text-primary" />}
                 </button>
               );
             })}

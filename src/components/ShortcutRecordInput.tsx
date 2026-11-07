@@ -137,16 +137,16 @@ export default function ShortcutRecordInput({ value, onChange, onRecordingChange
       }}
       className={`inline-flex select-none items-center gap-1.5 rounded-lg px-1.5 py-1 text-sm transition-colors ${
         disabled
-          ? "cursor-not-allowed text-zinc-400"
+          ? "cursor-not-allowed text-muted-foreground/60"
           : recording
-            ? "bg-blue-500/10 text-blue-600 ring-2 ring-blue-400/40"
+            ? "bg-primary/10 text-primary ring-2 ring-primary/40"
             : "cursor-pointer hover:bg-default"
       }`}
     >
       {recording ? (
         <span>
           {pendingDisplay || (
-            <span className="text-zinc-400 animate-pulse">Recording…</span>
+            <span className="text-muted-foreground/60 animate-pulse">Recording…</span>
           )}
         </span>
       ) : (
@@ -155,7 +155,7 @@ export default function ShortcutRecordInput({ value, onChange, onRecordingChange
             (part, i) => (
               <Kbd
                 key={i}
-                className="bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700 dark:bg-white/10 dark:text-zinc-200"
+                className="bg-default px-1.5 py-0.5 text-xs text-foreground"
               >
                 {part}
               </Kbd>

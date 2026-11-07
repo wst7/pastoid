@@ -72,7 +72,7 @@ function formatBytes(bytes: number): string {
 /** 一行设置：左标签、右控件 */
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[42px] items-center justify-between gap-3 border-b border-zinc-200/70 px-3 last:border-b-0 dark:border-white/10">
+    <div className="flex min-h-[42px] items-center justify-between gap-3 border-b border-border/70 px-3 last:border-b-0">
       <span className="text-[13px] text-foreground">{label}</span>
       <div className="flex items-center gap-1.5">{children}</div>
     </div>
@@ -404,12 +404,12 @@ export default function SettingsApp() {
 
   const hasUpdate = Boolean(updateStatus?.update);
   const statusDot = updateError
-    ? "bg-red-500"
+    ? "bg-destructive"
     : !updateStatus
-      ? "bg-zinc-400"
+      ? "bg-muted-foreground/50"
       : hasUpdate
-        ? "bg-amber-500"
-        : "bg-green-500";
+        ? "bg-warning"
+        : "bg-success";
   const statusLabel = updateError
     ? `${t("updateFailed")}（${updateError}）`
     : !updateStatus
@@ -503,7 +503,7 @@ export default function SettingsApp() {
 
       <main className="flex-1 overflow-y-auto px-4 pb-1">
         {saveError && (
-          <div className="mt-2 rounded-lg bg-red-500/10 px-3 py-1.5 text-[11.5px] text-red-600 dark:text-red-400">
+          <div className="mt-2 rounded-lg bg-destructive/10 px-3 py-1.5 text-[11.5px] text-destructive">
             {t("saveFailed")}: {saveError}
           </div>
         )}
@@ -560,11 +560,11 @@ export default function SettingsApp() {
               value={String(settings.max_items)}
               onChange={(e) => handleMaxItemsChange(e.target.value)}
               disabled={loadingSettings}
-              className="h-7 w-14 rounded-md border border-zinc-200 bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-white/15"
+              className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
           </Row>
 
-          <div className="border-t border-zinc-200/70 px-3 py-2.5 dark:border-white/10">
+          <div className="border-t border-border/70 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-[13px]">{t("clearHistory")}</div>
@@ -579,7 +579,7 @@ export default function SettingsApp() {
                   </Button>
                   <Button
                     size="sm"
-                    className="bg-red-600 text-white hover:bg-red-500"
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     onPress={handleClearHistory}
                     isDisabled={clearing}
                   >
@@ -590,7 +590,7 @@ export default function SettingsApp() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="flex-none text-red-600 dark:text-red-400"
+                  className="flex-none text-destructive"
                   onPress={() => setConfirmClear(true)}
                 >
                   <Trash2 size={14} />
@@ -600,7 +600,7 @@ export default function SettingsApp() {
             </div>
           </div>
 
-          <div className="border-t border-zinc-200/70 px-3 py-2.5 dark:border-white/10">
+          <div className="border-t border-border/70 px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[13px]">{t("dataDir")}</span>
               <div className="flex items-center gap-1">
@@ -634,7 +634,7 @@ export default function SettingsApp() {
               </p>
               {storage?.pending_dir && (
                 <p
-                  className="break-all font-mono text-[11px] leading-relaxed text-amber-600 dark:text-amber-400"
+                  className="break-all font-mono text-[11px] leading-relaxed text-warning"
                   title={storage.pending_dir}
                 >
                   {t("dataDirPending")}: {storage.pending_dir}
@@ -643,9 +643,9 @@ export default function SettingsApp() {
             </div>
 
             <div className="mt-2 flex items-center gap-2">
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-200/80 dark:bg-white/10">
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-default">
                 <div
-                  className="h-full rounded-full bg-blue-500 transition-all"
+                  className="h-full rounded-full bg-primary transition-all"
                   style={{ width: `${usageRatio}%` }}
                 />
               </div>
@@ -661,8 +661,8 @@ export default function SettingsApp() {
             </div>
 
             {(pendingDataDir || Boolean(storage?.pending_dir)) && (
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5">
-                <span className="text-[11px] text-amber-700 dark:text-amber-300">
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-warning/10 px-2.5 py-1.5">
+                <span className="text-[11px] text-warning">
                   {t("dataDirRestartNeeded")}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
@@ -696,14 +696,14 @@ export default function SettingsApp() {
         {manualUpdate && !hasUpdate ? (
           <button
             onClick={() => openUrl("https://github.com/wst7/pastoid/releases/latest")}
-            className="ml-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-[1px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+            className="ml-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-[1px] font-medium text-warning transition-colors hover:bg-warning/20"
           >
             {t("downloadVersion", { version: manualUpdate })}
           </button>
         ) : updateError ? (
           <button
             onClick={() => openUrl("https://github.com/wst7/pastoid/releases/latest")}
-            className="ml-1 rounded-md border border-zinc-200 px-2 py-[1px] transition-colors hover:bg-default dark:border-white/15"
+            className="ml-1 rounded-md border border-border px-2 py-[1px] transition-colors hover:bg-default"
           >
             {t("openReleases")}
           </button>
@@ -712,7 +712,7 @@ export default function SettingsApp() {
           <button
             onClick={handleDownloadAndInstall}
             disabled={isDownloading || installed}
-            className="ml-1 rounded-md border border-blue-500/40 bg-blue-500/10 px-2 py-[1px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 disabled:opacity-60 dark:text-blue-300"
+            className="ml-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-[1px] font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-60"
           >
             {installed
               ? t("restarting")
@@ -724,7 +724,7 @@ export default function SettingsApp() {
           <button
             onClick={checkForUpdate}
             disabled={checkingUpdate}
-            className="ml-1 rounded-md border border-zinc-200 px-2 py-[1px] transition-colors hover:bg-default disabled:opacity-50 dark:border-white/15"
+            className="ml-1 rounded-md border border-border px-2 py-[1px] transition-colors hover:bg-default disabled:opacity-50"
           >
             {checkingUpdate ? t("checking") : t("checkUpdate")}
           </button>
