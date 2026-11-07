@@ -91,6 +91,7 @@ pub fn run() {
                 settings: std::sync::Mutex::new(settings),
                 suppressed: std::sync::Mutex::new(std::collections::HashSet::new()),
                 usage_cache: std::sync::Mutex::new(None),
+                pending_update: std::sync::Mutex::new(None),
             });
 
             // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪
@@ -108,6 +109,45 @@ pub fn run() {
 
             // 设置托盘
             tray::setup_tray(app)?;
+
+            // 后台检查更新：启动 20 秒后查一次，之后每 6 小时一次。
+            // 只负责「发现有新版并提示」，下载始终由用户点。
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Emitter;
+                    use tauri_plugin_updater::UpdaterExt;
+
+                    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                    loop {
+                        if let Ok(updater) = handle.updater() {
+                            match updater.check().await {
+                                Ok(Some(update)) => {
+                                    let version = update.version.clone();
+                                    let state = handle.state::<AppState>();
+                                    let changed = {
+                                        let mut guard = state.pending_update.lock().unwrap();
+                                        if guard.as_deref() == Some(version.as_str()) {
+                                            false
+                                        } else {
+                                            *guard = Some(version.clone());
+                                            true
+                                        }
+                                    };
+                                    if changed {
+                                        log::info!("发现新版本 {}", version);
+                                        let _ = tray::update_tray_menu(&handle);
+                                        let _ = handle.emit("update-available", version);
+                                    }
+                                }
+                                Ok(None) => {}
+                                Err(e) => log::warn!("后台检查更新失败: {}", e),
+                            }
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
+                    }
+                });
+            }
 
             // 设置窗口关闭事件
             if let Some(main_window) = app.get_webview_window("settings") {
@@ -175,6 +215,7 @@ pub fn run() {
             commands::delete_clipboard_item,
             commands::update_clipboard_item,
             commands::clear_clipboard_items,
+            commands::get_pending_update,
             commands::import_clipboard_items,
             commands::get_image_data,
         commands::get_storage_info,

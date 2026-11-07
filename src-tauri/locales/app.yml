@@ -6,6 +6,9 @@ tray:
   preferences:
     en: "Preferences"
     zh: "偏好设置"
+  update_available:
+    en: "Update available: v%{version}"
+    zh: "发现新版本 v%{version}"
   quit:
     en: "Quit"
     zh: "退出"

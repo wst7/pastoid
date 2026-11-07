@@ -109,6 +109,7 @@ export default function SettingsApp() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -306,6 +307,32 @@ export default function SettingsApp() {
     }
     return 0;
   };
+
+  // 启动时问一次后端：后台是不是已经查到新版本了
+  useEffect(() => {
+    let alive = true;
+    invoke<string | null>("get_pending_update")
+      .then((v) => {
+        if (alive && v) setPendingUpdate(v);
+      })
+      .catch(() => {});
+    const unlisten = listen<string>("update-available", (e) => {
+      if (typeof e.payload === "string" && e.payload) setPendingUpdate(e.payload);
+      else setPendingUpdate("new");
+    });
+    return () => {
+      alive = false;
+      unlisten.then((f) => f());
+    };
+  }, []);
+
+  // 有待更新版本时，自动把详细的 Update 对象取回来（不自动下载）
+  useEffect(() => {
+    if (pendingUpdate && !updateStatus && !checkingUpdate) {
+      void checkForUpdate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingUpdate]);
 
   const handleClearHistory = async () => {
     setClearing(true);

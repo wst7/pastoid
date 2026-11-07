@@ -113,6 +113,12 @@ pub fn update_clipboard_item(
     Ok(())
 }
 
+/// 后台检查到的新版本号（没有就返回 null）
+#[tauri::command]
+pub fn get_pending_update(state: tauri::State<AppState>) -> Option<String> {
+    state.pending_update.lock().ok().and_then(|v| v.clone())
+}
+
 #[tauri::command]
 pub fn clear_clipboard_items(
     app_handle: tauri::AppHandle,

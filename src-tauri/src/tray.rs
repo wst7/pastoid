@@ -40,6 +40,14 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 "open_quick_paste" => {
                     crate::shortcut::toggle_quick_paste(app_handle);
                 }
+                "update_available" => {
+                    if let Some(window) = app_handle.get_webview_window("settings") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                    use tauri::Emitter;
+                    let _ = app_handle.emit("update-available", ());
+                }
                 "preferences" => {
                     if let Some(window) = app_handle.get_webview_window("settings") {
                         let _ = window.show();
@@ -69,6 +77,25 @@ fn build_tray_menu(app_handle: &AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn s
         settings.shortcut.clone()
     };
     let accelerator = shortcut_to_accelerator(&shortcut);
+
+    // 有未处理的新版本时，菜单最上面提示一行，点它打开设置页去下载
+    let pending = app_handle
+        .state::<crate::models::AppState>()
+        .pending_update
+        .lock()
+        .ok()
+        .and_then(|v| v.clone());
+    if let Some(version) = pending {
+        let item = MenuItem::with_id(
+            app_handle,
+            "update_available",
+            t!("tray.update_available", version = version.as_str()),
+            true,
+            None::<&str>,
+        )?;
+        menu.append(&item)?;
+        menu.append(&PredefinedMenuItem::separator(app_handle)?)?;
+    }
 
     // 打开剪贴板面板（带快捷键显示）
     let open_qp = MenuItem::with_id(

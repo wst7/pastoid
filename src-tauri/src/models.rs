@@ -43,6 +43,9 @@ pub struct AppState {
     /// 图片目录可能有几万个文件，每打开一次设置都全量 stat 一遍太慢，
     /// 60 秒内的重复请求直接复用。
     pub usage_cache: Mutex<Option<(std::time::Instant, u64, usize)>>,
+    /// 后台检查到的新版本号（还没被用户处理）。
+    /// 有值时托盘菜单会多一行「发现新版本」，设置页也会提示。
+    pub pending_update: Mutex<Option<String>>,
 }
 
 // 设置数据结构
