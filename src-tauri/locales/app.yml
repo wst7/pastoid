@@ -6,9 +6,6 @@ tray:
   preferences:
     en: "Preferences"
     zh: "偏好设置"
-  clear_history:
-    en: "Clear History"
-    zh: "清空历史"
   quit:
     en: "Quit"
     zh: "退出"

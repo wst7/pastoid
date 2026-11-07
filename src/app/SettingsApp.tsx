@@ -17,7 +17,7 @@ import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
 import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
-import { FolderOpen, X } from "lucide-react";
+import { FolderOpen, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
 
 interface UpdateStatus {
@@ -109,6 +109,9 @@ export default function SettingsApp() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [cleared, setCleared] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -302,6 +305,24 @@ export default function SettingsApp() {
       if (d !== 0) return d;
     }
     return 0;
+  };
+
+  const handleClearHistory = async () => {
+    setClearing(true);
+    try {
+      await invoke("clear_clipboard_items");
+      setCleared(true);
+      setTimeout(() => setCleared(false), 2000);
+      // 存储占用会变，刷新一下
+      const info = await invoke<StorageInfo>("get_storage_info");
+      setStorage(info);
+    } catch (e) {
+      console.error("clear failed", e);
+      setSaveError(String(e));
+    } finally {
+      setClearing(false);
+      setConfirmClear(false);
+    }
   };
 
   const checkForUpdate = async () => {
@@ -542,6 +563,42 @@ export default function SettingsApp() {
               className="h-7 w-14 rounded-md border border-zinc-200 bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-white/15"
             />
           </Row>
+
+          <div className="border-t border-zinc-200/70 px-3 py-2.5 dark:border-white/10">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[13px]">{t("clearHistory")}</div>
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {cleared ? t("cleared") : t("clearHistoryHint")}
+                </div>
+              </div>
+              {confirmClear ? (
+                <div className="flex flex-none items-center gap-1">
+                  <Button size="sm" variant="ghost" onPress={() => setConfirmClear(false)}>
+                    {t("cancel")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-red-600 text-white hover:bg-red-500"
+                    onPress={handleClearHistory}
+                    isDisabled={clearing}
+                  >
+                    {clearing ? "…" : t("confirmClear")}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-none text-red-600 dark:text-red-400"
+                  onPress={() => setConfirmClear(true)}
+                >
+                  <Trash2 size={14} />
+                  {t("clearAll")}
+                </Button>
+              )}
+            </div>
+          </div>
 
           <div className="border-t border-zinc-200/70 px-3 py-2.5 dark:border-white/10">
             <div className="flex items-center justify-between gap-2">

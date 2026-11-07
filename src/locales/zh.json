@@ -82,5 +82,11 @@
   "openDataDirFailed": "打开数据目录失败",
   "loadFailed": "加载失败",
   "retry": "重试",
-  "restartFailed": "重启失败"
+  "restartFailed": "重启失败",
+  "clearHistory": "清空全部记录",
+  "clearHistoryHint": "会删除所有历史（含已钉住的），无法恢复",
+  "clearHistoryConfirm": "确定要清空吗？",
+  "cancel": "取消",
+  "confirmClear": "确定清空",
+  "cleared": "已清空"
 }

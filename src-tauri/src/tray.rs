@@ -1,7 +1,6 @@
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::Emitter;
 use tauri::{AppHandle, Manager};
 
 use rust_i18n::t;
@@ -47,9 +46,6 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = window.set_focus();
                     }
                 }
-                "clear" => {
-                    clear_all_items(app_handle);
-                }
                 "quit" => {
                     log::info!("Pastoid exiting");
                     std::process::exit(0);
@@ -91,10 +87,6 @@ fn build_tray_menu(app_handle: &AppHandle) -> Result<Menu<tauri::Wry>, Box<dyn s
     // 分隔线
     menu.append(&PredefinedMenuItem::separator(app_handle)?)?;
 
-    // 清除
-    let clear_item = MenuItem::with_id(app_handle, "clear", t!("tray.clear_history"), true, None::<&str>)?;
-    menu.append(&clear_item)?;
-
     // 退出
     let quit_item = MenuItem::with_id(app_handle, "quit", t!("tray.quit"), true, None::<&str>)?;
     menu.append(&quit_item)?;
@@ -112,37 +104,6 @@ fn shortcut_to_accelerator(shortcut: &str) -> String {
     }
 }
 
-fn clear_all_items(app_handle: &AppHandle) {
-    let state = app_handle.state::<crate::models::AppState>();
-
-    // 记下被清掉的内容键，避免剪贴板里仍在的那条下一轮被加回来
-    if let Ok(mut set) = state.suppressed.lock() {
-        for item in state.repo.get_items() {
-            set.insert(item.image_hash.clone().unwrap_or_else(|| item.content.clone()));
-        }
-    }
-
-    state.repo.clear();
-    // 立即 flush
-    let _ = state.repo.flush_now();
-    // 历史清空后图片文件都成了孤儿
-    crate::storage::cleanup_orphan_images(&state.data_dir, &std::collections::HashSet::new());
-
-    // 通知前端清空
-    let _ = app_handle.emit("clipboard-cleared", ());
-
-    send_notification(app_handle, &t!("tray.history_cleared"));
-}
-
-fn send_notification(app_handle: &AppHandle, message: &str) {
-    use tauri_plugin_notification::NotificationExt;
-    let _ = app_handle
-        .notification()
-        .builder()
-        .title("Pastoid")
-        .body(message)
-        .show();
-}
 
 /// 当快捷键变更时，重建并更新托盘菜单
 pub fn update_tray_menu(app_handle: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {

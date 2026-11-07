@@ -82,5 +82,11 @@
   "openDataDirFailed": "Could not open the data folder",
   "loadFailed": "Could not load",
   "retry": "Retry",
-  "restartFailed": "Could not restart"
+  "restartFailed": "Could not restart",
+  "clearHistory": "Clear all history",
+  "clearHistoryHint": "Deletes everything, including pinned items. This cannot be undone.",
+  "clearHistoryConfirm": "Clear all history?",
+  "cancel": "Cancel",
+  "confirmClear": "Clear",
+  "cleared": "Cleared"
 }

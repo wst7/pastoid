@@ -114,7 +114,10 @@ pub fn update_clipboard_item(
 }
 
 #[tauri::command]
-pub fn clear_clipboard_items(state: tauri::State<AppState>) -> Result<(), String> {
+pub fn clear_clipboard_items(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<(), String> {
     // 先记下所有将被清掉的内容键：剪贴板里可能还留着其中一条，
     // 不抑制的话下一轮轮询会立刻把它加回来，清空就成了摆设。
     if let Ok(mut set) = state.suppressed.lock() {
@@ -129,6 +132,10 @@ pub fn clear_clipboard_items(state: tauri::State<AppState>) -> Result<(), String
     let _ = state.repo.flush_now();
     // 历史清空后，所有图片文件都成了孤儿
     storage::cleanup_orphan_images(&state.data_dir, &std::collections::HashSet::new());
+
+    // 面板和设置页都靠这个事件刷新，否则清空后仍显示旧数据
+    use tauri::Emitter;
+    let _ = app_handle.emit("clipboard-cleared", ());
     Ok(())
 }
 
