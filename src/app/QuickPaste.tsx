@@ -428,10 +428,10 @@ export default function QuickPaste() {
                     setFilter(f.key);
                     setActiveIndex(0);
                   }}
-                  className={`px-2.5 h-7 rounded-lg text-[11.5px] font-medium transition-colors ${
+                  className={`px-2.5 h-7 rounded-lg text-[11.5px] transition-colors ${
                     isActive
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                      : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/10"
+                      ? "bg-default text-foreground font-semibold"
+                      : "text-muted-foreground hover:bg-default"
                   }`}
                 >
                   {f.label}
