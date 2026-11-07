@@ -117,6 +117,8 @@ def main() -> None:
     # 5) 由 1024 源图生成 icns / ico / 各平台尺寸
     subprocess.run(["npx", "tauri", "icon", str(ICONS / "icon.png"), "-o", str(ICONS)],
                    cwd=ROOT, check=True, capture_output=True)
+    # tauri icon 会把 icon.png 压到 512，最后再补一次 1024 的源图
+    render(SRC / "appicon.svg", size, ICONS / "icon.png")
 
     # 6) 清掉 tauri icon 生成的移动端目录（桌面项目用不到）
     for d in ("android", "ios"):
