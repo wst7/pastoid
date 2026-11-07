@@ -9,7 +9,7 @@
   src-tauri/icons/icon.png             App 图标 1024（白色圆角底 + 角色）
   src-tauri/icons/tray/{16,32}.png     Windows 托盘（彩色）
   src-tauri/icons/tray-template/*.png  macOS 托盘（模板图：身体实心、卡片半透明、五官镂空）
-  public/logo.svg / logo.png           设置页、关于页
+  public/logo.svg                      设置页、关于页（favicon 同源）
 
 依赖：无头 Chrome（渲染 SVG）、`npx tauri icon`（生成 icns/ico 及各平台尺寸）
 """
@@ -91,7 +91,7 @@ def main() -> None:
         f'{place(char, cw, ch, size, pad=0.11)}</svg>'
     )
 
-    # 3) 托盘：彩色 + 模板
+    # 3) 托盘：彩色 + 模板（中间产物，构建后即弃）
     mono_map = {
         PURPLE: "#000000", "#7A51E8": "#000000",
         CARD: "rgba(0,0,0,0.42)",
@@ -112,7 +112,6 @@ def main() -> None:
     for px in (16, 32):
         render(SRC / f"tray-{px}.svg", px, ICONS / "tray" / f"{px}x{px}.png")
         render(SRC / f"tray-template-{px}.svg", px, ICONS / "tray-template" / f"{px}x{px}.png")
-    render(SRC / "appicon.svg", 512, PUBLIC / "logo.png")
 
     # 5) 由 1024 源图生成 icns / ico / 各平台尺寸
     subprocess.run(["npx", "tauri", "icon", str(ICONS / "icon.png"), "-o", str(ICONS)],
