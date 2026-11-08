@@ -31,3 +31,5 @@ dist-ssr
 .code-review-graph/
 src-tauri/icons/source/appicon.svg
 src-tauri/icons/source/tray-*.svg
+# 宣传片成片不进仓库（体积大，源工程在 ~/project/pastoid-promo）
+design/promo/*.mp4
