@@ -361,12 +361,15 @@ export default function QuickPaste() {
         list.findIndex((i) => i.id === activeIdRef.current)
       );
 
-      // 搜索框里有内容（或按着修饰键）时，左右键留给光标编辑，
+      // 搜索框里有内容（或按着修饰键）时，方向键/Home/End 留给光标编辑，
       // 否则会把 ⌘← / ⌥← 这种移动光标、跳到行首的快捷键一起吞掉。
       const editingSearch =
         document.activeElement === inputRef.current &&
         (searchRef.current.length > 0 || e.metaKey || e.ctrlKey || e.altKey);
-      if (editingSearch && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      if (
+        editingSearch &&
+        ["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)
+      ) {
         return;
       }
 
@@ -607,7 +610,7 @@ export default function QuickPaste() {
                     tabIndex={-1}
                     onClick={() => paste(item)}
                     onMouseEnter={() => hoverItem(item.id)}
-                    className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow] duration-150 ${
+                    className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.985] ${
                       isActive
                         ? item.isPinned
                           ? "border-primary/80 ring-2 ring-primary/30 bg-warning/[0.06] shadow-sm"
