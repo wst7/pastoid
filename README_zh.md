@@ -9,6 +9,8 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
+<p align="center">简体中文 | <a href="README.md">English</a></p>
+
 Pastoid 是一款轻量、快速的剪贴板管理器，支持 macOS 和 Windows。基于 Tauri 和 React 构建，后台静默运行，剪贴板历史触手可及。
 
 ## 为什么选择 Pastoid？
@@ -70,6 +72,15 @@ Pastoid 将剪贴板历史存储在本地机器上。无云端、无账号、无
 | Windows | `%LOCALAPPDATA%\com.wst7.pastoid` |
 
 **可以改。** 首次启动时 Pastoid 会直接问你要把数据放在哪，可以选默认位置，也可以选别的盘（比如 `D:\PastoidData`）。之后随时可以在 设置 → 数据目录 里改。改动后应用会自动重启，并把现有历史一起搬过去；如果目标盘当时不可用（比如移动硬盘没插），会自动回落到默认目录继续工作，不会丢数据。
+
+目录里的文件：
+
+| 文件 | 说明 |
+| --- | --- |
+| `history.db` | 历史记录，用 SQLite 存储，每条改动即时落盘，崩溃也不会丢 |
+| `clipboard_data.json` | 旧版本的 JSON 快照。升级时会自动导入 `history.db`，之后只作备份保留，不再改动 |
+| `images/` | 截图与复制的图片，按内容哈希命名，同一张图只存一份 |
+| `settings.json` | 设置 |
 
 占用空间 ≈ 历史条数 × 单条内容大小，图片是大头。设置里的「历史条数」（1–100）可以直接控制上限——超出条数的旧条目会被清掉，对应的图片文件也会一并删除，不会无限增长。
 

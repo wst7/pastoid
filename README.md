@@ -9,6 +9,8 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
+<p align="center">English | <a href="README_zh.md">简体中文</a></p>
+
 Pastoid is a lightweight, fast clipboard manager for macOS and Windows. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
 
 ## Why Pastoid?
@@ -70,6 +72,15 @@ History and images live in a single folder:
 | Windows | `%LOCALAPPDATA%\com.wst7.pastoid` |
 
 **It is configurable.** On first launch Pastoid asks where to keep its data — accept the default or pick another drive (e.g. `D:\PastoidData`). You can change it later in Settings → Data folder. Pastoid restarts, moves the existing history over, and keeps working. If the target drive is unavailable at startup (an unplugged external disk, say), it falls back to the default folder instead of failing, and the data is left untouched.
+
+What's in the folder:
+
+| File | Purpose |
+| --- | --- |
+| `history.db` | Clipboard history, stored in SQLite — every change is written through immediately, so a crash can't lose it |
+| `clipboard_data.json` | Snapshot from older versions. It is imported into `history.db` automatically on upgrade, then kept as a backup and never modified |
+| `images/` | Screenshots and copied images, named by content hash — the same image is only ever stored once |
+| `settings.json` | Settings |
 
 Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100) caps it: items beyond the limit are dropped and their image files are deleted, so the folder does not grow without bound.
 
