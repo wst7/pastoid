@@ -19,6 +19,12 @@ export interface ClipboardItem {
 
 export type ClipboardFilter = "all" | "text" | "image" | "link";
 
+/** 标签及使用次数（搜索框的标签建议用） */
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
 /** 各筛选维度的全量计数（后端 SQL 统计，筛选 chip 用） */
 export interface ClipboardCounts {
   all: number;

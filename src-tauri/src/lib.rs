@@ -209,6 +209,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::list_clipboard_items,
             commands::get_clipboard_counts,
+            commands::get_clipboard_tags,
             commands::add_clipboard_item,
             commands::delete_clipboard_item,
             commands::update_clipboard_item,

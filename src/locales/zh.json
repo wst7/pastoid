@@ -1,7 +1,7 @@
 {
   "appName": "Pastoid",
   "dark": "暗黑",
-  "search": "搜索...",
+  "search": "搜索内容或 #标签…",
   "noItems": "暂无记录",
   "noItemsHint": "复制内容后会显示在这里",
   "pinned": "已固定",

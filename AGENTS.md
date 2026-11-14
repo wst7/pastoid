@@ -99,6 +99,8 @@ npm run release:major     # 0.1.0 -> 1.0.0
   打 tag 是明确的用户投入，复制新内容时不能把它挤掉；代价是上限变成"软上限"（tagged 不占名额）
 - **搜索同时命中正文和 tag**：`repository.list` 用 `json_each` 展开 tags 再 LIKE，
   给条目打上 "work" 之后搜 "work" 能捞出来
+- **`#` 前缀是标签专用查询**：`#work` 只匹配 tags、不碰正文（否则正文里的 "work" 会污染结果）；
+  前端输入 `#` 时用 `get_clipboard_tags` 的建议列表补全，点卡片上的标签 chip 也会切到 `#tag`
 - 标签以 JSON 数组存在 `items.tags`（`["work","客户A"]`），空数组等价于没打标签
 - 数据目录可能在 exFAT / 网络盘上：开库时尝试 WAL，PRAGMA 退回原模式就改用回滚日志 + `synchronous=FULL`
 - `images/`、`settings.json`、`location.txt` 与历史库无关，数据目录搬家逻辑原样生效

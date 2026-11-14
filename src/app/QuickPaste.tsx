@@ -19,7 +19,7 @@ import {
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { isMac, modKeyLabel } from "@/lib/platform";
-import type { ClipboardCounts, ClipboardItem, ClipboardFilter } from "@/types/clipboard";
+import type { ClipboardCounts, ClipboardItem, ClipboardFilter, TagCount } from "@/types/clipboard";
 import { formatRelativeTime, itemKind, linkDomain } from "@/lib/clipboard";
 
 interface SettingsData {
@@ -117,6 +117,9 @@ export default function QuickPaste() {
   const [orderFrozen, setOrderFrozen] = useState(false);
   // 标签编辑条 / 正文编辑弹层（同一时间只开一个）
   const [tagEditor, setTagEditor] = useState<{ id: string; value: string } | null>(null);
+  // 所有标签 + 使用次数，给 `#` 搜索做建议
+  const [allTags, setAllTags] = useState<TagCount[]>([]);
+  const [tagIndex, setTagIndex] = useState(0);
   const [editor, setEditor] = useState<{ id: string; draft: string; error?: string } | null>(
     null
   );
@@ -182,6 +185,20 @@ export default function QuickPaste() {
   const filterRef = useRef(filter);
   filterRef.current = filter;
 
+  // `#` 前缀进入标签模式：只按标签查，并给出已有标签的建议
+  const tagQuery = search.startsWith("#") ? search.slice(1).trim().toLowerCase() : null;
+  const suggestions =
+    tagQuery === null
+      ? []
+      : allTags
+          .filter((t) => t.tag.toLowerCase().includes(tagQuery))
+          .slice(0, 6);
+  // 已经完整打出某个标签时不再弹建议，否则会把第一张卡挡住
+  const exactTag =
+    tagQuery !== null && allTags.some((t) => t.tag.toLowerCase() === tagQuery);
+  const showSuggestions = suggestions.length > 0 && !exactTag;
+
+
   /**
    * 拉一次面板数据：窗口、筛选、搜索全在后端（SQL）完成。
    * `reset` 时选中落到第一张（搜索/筛选/重开面板）；否则尽量保持选中同一条内容。
@@ -241,6 +258,20 @@ export default function QuickPaste() {
     }
   }, []);
 
+  const loadTags = useCallback(async () => {
+    try {
+      setAllTags(await invoke<TagCount[]>("get_clipboard_tags"));
+    } catch (e) {
+      console.error("Load tags failed:", e);
+    }
+  }, []);
+
+  /** 把搜索切到「只看这个标签」 */
+  const applyTagQuery = useCallback((tag: string) => {
+    setSearch(`#${tag}`);
+    inputRef.current?.focus();
+  }, []);
+
   /** 把一条修改写回后端并同步本地列表 */
   const persistItem = useCallback(async (next: ClipboardItem) => {
     await invoke("update_clipboard_item", { item: next });
@@ -256,11 +287,12 @@ export default function QuickPaste() {
       if (existing.includes(tag)) return;
       try {
         await persistItem({ ...item, tags: [...existing, tag], updatedAt: Date.now() });
+        void loadTags();
       } catch (e) {
         console.error("Add tag failed:", e);
       }
     },
-    [persistItem]
+    [persistItem, loadTags]
   );
 
   const removeTag = useCallback(
@@ -268,11 +300,12 @@ export default function QuickPaste() {
       const next = (item.tags ?? []).filter((t) => t !== tag);
       try {
         await persistItem({ ...item, tags: next, updatedAt: Date.now() });
+        void loadTags();
       } catch (e) {
         console.error("Remove tag failed:", e);
       }
     },
-    [persistItem]
+    [persistItem, loadTags]
   );
 
   const openTagEditor = useCallback((item: ClipboardItem) => {
@@ -371,6 +404,15 @@ export default function QuickPaste() {
   openEditorRef.current = openEditor;
   const openTagEditorRef = useRef(openTagEditor);
   openTagEditorRef.current = openTagEditor;
+  // 建议列表要在键盘回调里读到最新值
+  const suggestionsRef = useRef<{ tag: string }[]>([]);
+  suggestionsRef.current = suggestions;
+  const showSuggestionsRef = useRef(false);
+  showSuggestionsRef.current = showSuggestions;
+  const tagIndexRef = useRef(0);
+  tagIndexRef.current = tagIndex;
+  const applyTagQueryRef = useRef(applyTagQuery);
+  applyTagQueryRef.current = applyTagQuery;
 
   /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
   const playEnter = useCallback(() => {
@@ -425,6 +467,9 @@ export default function QuickPaste() {
       })
       .catch(() => paint("light", "default"));
 
+    // 首帧也拉一次标签，别等面板第一次打开才有建议
+    void loadTags();
+
     const unlistenPanel = listen("panel-opened", () => {
       if (closeTimerRef.current !== null) {
         clearTimeout(closeTimerRef.current);
@@ -435,6 +480,7 @@ export default function QuickPaste() {
       setFilter("all");
       // 状态是异步的，这里显式带上空查询/全筛选，别依赖 ref 已经更新
       void refresh({ reset: true, query: "", filter: "all" });
+      void loadTags();
       setOrderFrozen(false);
       // 上次关窗时可能停在列表中间，重开必须回到最左边，
       // 否则第一张卡在视口外，回车粘的是看不见的内容。
@@ -487,6 +533,24 @@ export default function QuickPaste() {
     });
 
     const handleKey = (e: KeyboardEvent) => {
+      // 标签建议打开时，方向键/回车先交给建议列表，别去移动卡片
+      if (showSuggestionsRef.current) {
+        const count = suggestionsRef.current.length;
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          setTagIndex((i) =>
+            e.key === "ArrowDown" ? (i + 1) % count : (i - 1 + count) % count
+          );
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          const picked = suggestionsRef.current[tagIndexRef.current];
+          if (picked) applyTagQueryRef.current(picked.tag);
+          return;
+        }
+      }
+
       const list = filteredItemsRef.current;
       const current = Math.max(
         0,
@@ -621,6 +685,10 @@ export default function QuickPaste() {
 
   // 搜索防抖、筛选立即刷新，结果都由后端出（首帧挂载时也会跑一次，即初始加载）
   useEffect(() => {
+    setTagIndex(0);
+  }, [search]);
+
+  useEffect(() => {
     const timer = window.setTimeout(
       () => void refresh({ reset: true }),
       search ? SEARCH_DEBOUNCE_MS : 0
@@ -740,6 +808,26 @@ export default function QuickPaste() {
           </div>
         </div>
 
+        {/* 标签建议：输入 # 时出现 */}
+        {showSuggestions && (
+          <div className="absolute left-3 top-[50px] z-30 w-[340px] overflow-hidden rounded-xl border border-border bg-card p-1 shadow-xl">
+            {suggestions.map((s, index) => (
+              <button
+                key={s.tag}
+                type="button"
+                onMouseEnter={() => setTagIndex(index)}
+                onClick={() => applyTagQuery(s.tag)}
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] ${
+                  index === tagIndex ? "bg-default text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                <span className="truncate">#{s.tag}</span>
+                <span className="shrink-0 text-[10.5px] text-muted-foreground">{s.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* 横向卡片条 */}
         <div
           ref={listRef}
@@ -812,12 +900,17 @@ export default function QuickPaste() {
                     {item.tags?.length ? (
                       <div className="shrink-0 flex items-center gap-1 px-2.5 pb-1.5 overflow-hidden">
                         {item.tags.slice(0, 3).map((tag) => (
-                          <span
+                          <button
                             key={tag}
-                            className="text-[9px] leading-[14px] px-1 rounded bg-primary/10 text-primary truncate max-w-[80px]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              applyTagQuery(tag);
+                            }}
+                            className="text-[9px] leading-[14px] px-1 rounded bg-primary/10 text-primary truncate max-w-[80px] hover:bg-primary/20"
+                            title={`#${tag}`}
                           >
                             #{tag}
-                          </span>
+                          </button>
                         ))}
                         {item.tags.length > 3 && (
                           <span className="text-[9px] text-muted-foreground shrink-0">

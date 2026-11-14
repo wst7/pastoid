@@ -205,9 +205,18 @@ impl ClipboardRepository {
             _ => "1 = 1".to_string(),
         };
 
+        // `#` 前缀 = 只按标签查（`#work`），其余情况正文和标签一起搜
+        let trimmed_query = query.trim();
+        let tag_only = trimmed_query.starts_with('#');
+        let keyword = if tag_only {
+            trimmed_query.trim_start_matches('#').trim()
+        } else {
+            trimmed_query
+        };
+
         // LIKE 里 % _ \ 是通配符，用户输入的要转义掉，否则搜 "100%" 会命中一切
         let pattern = {
-            let trimmed = query.trim();
+            let trimmed = keyword;
             if trimmed.is_empty() {
                 "%%".to_string()
             } else {
@@ -222,22 +231,58 @@ impl ClipboardRepository {
         self.with_conn(|conn| {
             // 搜索同时命中正文和 tag：tag 是用户自己写的索引，
             // 打上 "work" 之后搜 "work" 应该能把这条捞出来
+            let match_clause = if tag_only {
+                // 标签模式：只匹配标签，不碰正文，否则搜 #work 会被正文里的 "work" 干扰
+                "EXISTS (
+                     SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(tags) THEN tags ELSE '[]' END
+                     ) WHERE json_each.value LIKE ?2 ESCAPE '\\'
+                 )"
+            } else {
+                "content LIKE ?2 ESCAPE '\\'
+                 OR EXISTS (
+                     SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(tags) THEN tags ELSE '[]' END
+                     ) WHERE json_each.value LIKE ?2 ESCAPE '\\'
+                 )"
+            };
             let sql = format!(
                 "SELECT * FROM items
-                 WHERE {filter_cond} AND (
-                     content LIKE ?2 ESCAPE '\\'
-                     OR EXISTS (
-                         SELECT 1 FROM json_each(
-                             CASE WHEN json_valid(tags) THEN tags ELSE '[]' END
-                         ) WHERE json_each.value LIKE ?2 ESCAPE '\\'
-                     )
-                 )
+                 WHERE {filter_cond} AND ({match_clause})
                  ORDER BY is_pinned DESC, created_at DESC, rowid DESC
                  LIMIT ?1"
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
             let rows = stmt
                 .query_map(rusqlite::params![limit, pattern], db::row_to_item)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        })
+        .unwrap_or_default()
+    }
+
+    /// 所有标签及使用次数，按次数倒序。搜索框的标签建议用。
+    pub fn list_tags(&self) -> Vec<crate::models::TagCount> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT json_each.value AS tag, COUNT(*) AS n
+                     FROM items, json_each(
+                         CASE WHEN json_valid(items.tags) THEN items.tags ELSE '[]' END
+                     )
+                     WHERE json_each.value != ''
+                     GROUP BY json_each.value
+                     ORDER BY n DESC, tag ASC
+                     LIMIT 200",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(crate::models::TagCount {
+                        tag: row.get(0)?,
+                        count: row.get::<_, i64>(1)? as usize,
+                    })
+                })
                 .map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
         })
@@ -753,6 +798,43 @@ mod tests {
         assert!(repo.list(10, "all", "不存在的tag").is_empty());
         // 正文搜索仍然有效
         assert_eq!(repo.list(10, "all", "普通").len(), 1);
+    }
+
+    #[test]
+    fn test_list_hash_prefix_searches_tags_only() {
+        // #work 只查标签：正文里带 work 但没打标签的条目不能混进来
+        let (_dir, repo) = text_repo(100);
+        let mut tagged = ClipboardItem::new("无关正文".to_string(), "text");
+        tagged.tags = Some(vec!["work".to_string()]);
+        repo.add(tagged);
+
+        let plain = ClipboardItem::new("work in content".to_string(), "text");
+        repo.add(plain);
+
+        let tagged_only = repo.list(10, "all", "#work");
+        assert_eq!(tagged_only.len(), 1);
+        assert_eq!(tagged_only[0].content, "无关正文");
+
+        // 不带 # 时正文和标签都命中
+        assert_eq!(repo.list(10, "all", "work").len(), 2);
+    }
+
+    #[test]
+    fn test_list_tags_counts_and_order() {
+        let (_dir, repo) = text_repo(100);
+        let mut a = ClipboardItem::new("a".to_string(), "text");
+        a.tags = Some(vec!["work".to_string(), "客户A".to_string()]);
+        let mut b = ClipboardItem::new("b".to_string(), "text");
+        b.tags = Some(vec!["work".to_string()]);
+        repo.add(a);
+        repo.add(b);
+
+        let tags = repo.list_tags();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].tag, "work");
+        assert_eq!(tags[0].count, 2);
+        assert_eq!(tags[1].tag, "客户A");
+        assert_eq!(tags[1].count, 1);
     }
 
     #[test]

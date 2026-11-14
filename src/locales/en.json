@@ -1,6 +1,6 @@
 {
   "appName": "Pastoid",
-  "search": "Search...",
+  "search": "Search text or #tag…",
   "noItems": "No items",
   "noItemsHint": "Copied content will appear here",
   "pinned": "Pinned",

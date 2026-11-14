@@ -37,6 +37,13 @@ pub struct ClipboardCounts {
     pub link: usize,
 }
 
+/// 标签及其使用次数，给搜索框的标签建议用。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagCount {
+    pub tag: String,
+    pub count: usize,
+}
+
 // 应用状态
 use std::collections::HashSet;
 use std::path::PathBuf;

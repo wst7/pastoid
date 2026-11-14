@@ -1,4 +1,4 @@
-use crate::models::{AppState, ClipboardCounts, ClipboardItem, Settings};
+use crate::models::{AppState, ClipboardCounts, ClipboardItem, Settings, TagCount};
 use crate::storage;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager};
@@ -81,6 +81,12 @@ pub fn list_clipboard_items(
 #[tauri::command]
 pub fn get_clipboard_counts(state: tauri::State<AppState>) -> Result<ClipboardCounts, String> {
     Ok(state.repo.counts())
+}
+
+/// 所有标签及使用次数（搜索框的标签建议用）
+#[tauri::command]
+pub fn get_clipboard_tags(state: tauri::State<AppState>) -> Result<Vec<TagCount>, String> {
+    Ok(state.repo.list_tags())
 }
 
 #[tauri::command]
