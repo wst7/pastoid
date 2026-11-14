@@ -99,5 +99,8 @@
   "tagHint": "Enter to add · Esc to close",
   "editHint": "⌘↩ save · Esc cancel",
   "save": "Save",
-  "duplicateContent": "This content already exists"
+  "duplicateContent": "This content already exists",
+  "appearance": "Appearance",
+  "appearanceLighting": "Lighting",
+  "appearanceStyle": "Style"
 }

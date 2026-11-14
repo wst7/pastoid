@@ -52,17 +52,24 @@ const languages = [
   { id: "en", name: "English" },
 ];
 
-const styleOptions = (lang: string) =>
-  THEMES.map((style) => ({
-    id: style.id,
+/**
+ * 外观 = 风格 × 明暗，合成一个下拉：
+ * 上半段是明暗（跟随系统 / 浅色 / 深色），下半段是风格。
+ * 选明暗时保留当前风格，选风格时保留当前明暗（单模式风格会自动收敛）。
+ */
+const appearanceOptions = (lang: string, t: (key: string) => string) => [
+  { id: "mode:system", name: t("system"), group: t("appearanceLighting") },
+  { id: "mode:light", name: t("light"), group: t("appearanceLighting") },
+  { id: "mode:dark", name: t("dark"), group: t("appearanceLighting") },
+  ...THEMES.map((style) => ({
+    id: `style:${style.id}`,
     name: lang.startsWith("zh") ? style.name : style.nameEn,
-  }));
-
-const themes = (t: (key: string) => string) => [
-  { id: "system", name: t("system") },
-  { id: "light", name: t("light") },
-  { id: "dark", name: t("dark") },
+    group: t("appearanceStyle"),
+  })),
 ];
+
+const modeLabel = (theme: string, t: (key: string) => string) =>
+  theme === "system" ? t("system") : theme === "dark" ? t("dark") : t("light");
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
@@ -243,6 +250,14 @@ export default function SettingsApp() {
           : "system"
         : modeForTheme(style, theme as "light" | "dark");
     await persist({ ...settings, theme: mode });
+  };
+
+  const handleAppearanceChange = async (id: string) => {
+    if (id.startsWith("mode:")) {
+      await handleThemeChange(id.slice(5));
+    } else if (id.startsWith("style:")) {
+      await handleStyleChange(id.slice(6));
+    }
   };
 
   const handleStyleChange = async (theme_style: string) => {
@@ -474,7 +489,6 @@ export default function SettingsApp() {
     }
   };
 
-  const themeOptions = themes(t);
 
   const isUnlimited = settings.max_items === 0;
   const itemCount = storage?.item_count ?? 0;
@@ -601,26 +615,19 @@ export default function SettingsApp() {
             </div>
           </Row>
 
-          <Row label={t("theme")}>
+          <Row label={t("appearance")}>
             <div className="relative flex items-center">
               <Select
-                value={settings.theme}
-                options={themeOptions}
-                onChange={handleThemeChange}
+                value={`style:${settings.theme_style}`}
+                options={appearanceOptions(settings.language, t)}
+                onChange={handleAppearanceChange}
                 disabled={loadingSettings}
-                minWidth={120}
-              />
-            </div>
-          </Row>
-
-          <Row label={t("themeStyle")}>
-            <div className="relative flex items-center">
-              <Select
-                value={settings.theme_style}
-                options={styleOptions(settings.language)}
-                onChange={handleStyleChange}
-                disabled={loadingSettings}
-                minWidth={150}
+                minWidth={190}
+                label={`${
+                  settings.language.startsWith("zh")
+                    ? themeById(settings.theme_style).name
+                    : themeById(settings.theme_style).nameEn
+                } · ${modeLabel(settings.theme, t)}`}
               />
             </div>
           </Row>

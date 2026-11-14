@@ -99,5 +99,8 @@
   "tagHint": "回车添加 · Esc 关闭",
   "editHint": "⌘↩ 保存 · Esc 取消",
   "save": "保存",
-  "duplicateContent": "内容与已有条目重复"
+  "duplicateContent": "内容与已有条目重复",
+  "appearance": "外观",
+  "appearanceLighting": "明暗",
+  "appearanceStyle": "风格"
 }
