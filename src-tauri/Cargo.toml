@@ -37,6 +37,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 arboard = "3.6.1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "tiff", "ico"] }
 blake3 = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
 base64 = "0.22"
 tray-icon = "0.22.0"
 reqwest = { version = "0.12", features = ["json", "stream"] }

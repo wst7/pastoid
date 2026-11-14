@@ -63,10 +63,27 @@ npm run release:major     # 0.1.0 -> 1.0.0
   - `src/commands.rs` - Tauri IPC 命令（剪贴板操作、设置管理、图片读取）
   - `src/clipboard.rs` - 剪贴板监控逻辑（文本 + 图片，按内容哈希去重）
   - `src/tray.rs` - 系统托盘菜单（显示快捷键 accelerator）
-  - `src/storage.rs` - 数据持久化、日志轮转、孤儿图片回收
+  - `src/storage.rs` - 数据目录、日志轮转、孤儿图片回收（历史数据的读写在 db.rs）
+  - `src/db.rs` - 历史库（SQLite）：schema、JSON 迁移、上限裁剪
   - `src/models.rs` - 数据结构定义
   - `src/shortcut.rs` - 全局快捷键注册/注销、健康监控、面板定位
-  - `src/repository.rs` - ClipboardRepository（内存缓存 + 定期 flush）
+  - `src/repository.rs` - ClipboardRepository（SQLite 写穿，单条操作即时落盘）
+
+**历史数据存储约定（重要）：**
+- 历史存 `history.db`（rusqlite bundled，自带 SQLite 编译，无系统依赖），**SQLite 是唯一数据源**：
+  单条操作即时落盘（写穿），没有内存全量缓存、没有定时快照、没有 flush 线程——
+  旧的「全量序列化 + 覆写」是 O(N)，条目一多就是卡顿源，而且 `fs::write` 非原子，崩溃截断会丢历史
+- `clipboard_data.json` **只当迁移源和备份：永远不写、不删、不改名**。
+  `PRAGMA user_version >= 1` 表示已迁移过；迁移在 `ClipboardRepository::new` 里跑：
+  单事务导入、按 id/内容去重，成功后才写 version
+- JSON 读失败 / 解析失败都**不写 version**（下次启动重试）；解析失败时原文件保持不动，
+  日志里给出路径供手动恢复——别把「解析失败」和「读失败」混成一个分支
+- 去重靠唯一索引 `ux_items_dedup (type, content_hash)`，`content_hash = blake3(内容)`：
+  最长 512KB 的原文不能当索引键；图片另有 `image_hash` 唯一索引
+- `max_items = 0` 表示不限（无限保存），`db::enforce_max_items` 遇 0 直接跳过；
+  裁剪时置顶优先保留，被砍掉的图片条目同步删文件
+- 数据目录可能在 exFAT / 网络盘上：开库时尝试 WAL，PRAGMA 退回原模式就改用回滚日志 + `synchronous=FULL`
+- `images/`、`settings.json`、`location.txt` 与历史库无关，数据目录搬家逻辑原样生效
 
 **剪贴板采集约定（重要）：**
 - 文本按「内容 + 类型」去重，图片按 `imageHash`（blake3）去重

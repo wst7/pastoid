@@ -132,10 +132,8 @@ pub fn clear_clipboard_items(
         }
     }
 
+    // 写穿存储：clear 已经即时落盘，不存在「退出后历史复活」的窗口
     state.repo.clear();
-    // 立即落盘：清空是用户主动操作，不能等 5 秒自动 flush 才写，
-    // 否则这期间退出应用，重启后历史会「复活」。
-    let _ = state.repo.flush_now();
     // 历史清空后，所有图片文件都成了孤儿
     storage::cleanup_orphan_images(&state.data_dir, &std::collections::HashSet::new());
 
