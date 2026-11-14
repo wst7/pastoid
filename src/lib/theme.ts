@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { DEFAULT_STYLE } from "@/themes";
+import { DEFAULT_STYLE, themeById } from "@/themes";
 
 export type ThemePref = "system" | "light" | "dark";
 
@@ -13,7 +13,13 @@ function isDarkPref(theme: ThemePref): boolean {
 
 /** 只负责把当前该用的明暗 + 风格画到 DOM 上 */
 export function paint(theme: ThemePref, style: string = DEFAULT_STYLE): boolean {
-  const isDark = isDarkPref(theme);
+  // 单模式风格（OLED 只有深色、侘寂只有浅色）不允许出现"浅色 + OLED"这种不成立的组合：
+  // 这里兜底把明暗掰到它支持的那一档，设置页的自动切换只是让 UI 保持一致。
+  const styleDef = themeById(style);
+  let isDark = isDarkPref(theme);
+  if (!styleDef.modes.includes(isDark ? "dark" : "light")) {
+    isDark = styleDef.modes[0] === "dark";
+  }
   const html = document.documentElement;
   html.classList.toggle("dark", isDark);
   html.classList.toggle("light", !isDark);

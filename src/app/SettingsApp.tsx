@@ -236,7 +236,12 @@ export default function SettingsApp() {
   const handleThemeChange = async (theme: string) => {
     // 切明暗时，如果当前风格不支持这一档（比如 OLED 只有深色），自动换成它支持的
     const style = themeById(settings.theme_style);
-    const mode = theme === "system" ? theme : modeForTheme(style, theme as "light" | "dark");
+    const mode =
+      theme === "system"
+        ? style.modes.length === 1
+          ? style.modes[0]
+          : "system"
+        : modeForTheme(style, theme as "light" | "dark");
     await persist({ ...settings, theme: mode });
   };
 
@@ -245,7 +250,11 @@ export default function SettingsApp() {
     const style = themeById(theme_style);
     const resolved = themeRef.current === "system" ? "system" : themeRef.current;
     const theme =
-      resolved === "system" ? resolved : modeForTheme(style, resolved as "light" | "dark");
+      resolved === "system"
+        ? style.modes.length === 1
+          ? style.modes[0]
+          : "system"
+        : modeForTheme(style, resolved as "light" | "dark");
     await persist({ ...settings, theme_style, theme });
   };
 
