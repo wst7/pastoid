@@ -122,7 +122,10 @@ fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE UNIQUE INDEX IF NOT EXISTS ux_items_image_hash
             ON items(image_hash) WHERE image_hash IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_items_order
-            ON items(is_pinned DESC, created_at DESC);",
+            ON items(is_pinned DESC, created_at DESC);
+        -- 图片护栏每次 add 都要 COUNT(type='image')，没有这个索引就是全表扫
+        CREATE INDEX IF NOT EXISTS idx_items_type
+            ON items(type);",
     )
 }
 
