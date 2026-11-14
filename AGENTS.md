@@ -80,8 +80,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
   日志里给出路径供手动恢复——别把「解析失败」和「读失败」混成一个分支
 - 去重靠唯一索引 `ux_items_dedup (type, content_hash)`，`content_hash = blake3(内容)`：
   最长 512KB 的原文不能当索引键；图片另有 `image_hash` 唯一索引
-- `max_items = 0` 表示不限（无限保存），`db::enforce_max_items` 遇 0 直接跳过；
-  裁剪时置顶优先保留，被砍掉的图片条目同步删文件
+- `max_items = 0` 表示不限（无限保存）：条数裁剪跳过，`get_history` 也不拼 LIMIT
+  （`LIMIT 0` 会永远返回空）；非 0 时裁剪置顶优先保留，被砍掉的图片条目同步删文件
+- 图片有独立磁盘护栏 `db::MAX_IMAGES = 1000`：图片条目超过 1000 张按 `created_at DESC` 保留最新，
+  删行 + 删文件（`enforce_image_limit`，由 `enforce_max_items` 在条数裁剪后调用，
+  `max_items == 0` 的分支也调）——文本可以不限，图片不限会把磁盘吃光
 - 数据目录可能在 exFAT / 网络盘上：开库时尝试 WAL，PRAGMA 退回原模式就改用回滚日志 + `synchronous=FULL`
 - `images/`、`settings.json`、`location.txt` 与历史库无关，数据目录搬家逻辑原样生效
 

@@ -492,7 +492,7 @@ pub fn save_settings(
 #[tauri::command]
 pub fn get_history_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
     let settings = state.settings.lock().map_err(|e| e.to_string())?;
-    let max_items = settings.max_items as usize;
+    let max_items = settings.max_items;
     drop(settings);
 
     Ok(state.repo.get_history(max_items))

@@ -19,6 +19,10 @@ use std::path::Path;
 /// 历史库 schema 版本。表结构变更时 +1，并在 open 后按版本做升级。
 pub const SCHEMA_VERSION: i32 = 1;
 
+/// 图片条目的磁盘护栏：超过这个张数就删最旧的。
+/// 文本可以不限量（`max_items == 0`），图片不行——截图会把磁盘吃光。
+pub const MAX_IMAGES: u32 = 1000;
+
 /// 写入一条条目；命中去重唯一索引时静默跳过（调用方用 changes 判断）。
 pub(crate) const INSERT_ITEM: &str = "INSERT OR IGNORE INTO items \
      (id, content, type, content_hash, created_at, updated_at, is_pinned, tags, source, image_hash) \
@@ -226,11 +230,17 @@ fn set_version(conn: &Connection, version: i32) {
 /// 把库裁剪到 `max_items` 条：置顶优先保留，非置顶保留最新的，
 /// 被砍掉的图片条目同步删除磁盘文件。
 ///
-/// `max_items == 0` 表示不限（无限保存），直接跳过。
+/// `max_items == 0` 表示不限（无限保存），跳过条数裁剪；
+/// 但无论哪条路径都要过图片上限——磁盘护栏不跟「不限」一起放开。
 pub fn enforce_max_items(conn: &Connection, max_items: u32, data_dir: &Path) -> Result<(), String> {
-    if max_items == 0 {
-        return Ok(());
+    if max_items > 0 {
+        trim_items(conn, max_items, data_dir)?;
     }
+    enforce_image_limit(conn, data_dir, MAX_IMAGES)
+}
+
+/// 条数裁剪的实现，只在 `max_items > 0` 时由 [`enforce_max_items`] 调用。
+fn trim_items(conn: &Connection, max_items: u32, data_dir: &Path) -> Result<(), String> {
     let max = max_items as usize;
 
     let pinned_total = count(conn, "SELECT COUNT(*) FROM items WHERE is_pinned = 1")?;
@@ -263,6 +273,60 @@ pub fn enforce_max_items(conn: &Connection, max_items: u32, data_dir: &Path) -> 
     // 行已删掉，对应的图片文件也没人引用了
     for (_, content, item_type) in overflow {
         if item_type == "image" && !content.is_empty() {
+            storage::delete_image_file(data_dir, &content);
+        }
+    }
+    Ok(())
+}
+
+/// 图片条目磁盘护栏：超过 `max_images` 张时按 `created_at DESC` 保留最新 N 张，
+/// 删掉更旧的行并同步删除磁盘文件。
+///
+/// 置顶不豁免：这是磁盘约束，不是用户偏好——图片留着就是留着占空间。
+pub fn enforce_image_limit(
+    conn: &Connection,
+    data_dir: &Path,
+    max_images: u32,
+) -> Result<(), String> {
+    let total = count(conn, "SELECT COUNT(*) FROM items WHERE type = 'image'")?;
+    if total <= max_images as i64 {
+        return Ok(());
+    }
+
+    // 保留最新的 max_images 张，其余（按时间最旧的）全删
+    let overflow = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, content FROM items
+                 WHERE type = 'image'
+                 ORDER BY created_at DESC, rowid DESC
+                 LIMIT -1 OFFSET ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![max_images as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+    if overflow.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("begin: {e}"))?;
+    for (id, _) in &overflow {
+        tx.execute("DELETE FROM items WHERE id = ?1", [id.as_str()])
+            .map_err(|e| format!("delete: {e}"))?;
+    }
+    tx.commit().map_err(|e| format!("commit: {e}"))?;
+
+    // 行已删掉，对应的图片文件也没人引用了
+    for (_, content) in overflow {
+        if !content.is_empty() {
             storage::delete_image_file(data_dir, &content);
         }
     }
@@ -543,7 +607,7 @@ mod tests {
 
     #[test]
     fn test_enforce_unlimited_skips() {
-        // max_items = 0 表示不限（无限保存），一条都不许裁
+        // max_items = 0 表示不限（无限保存），一条文本都不许裁
         let dir = temp();
         let conn = open(dir.path());
         for i in 0..5 {
@@ -552,5 +616,77 @@ mod tests {
 
         enforce_max_items(&conn, 0, dir.path()).unwrap();
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM items").unwrap(), 5);
+    }
+
+    #[test]
+    fn test_image_limit_keeps_newest_and_deletes_files() {
+        let dir = temp();
+        let images_dir = dir.path().join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+
+        let conn = open(dir.path());
+        for i in 1..=5i64 {
+            fs::write(images_dir.join(format!("img{i}.png")), b"png").unwrap();
+            let mut image =
+                ClipboardItem::new_image(format!("images/img{i}.png"), format!("hash-{i}"));
+            image.created_at = i;
+            image.updated_at = i;
+            insert(&conn, &image);
+        }
+        // 文本条目不归图片上限管
+        insert(&conn, &item_with("text", 10));
+
+        enforce_image_limit(&conn, dir.path(), 2).unwrap();
+
+        // 只留最新的两张（img4、img5），文本原样保留
+        assert_eq!(
+            count(&conn, "SELECT COUNT(*) FROM items WHERE type = 'image'").unwrap(),
+            2
+        );
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items").unwrap(), 3);
+        let kept: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM items WHERE content LIKE 'images/img%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept, 2);
+        for i in 1..=3 {
+            assert!(
+                !images_dir.join(format!("img{i}.png")).exists(),
+                "最旧的图片文件应删除"
+            );
+        }
+        for i in 4..=5 {
+            assert!(
+                images_dir.join(format!("img{i}.png")).exists(),
+                "最新图片文件应保留"
+            );
+        }
+    }
+
+    #[test]
+    fn test_unlimited_still_caps_images() {
+        // 条数不限，图片护栏照跑——否则不限模式下截图会吃光磁盘
+        let dir = temp();
+        let conn = open(dir.path());
+        for i in 0..=MAX_IMAGES {
+            let mut image =
+                ClipboardItem::new_image(format!("images/i{i}.png"), format!("hash-{i}"));
+            image.created_at = i as i64;
+            image.updated_at = i as i64;
+            insert(&conn, &image);
+        }
+
+        enforce_max_items(&conn, 0, dir.path()).unwrap();
+
+        let images = count(&conn, "SELECT COUNT(*) FROM items WHERE type = 'image'").unwrap();
+        assert_eq!(images, MAX_IMAGES as i64);
+        // 删的是最旧的那张（created_at = 0），剩下的从 1 开始
+        let oldest: i64 = conn
+            .query_row("SELECT MIN(created_at) FROM items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(oldest, 1);
     }
 }

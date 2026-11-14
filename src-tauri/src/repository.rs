@@ -82,8 +82,17 @@ impl ClipboardRepository {
         .unwrap_or_default()
     }
 
-    pub fn get_history(&self, max_items: usize) -> Vec<ClipboardItem> {
+    /// `max_items == 0` 表示不限：不拼 LIMIT（`LIMIT 0` 会永远返回空）。
+    pub fn get_history(&self, max_items: u32) -> Vec<ClipboardItem> {
         self.with_conn(|conn| {
+            if max_items == 0 {
+                return query_items(
+                    conn,
+                    "SELECT * FROM items
+                     ORDER BY is_pinned DESC, created_at DESC, rowid DESC",
+                    [],
+                );
+            }
             query_items(
                 conn,
                 "SELECT * FROM items
@@ -623,6 +632,19 @@ mod tests {
         let history = repo.get_history(10);
         assert!(history[0].is_pinned);
         assert!(!history[1].is_pinned);
+    }
+
+    #[test]
+    fn test_repo_get_history_unlimited() {
+        // max_items = 0（不限）时不能拼 LIMIT 0，否则永远取不到历史
+        let (_dir, repo) = text_repo(0);
+        for i in 0..5 {
+            repo.add(ClipboardItem::new(format!("item {i}"), "text"));
+        }
+
+        assert_eq!(repo.get_history(0).len(), 5);
+        // 非 0 时仍然按窗口截断
+        assert_eq!(repo.get_history(3).len(), 3);
     }
 
     #[test]
