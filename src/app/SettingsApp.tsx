@@ -125,6 +125,8 @@ export default function SettingsApp() {
   const [manualUpdate, setManualUpdate] = useState<string | null>(null);
 
   const oldShortcutRef = useRef(settings.shortcut);
+  // 「不限」期间 max_items 存 0，取消勾选时要恢复成之前的数值
+  const lastMaxItemsRef = useRef(20);
 
   useEffect(() => {
     loadSettings();
@@ -157,11 +159,14 @@ export default function SettingsApp() {
   const loadSettings = async () => {
     try {
       const data = await invoke<SettingsData>("get_settings");
+      const loadedMax = data.max_items ?? 20;
+      // 0（不限）没有可恢复的数值，保持 ref 里的默认值
+      if (loadedMax > 0) lastMaxItemsRef.current = loadedMax;
       setSettings({
         language: data.language || "zh",
         theme: data.theme || "light",
         autostart: data.autostart ?? false,
-        max_items: data.max_items ?? 20,
+        max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
       themeRef.current = (data.theme as ThemePref) || "system";
@@ -224,7 +229,18 @@ export default function SettingsApp() {
 
   const handleMaxItemsChange = async (value: string) => {
     const max_items = Math.max(1, Math.min(100, parseInt(value) || 20));
+    lastMaxItemsRef.current = max_items;
     await persist({ ...settings, max_items });
+  };
+
+  const handleUnlimitedChange = async (isSelected: boolean) => {
+    if (isSelected) {
+      if (settings.max_items > 0) lastMaxItemsRef.current = settings.max_items;
+      await persist({ ...settings, max_items: 0 });
+    } else {
+      // 恢复勾选前的数值；没有（首次运行 / 之前存的就是 0）就回默认 20
+      await persist({ ...settings, max_items: lastMaxItemsRef.current || 20 });
+    }
   };
 
   const handleChangeDataDir = async () => {
@@ -425,9 +441,12 @@ export default function SettingsApp() {
 
   const themeOptions = themes(t);
 
-  const maxItems = settings.max_items || 20;
+  const isUnlimited = settings.max_items === 0;
   const itemCount = storage?.item_count ?? 0;
-  const usageRatio = Math.min(100, Math.round((itemCount / maxItems) * 100));
+  // 不限模式没有分母：除零 + `|| 20` 会把 0 当 20，这里干脆不算百分比
+  const usageRatio = isUnlimited
+    ? null
+    : Math.min(100, Math.round((itemCount / settings.max_items) * 100));
 
   const hasUpdate = Boolean(updateStatus?.update);
   const statusDot = updateError
@@ -584,11 +603,28 @@ export default function SettingsApp() {
               type="number"
               min={1}
               max={100}
-              value={String(settings.max_items)}
+              value={String(isUnlimited ? lastMaxItemsRef.current : settings.max_items)}
               onChange={(e) => handleMaxItemsChange(e.target.value)}
-              disabled={loadingSettings}
+              disabled={loadingSettings || isUnlimited}
               className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
+            <span className="text-[12px] text-muted-foreground">{t("unlimited")}</span>
+            <Switch
+              isSelected={isUnlimited}
+              onChange={handleUnlimitedChange}
+              isDisabled={loadingSettings}
+              aria-label={t("unlimited")}
+              style={
+                {
+                  "--color-accent": "var(--primary)",
+                  "--accent-foreground": "#ffffff",
+                } as React.CSSProperties
+              }
+            >
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch>
           </Row>
 
           <div className="border-t border-border/70 px-3 py-2.5">
@@ -670,18 +706,25 @@ export default function SettingsApp() {
             </div>
 
             <div className="mt-2 flex items-center gap-2">
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-default">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${usageRatio}%` }}
-                />
-              </div>
+              {usageRatio !== null && (
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-default">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${usageRatio}%` }}
+                  />
+                </div>
+              )}
               <span className="shrink-0 text-[11px] text-muted-foreground">
-                {t("storageUsage", {
-                  items: itemCount,
-                  max: maxItems,
-                  size: formatBytes(storage?.total_bytes ?? 0),
-                })}
+                {usageRatio !== null
+                  ? t("storageUsage", {
+                      items: itemCount,
+                      max: settings.max_items,
+                      size: formatBytes(storage?.total_bytes ?? 0),
+                    })
+                  : t("storageUsageUnlimited", {
+                      items: itemCount,
+                      size: formatBytes(storage?.total_bytes ?? 0),
+                    })}
                 {" · "}
                 {t("storageImages", { count: storage?.image_count ?? 0 })}
               </span>

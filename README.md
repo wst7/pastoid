@@ -26,7 +26,7 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 - **🌍 Bilingual** — Full support for both English and Chinese interfaces.
 - **🚀 Start with System** — Optional auto-start so Pastoid is always ready when you are.
 - **⌨️ Keyboard-First** — Open the quick paste panel with a global shortcut, navigate with arrow keys, and paste without touching your mouse.
-- **⚙️ Configurable Limits** — Set how many items to keep (1–100) to balance history depth and performance.
+- **⚙️ Configurable Limits** — Set how many items to keep (1–100, or unlimited) to balance history depth and performance.
 
 ## Screenshots
 
@@ -82,7 +82,7 @@ What's in the folder:
 | `images/` | Screenshots and copied images, named by content hash — the same image is only ever stored once |
 | `settings.json` | Settings |
 
-Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100) caps it: items beyond the limit are dropped and their image files are deleted, so the folder does not grow without bound.
+Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100, or unlimited) caps it: items beyond the limit are dropped and their image files are deleted, so the folder does not grow without bound.
 
 ## Installation
 
