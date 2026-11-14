@@ -43,6 +43,18 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - `src/quick-paste-entry.tsx` → `quick-paste.html` → `src/app/QuickPaste.tsx`（快速粘贴面板）
 - Vite 配置多入口: `vite.config.ts` 中 `build.rollupOptions.input`
 
+**快速粘贴面板交互约定（重要）：**
+- **选中态用 `activeId`（id），不要用下标**：置顶/删除/新条目插入都会重排列表，
+  下标会让选中漂到别的卡上，回车粘错内容
+- **面板打开期间冻结排序**：置顶只换图钉不重排，下次打开 `loadItems()` 时才重新排序；
+  面板开着时卡片不能从指针下面跑掉
+- **hover 只改选中、不滚动**；滚动只由键盘触发（`scrollNext` ref 区分），否则鼠标下的卡片会自己跑
+- **出入场动画**在 `src/index.css`：入场 90ms（panel-opened 事件重放 class）、退场 70ms；
+  粘贴路径不走退场动画（Rust 侧 hide 后还有 Cmd+Tab 的等待），`prefers-reduced-motion` 下归零
+- 横向卡片条的**滚轮映射**用原生 `wheel` 监听（`passive: false`），React 的 onWheel 拦不住页面滚动
+- 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
+  隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
+
 ### 后端 (src-tauri/)
 - **Tauri 2 (Rust)**
 - **rust-i18n** 托盘菜单国际化: `src-tauri/locales/app.yml`

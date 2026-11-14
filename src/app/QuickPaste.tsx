@@ -37,8 +37,19 @@ const backspaceLabel = isMac ? "⌫" : "Backspace";
 const enterLabel = isMac ? "↵" : "Enter";
 const escLabel = isMac ? "esc" : "Esc";
 
+/** 面板退场动画时长，必须和 index.css 里的 .panel-anim-out 一致 */
+const PANEL_EXIT_MS = 70;
+
 /** 图片内容只拉一次，后续复用 data URL */
 const imageCache = new Map<string, string>();
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 function ImageThumb({ filename }: { filename: string }) {
   const [src, setSrc] = useState<string | null>(() => imageCache.get(filename) ?? null);
@@ -92,24 +103,38 @@ export default function QuickPaste() {
   const [filter, setFilter] = useState<ClipboardFilter>("all");
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  // 选中态用 id 而不是下标：卡片重排（置顶、删除、新条目插入）时，
+  // 选中的应该始终是「同一条内容」，否则回车会粘错东西。
+  const [activeId, setActiveId] = useState<string | null>(null);
+  // 面板打开期间冻结排序，避免卡片在指针下方跳动；关闭后再重排
+  const [orderFrozen, setOrderFrozen] = useState(false);
   const [language, setLanguage] = useState("zh");
   // 跟随系统时，系统夜间切暗也要跟着变
   const themeRef = useRef<ThemePref>("system");
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const blurEnabled = useRef(false);
+  const closingRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+  // 下一次 activeId 变化要不要滚动到可视区：键盘要，hover 不要
+  const scrollNext = useRef(true);
 
   // 键盘监听只注册一次，闭包里拿不到最新的 search，用 ref 兜住。
   // 之前 Esc 用闭包里的 search，永远是 ""，所以「先清搜索再关窗」那段是死代码。
   const searchRef = useRef(search);
   searchRef.current = search;
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (resetSelection = false) => {
     try {
       const data: ClipboardItem[] = await invoke("get_clipboard_items");
-      setItems(sortItems(data));
+      const sorted = sortItems(data);
+      setItems(sorted);
+      setActiveId((prev) => {
+        if (!resetSelection && prev && sorted.some((i) => i.id === prev)) return prev;
+        return sorted[0]?.id ?? null;
+      });
       setLoadError(null);
     } catch (e) {
       console.error("Failed to load items:", e);
@@ -153,7 +178,8 @@ export default function QuickPaste() {
 
   const paste = useCallback(async (item: ClipboardItem) => {
     try {
-      // 按 id 粘贴：图片条目要走图片通道，不能把文件路径当文本写进剪贴板
+      // 按 id 粘贴：图片条目要走图片通道，不能把文件路径当文本写进剪贴板。
+      // 粘贴路径不做退场动画——Rust 侧隐藏窗口后还有 Cmd+Tab 的等待。
       await invoke("paste_item", { id: item.id });
     } catch (e) {
       console.error("Paste failed:", e);
@@ -164,9 +190,10 @@ export default function QuickPaste() {
     try {
       const updated = { ...item, isPinned: !item.isPinned, updatedAt: Date.now() };
       await invoke("update_clipboard_item", { item: updated });
-      setItems((prev) =>
-        sortItems(prev.map((i) => (i.id === item.id ? updated : i)))
-      );
+      // 只换图钉，不重排：面板开着的时候卡片不能从指针下面跑掉。
+      // 下次打开时 loadItems() 会按置顶/时间重新排序。
+      setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
+      setOrderFrozen(true);
     } catch (e) {
       console.error("Toggle pin failed:", e);
     }
@@ -174,8 +201,16 @@ export default function QuickPaste() {
 
   const deleteItem = useCallback(async (item: ClipboardItem) => {
     try {
+      const list = filteredItemsRef.current;
+      const idx = list.findIndex((i) => i.id === item.id);
       await invoke("delete_clipboard_item", { id: item.id });
       setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setActiveId((prev) => {
+        if (prev !== item.id) return prev;
+        // 优先落到后一张，删的是最后一张就往前一张
+        const next = list[idx + 1] ?? list[idx - 1];
+        return next?.id ?? null;
+      });
     } catch (e) {
       console.error("Delete failed:", e);
     }
@@ -185,15 +220,31 @@ export default function QuickPaste() {
     try {
       await invoke("clear_clipboard_items");
       setItems([]);
+      setActiveId(null);
       imageCache.clear();
     } catch (e) {
       console.error("Clear all failed:", e);
     }
   }, []);
 
+  /** 按方向键移动选中：先算下标，再落到 id */
+  const selectIndex = useCallback((index: number, scroll = true) => {
+    const list = filteredItemsRef.current;
+    if (!list.length) return;
+    const clamped = Math.max(0, Math.min(index, list.length - 1));
+    scrollNext.current = scroll;
+    setActiveId(list[clamped].id);
+  }, []);
+
+  const hoverItem = useCallback((id: string) => {
+    // hover 只改选中，不滚动：否则鼠标下的卡片会自己跑，感觉"追不上"
+    scrollNext.current = false;
+    setActiveId(id);
+  }, []);
+
   // 事件回调里要用到最新值，用 ref 兜住，避免每次重建监听
-  const activeIndexRef = useRef(activeIndex);
-  activeIndexRef.current = activeIndex;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   const filteredItemsRef = useRef(filteredItems);
   filteredItemsRef.current = filteredItems;
@@ -206,6 +257,38 @@ export default function QuickPaste() {
   deleteItemRef.current = deleteItem;
   const clearAllRef = useRef(clearAll);
   clearAllRef.current = clearAll;
+
+  /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
+  const playEnter = useCallback(() => {
+    const el = panelRef.current;
+    if (!el || prefersReducedMotion()) return;
+    el.classList.remove("panel-anim-in", "panel-anim-out");
+    void el.offsetWidth;
+    el.classList.add("panel-anim-in");
+  }, []);
+
+  /** 退场动画结束后再真正隐藏；粘贴不走这里，由 Rust 直接 hide */
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    const win = getCurrentWindow();
+    const el = panelRef.current;
+
+    if (!el || prefersReducedMotion()) {
+      void win.hide();
+      closingRef.current = false;
+      return;
+    }
+
+    el.classList.remove("panel-anim-in");
+    el.classList.add("panel-anim-out");
+    closeTimerRef.current = window.setTimeout(() => {
+      void win.hide();
+      el.classList.remove("panel-anim-out");
+      closingRef.current = false;
+      closeTimerRef.current = null;
+    }, PANEL_EXIT_MS);
+  }, []);
 
   useEffect(() => {
     return watchSystemTheme(() => {
@@ -227,13 +310,22 @@ export default function QuickPaste() {
       })
       .catch(() => paint("light"));
 
-    loadItems();
+    loadItems(true);
 
     const unlistenPanel = listen("panel-opened", () => {
-      loadItems();
+      if (closeTimerRef.current !== null) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      closingRef.current = false;
+      loadItems(true);
       setSearch("");
       setFilter("all");
-      setActiveIndex(0);
+      setOrderFrozen(false);
+      // 上次关窗时可能停在列表中间，重开必须回到最左边，
+      // 否则第一张卡在视口外，回车粘的是看不见的内容
+      if (listRef.current) listRef.current.scrollLeft = 0;
+      playEnter();
       inputRef.current?.focus();
       blurEnabled.current = false;
       setTimeout(() => {
@@ -243,7 +335,7 @@ export default function QuickPaste() {
 
     const unlistenBlur = getCurrentWindow().listen("tauri://blur", () => {
       if (blurEnabled.current) {
-        getCurrentWindow().hide();
+        requestClose();
       }
     });
 
@@ -258,11 +350,16 @@ export default function QuickPaste() {
 
     const unlistenCleared = listen("clipboard-cleared", () => {
       setItems([]);
+      setActiveId(null);
       imageCache.clear();
     });
 
     const handleKey = (e: KeyboardEvent) => {
       const list = filteredItemsRef.current;
+      const current = Math.max(
+        0,
+        list.findIndex((i) => i.id === activeIdRef.current)
+      );
 
       // 搜索框里有内容（或按着修饰键）时，左右键留给光标编辑，
       // 否则会把 ⌘← / ⌥← 这种移动光标、跳到行首的快捷键一起吞掉。
@@ -273,46 +370,46 @@ export default function QuickPaste() {
         return;
       }
 
-      const lastIndex = Math.max(list.length - 1, 0);
-
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        setActiveIndex((prev) => Math.min(Math.max(prev, 0) + 1, lastIndex));
+        selectIndex(current + 1);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        setActiveIndex((prev) => Math.max(prev - 1, 0));
+        selectIndex(current - 1);
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveIndex((prev) => Math.min(prev + 4, lastIndex));
+        selectIndex(current + 4);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setActiveIndex((prev) => Math.max(prev - 4, 0));
+        selectIndex(current - 4);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        selectIndex(0);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        selectIndex(list.length - 1);
       } else if (e.key === "Enter") {
         e.preventDefault();
-        const item = list[activeIndexRef.current];
+        const item = list[current];
         if (item) pasteRef.current(item);
       } else if (e.key === "Escape") {
         e.preventDefault();
         if (searchRef.current.length > 0) {
           setSearch("");
-          setActiveIndex(0);
         } else {
-          getCurrentWindow().hide();
+          requestClose();
         }
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
-        const item = list[activeIndexRef.current];
+        const item = list[current];
         if (item) togglePinRef.current(item);
       } else if (
         (e.metaKey || e.ctrlKey) &&
         (e.key === "Backspace" || e.key === "Delete")
       ) {
         e.preventDefault();
-        const item = list[activeIndexRef.current];
-        if (item) {
-          deleteItemRef.current(item);
-          setActiveIndex((prev) => Math.max(0, Math.min(prev, list.length - 2)));
-        }
+        const item = list[current];
+        if (item) deleteItemRef.current(item);
       } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "x") {
         e.preventDefault();
         clearAllRef.current();
@@ -325,7 +422,6 @@ export default function QuickPaste() {
           "4": "link",
         };
         setFilter(map[e.key]);
-        setActiveIndex(0);
       }
     };
 
@@ -340,19 +436,46 @@ export default function QuickPaste() {
     };
     // search 只用于 Esc 判断，不希望在打字时重建监听
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadItems]);
+  }, [loadItems, playEnter, requestClose, selectIndex]);
 
-  // 选中项跟着滚动，别跑出可视区
+  // 选中项跟着滚动，别跑出可视区。hover 触发的选中不滚（scrollNext=false）。
   useEffect(() => {
     const el = listRef.current?.querySelector(
-      `[data-index="${activeIndex}"]`
+      `[data-id="${activeId}"]`
     ) as HTMLElement | null;
-    el?.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
-  }, [activeIndex]);
+    const strip = listRef.current;
+    if (el && strip && scrollNext.current) {
+      const left = el.offsetLeft;
+      const right = left + el.offsetWidth;
+      if (left < strip.scrollLeft) {
+        strip.scrollLeft = left - 8;
+      } else if (right > strip.scrollLeft + strip.clientWidth) {
+        strip.scrollLeft = right - strip.clientWidth + 8;
+      }
+    }
+    scrollNext.current = true;
+  }, [activeId]);
 
+  // 搜索或筛选变化后，选中落到第一张
   useEffect(() => {
-    setActiveIndex(0);
-  }, [search, filter]);
+    const first = filteredItemsRef.current[0];
+    scrollNext.current = true;
+    setActiveId(first ? first.id : null);
+  }, [searchLower, filter]);
+
+  // 鼠标滚轮上下 = 横向滚动。React 的 onWheel 是 passive 的，拦不住页面滚动，
+  // 所以这里用原生监听 + preventDefault。
+  useEffect(() => {
+    const strip = listRef.current;
+    if (!strip) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      strip.scrollLeft += e.deltaY;
+    };
+    strip.addEventListener("wheel", onWheel, { passive: false });
+    return () => strip.removeEventListener("wheel", onWheel);
+  }, []);
 
   const filters: { key: ClipboardFilter; label: string; count: number }[] = [
     { key: "all", label: t("filterAll"), count: counts.all },
@@ -392,7 +515,10 @@ export default function QuickPaste() {
 
   return (
     <div className="h-screen w-screen p-2">
-      <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur-2xl shadow-xl shadow-black/10">
+      <div
+        ref={panelRef}
+        className="h-full flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur-2xl shadow-xl shadow-black/10"
+      >
         {/* 顶部：搜索 + 分类 */}
         <div className="shrink-0 flex items-center gap-2 px-3 pt-3 pb-2">
           <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-default ring-1 ring-transparent focus-within:ring-ring/50 transition-shadow">
@@ -424,10 +550,7 @@ export default function QuickPaste() {
               return (
                 <button
                   key={f.key}
-                  onClick={() => {
-                    setFilter(f.key);
-                    setActiveIndex(0);
-                  }}
+                  onClick={() => setFilter(f.key)}
                   className={`px-2.5 h-7 rounded-lg text-[11.5px] transition-colors ${
                     isActive
                       ? "bg-default text-foreground font-semibold"
@@ -457,7 +580,7 @@ export default function QuickPaste() {
                   {t("loadFailed")}: {loadError}
                 </span>
                 <button
-                  onClick={() => void loadItems()}
+                  onClick={() => void loadItems(true)}
                   className="rounded-md border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-destructive/10"
                 >
                   {t("retry")}
@@ -473,21 +596,21 @@ export default function QuickPaste() {
             )
           ) : (
             <div className="flex gap-2.5 h-full items-stretch py-0.5">
-              {filteredItems.map((item, idx) => {
-                const isActive = idx === activeIndex;
+              {filteredItems.map((item) => {
+                const isActive = item.id === activeId;
                 const kind = itemKind(item);
                 return (
                   <div
                     key={item.id}
-                    data-index={idx}
+                    data-id={item.id}
                     role="button"
                     tabIndex={-1}
                     onClick={() => paste(item)}
-                    onMouseEnter={() => setActiveIndex(idx)}
-                    className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-all duration-150 ${
+                    onMouseEnter={() => hoverItem(item.id)}
+                    className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow] duration-150 ${
                       isActive
                         ? item.isPinned
-                          ? "border-warning/60 ring-2 ring-primary/30 bg-warning/[0.10] shadow-sm"
+                          ? "border-primary/80 ring-2 ring-primary/30 bg-warning/[0.06] shadow-sm"
                           : "border-primary/80 ring-2 ring-primary/30 bg-card shadow-sm"
                         : item.isPinned
                           ? "border-warning/30 bg-warning/[0.06] hover:border-warning/50"
@@ -521,26 +644,22 @@ export default function QuickPaste() {
                           e.stopPropagation();
                           togglePin(item);
                         }}
-                        className={`w-5 h-5 flex items-center justify-center rounded-md bg-card/90 hover:bg-default ${
+                        className={`w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-default ${
                           item.isPinned ? "text-warning" : "text-muted-foreground hover:text-foreground"
                         }`}
                         aria-label={item.isPinned ? t("unpin") : t("pin")}
                       >
-                        <Pin size={10} fill={item.isPinned ? "currentColor" : "none"} />
+                        <Pin size={11} fill={item.isPinned ? "currentColor" : "none"} />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteItem(item);
-                          // 鼠标删除也要收敛选中下标，否则删掉最后一张后 Enter 会静默失效
-                          setActiveIndex((prev) =>
-                            Math.max(0, Math.min(prev, filteredItems.length - 2))
-                          );
                         }}
-                        className="w-5 h-5 flex items-center justify-center rounded-md bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        className="w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                         aria-label={t("delete")}
                       >
-                        <Trash2 size={10} />
+                        <Trash2 size={11} />
                       </button>
                     </div>
                   </div>
@@ -557,7 +676,10 @@ export default function QuickPaste() {
           <Hint keys={[modKey, "P"]} label={t("pin")} />
           <Hint keys={[modKey, backspaceLabel]} label={t("delete")} />
           <Hint keys={[modKey, shiftLabel, "X"]} label={t("clearAll")} />
-          <span className="ml-auto flex items-center gap-1">
+          <span className="ml-auto flex items-center gap-2">
+            {orderFrozen && (
+              <span className="text-warning/90">{t("orderFrozen")}</span>
+            )}
             <Hint keys={[escLabel]} label={t("close")} />
           </span>
         </div>

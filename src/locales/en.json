@@ -88,5 +88,6 @@
   "clearHistoryConfirm": "Clear all history?",
   "cancel": "Cancel",
   "confirmClear": "Clear",
-  "cleared": "Cleared"
+  "cleared": "Cleared",
+  "orderFrozen": "Order updates after closing"
 }

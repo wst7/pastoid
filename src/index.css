@@ -99,3 +99,43 @@
 .tabs__tab[aria-selected="true"] {
   color: var(--color-foreground) !important;
 }
+/* ============ 快速粘贴面板的出入场 ============
+   面板是 show() 出来的，动画靠 panel-opened 事件重放 class 触发。
+   只动 opacity / transform；时长与曲线见原型（90ms / 70ms）。
+   粘贴路径不做退场动画，由 Rust 直接 hide。 */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.panel-anim-in {
+  animation: panel-in 90ms cubic-bezier(0.2, 0, 0.38, 0.9) both;
+}
+
+.panel-anim-out {
+  animation: panel-out 70ms cubic-bezier(0.2, 0, 1, 0.9) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-anim-in,
+  .panel-anim-out {
+    animation-duration: 0.001ms !important;
+  }
+}
