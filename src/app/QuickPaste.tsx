@@ -124,6 +124,46 @@ export default function QuickPaste() {
   const closeTimerRef = useRef<number | null>(null);
   // 下一次 activeId 变化要不要滚动到可视区：键盘要，hover 不要
   const scrollNext = useRef(true);
+  // 横向滚动的补间句柄（同一时间只允许一个）
+  const scrollAnimRef = useRef<number | null>(null);
+  // 滚动补间期间及其后一小段时间内忽略 hover 选中：
+  // 卡片从静止的鼠标指针下经过会触发 mouseover，否则会把键盘选中的卡抢走
+  const hoverLockUntil = useRef(0);
+
+  /**
+   * 横向滚动的补间：键盘换卡时让卡片条滑过去，而不是瞬移。
+   *
+   * 不用 `scrollIntoView({behavior:"smooth"})`：WKWebView / WebView2 的
+   * 原生平滑滚动时长不可控（往往 300ms+），连续按键会拖沓；
+   * 这里自己补间，时长按距离给，封顶 220ms。
+   */
+  function animateScrollLeft(strip: HTMLDivElement, target: number) {
+    if (scrollAnimRef.current !== null) {
+      cancelAnimationFrame(scrollAnimRef.current);
+      scrollAnimRef.current = null;
+    }
+    const start = strip.scrollLeft;
+    const delta = target - start;
+    if (Math.abs(delta) < 1) return;
+
+    if (prefersReducedMotion()) {
+      strip.scrollLeft = target;
+      return;
+    }
+
+    const duration = Math.min(220, 110 + Math.abs(delta) * 0.35);
+    // 补间结束再宽限 80ms：滚动停下时可能还会补发一次 mouseover
+    hoverLockUntil.current = performance.now() + duration + 80;
+    const started = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - started) / duration);
+      // easeOutCubic：起步快、收尾稳，和面板入场的 decelerate 一致
+      const eased = 1 - Math.pow(1 - p, 3);
+      strip.scrollLeft = start + delta * eased;
+      scrollAnimRef.current = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    scrollAnimRef.current = requestAnimationFrame(step);
+  }
 
   // 键盘监听只注册一次，闭包里拿不到最新的 search，用 ref 兜住。
   // 之前 Esc 用闭包里的 search，永远是 ""，所以「先清搜索再关窗」那段是死代码。
@@ -230,6 +270,8 @@ export default function QuickPaste() {
   }, []);
 
   const hoverItem = useCallback((id: string) => {
+    // 键盘滚动刚把卡片挪到指针下面，这次 mouseover 不是用户移动鼠标造成的，忽略
+    if (performance.now() < hoverLockUntil.current) return;
     // hover 只改选中，不滚动：否则鼠标下的卡片会自己跑，感觉"追不上"
     scrollNext.current = false;
     setActiveId(id);
@@ -315,8 +357,15 @@ export default function QuickPaste() {
       void refresh({ reset: true, query: "", filter: "all" });
       setOrderFrozen(false);
       // 上次关窗时可能停在列表中间，重开必须回到最左边，
-      // 否则第一张卡在视口外，回车粘的是看不见的内容
+      // 否则第一张卡在视口外，回车粘的是看不见的内容。
+      // 这里要瞬移，不能走补间（否则开面板时列表会自己滑一下）。
+      if (scrollAnimRef.current !== null) {
+        cancelAnimationFrame(scrollAnimRef.current);
+        scrollAnimRef.current = null;
+      }
       if (listRef.current) listRef.current.scrollLeft = 0;
+      // 列表瞬间回到最左，指针下的卡片会换人，别让 hover 抢选中
+      hoverLockUntil.current = performance.now() + 120;
       playEnter();
       inputRef.current?.focus();
       blurEnabled.current = false;
@@ -443,14 +492,34 @@ export default function QuickPaste() {
     if (el && strip && scrollNext.current) {
       const left = el.offsetLeft;
       const right = left + el.offsetWidth;
-      if (left < strip.scrollLeft) {
-        strip.scrollLeft = left - 8;
-      } else if (right > strip.scrollLeft + strip.clientWidth) {
-        strip.scrollLeft = right - strip.clientWidth + 8;
+      const viewLeft = strip.scrollLeft;
+      const viewRight = viewLeft + strip.clientWidth;
+
+      let target: number | null = null;
+      if (left < viewLeft) {
+        target = left - 8;
+      } else if (right > viewRight) {
+        target = right - strip.clientWidth + 8;
+      }
+
+      if (target !== null) {
+        // 别滚过内容末尾（末张卡时目标会大于可滚距离）
+        const max = Math.max(0, strip.scrollWidth - strip.clientWidth);
+        animateScrollLeft(strip, Math.max(0, Math.min(target, max)));
       }
     }
     scrollNext.current = true;
   }, [activeId]);
+
+  // 卸载时别把 rAF 留在队列里
+  useEffect(() => {
+    return () => {
+      if (scrollAnimRef.current !== null) {
+        cancelAnimationFrame(scrollAnimRef.current);
+        scrollAnimRef.current = null;
+      }
+    };
+  }, []);
 
   // 搜索防抖、筛选立即刷新，结果都由后端出（首帧挂载时也会跑一次，即初始加载）
   useEffect(() => {
@@ -469,6 +538,11 @@ export default function QuickPaste() {
     const onWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
       e.preventDefault();
+      // 用户自己滚了，就别让键盘的补间继续抢滚动位置
+      if (scrollAnimRef.current !== null) {
+        cancelAnimationFrame(scrollAnimRef.current);
+        scrollAnimRef.current = null;
+      }
       strip.scrollLeft += e.deltaY;
     };
     strip.addEventListener("wheel", onWheel, { passive: false });
