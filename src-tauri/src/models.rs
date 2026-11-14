@@ -65,6 +65,9 @@ pub struct AppState {
 pub struct Settings {
     pub language: String,
     pub theme: String,
+    /// 视觉风格 id（见 src/themes/index.ts）。老数据没有这个字段，按 default 处理。
+    #[serde(default = "default_theme_style")]
+    pub theme_style: String,
     pub autostart: bool,
     #[serde(rename = "max_items")]
     pub max_items: u32,
@@ -76,11 +79,17 @@ impl Default for Settings {
         Self {
             language: "zh".to_string(),
             theme: "system".to_string(),
+            theme_style: default_theme_style(),
             autostart: false,
             max_items: 20,
             shortcut: default_shortcut().to_string(),
         }
     }
+}
+
+/// 默认视觉风格（当前的外观）
+pub fn default_theme_style() -> String {
+    "default".to_string()
 }
 
 /// 默认快捷键：macOS 用 Cmd，其它平台用 Ctrl。
@@ -183,6 +192,7 @@ mod tests {
         let settings1 = Settings {
             language: "en".to_string(),
             theme: "dark".to_string(),
+            theme_style: "oled".to_string(),
             autostart: true,
             max_items: 50,
             shortcut: "Ctrl+Alt+K".to_string(),
@@ -191,6 +201,7 @@ mod tests {
 
         assert_eq!(settings1.language, settings2.language);
         assert_eq!(settings1.theme, settings2.theme);
+        assert_eq!(settings1.theme_style, settings2.theme_style);
         assert_eq!(settings1.autostart, settings2.autostart);
         assert_eq!(settings1.max_items, settings2.max_items);
         assert_eq!(settings1.shortcut, settings2.shortcut);
@@ -201,6 +212,7 @@ mod tests {
         let settings = Settings {
             language: "en".to_string(),
             theme: "dark".to_string(),
+            theme_style: "default".to_string(),
             autostart: true,
             max_items: 100,
             shortcut: "Cmd+Shift+V".to_string(),

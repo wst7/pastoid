@@ -220,9 +220,18 @@ impl ClipboardRepository {
         };
 
         self.with_conn(|conn| {
+            // 搜索同时命中正文和 tag：tag 是用户自己写的索引，
+            // 打上 "work" 之后搜 "work" 应该能把这条捞出来
             let sql = format!(
                 "SELECT * FROM items
-                 WHERE {filter_cond} AND content LIKE ?2 ESCAPE '\\'
+                 WHERE {filter_cond} AND (
+                     content LIKE ?2 ESCAPE '\\'
+                     OR EXISTS (
+                         SELECT 1 FROM json_each(
+                             CASE WHEN json_valid(tags) THEN tags ELSE '[]' END
+                         ) WHERE json_each.value LIKE ?2 ESCAPE '\\'
+                     )
+                 )
                  ORDER BY is_pinned DESC, created_at DESC, rowid DESC
                  LIMIT ?1"
             );
@@ -356,9 +365,11 @@ impl ClipboardRepository {
         });
     }
 
-    pub fn update(&self, item: ClipboardItem) {
+    /// 更新条目。失败要往上抛：编辑正文撞到内容唯一索引时，
+    /// UI 必须能告诉用户「内容重复」，而不是假装保存成功。
+    pub fn update(&self, item: ClipboardItem) -> Result<(), String> {
         let hash = db::content_hash(&item.content);
-        let _ = self.with_conn(|conn| {
+        match self.with_conn(|conn| {
             conn.execute(
                 "UPDATE items SET content = ?2, type = ?3, content_hash = ?4,
                         created_at = ?5, updated_at = ?6, is_pinned = ?7,
@@ -379,7 +390,10 @@ impl ClipboardRepository {
             )
             .map(|_| ())
             .map_err(|e| e.to_string())
-        });
+        }) {
+            Some(()) => Ok(()),
+            None => Err("更新条目失败".to_string()),
+        }
     }
 
     pub fn clear(&self) {
@@ -532,6 +546,26 @@ mod tests {
         repo.delete(&item.id);
 
         assert!(repo.is_empty());
+    }
+
+    #[test]
+    fn test_update_rejects_duplicate_content() {
+        // 把一条改成另一条已有的内容：唯一索引会拒绝，错误要能传到 UI
+        let (_dir, repo) = text_repo(100);
+        let a = ClipboardItem::new("first".to_string(), "text");
+        let b = ClipboardItem::new("second".to_string(), "text");
+        repo.add(a.clone());
+        repo.add(b.clone());
+
+        let mut edited = a.clone();
+        edited.content = "second".to_string();
+        assert!(repo.update(edited).is_err(), "重复内容应返回错误");
+
+        // 正常改名仍然成功
+        let mut ok = a.clone();
+        ok.content = "renamed".to_string();
+        assert!(repo.update(ok).is_ok());
+        assert_eq!(repo.find_by_id(&a.id).unwrap().content, "renamed");
     }
 
     #[test]
@@ -700,6 +734,25 @@ mod tests {
 
         // 窗口截断
         assert_eq!(repo.list(2, "all", "").len(), 2);
+    }
+
+    #[test]
+    fn test_list_search_matches_tags() {
+        // 搜索要能命中 tag，否则用户标了 tag 却搜不到
+        let (_dir, repo) = text_repo(100);
+        let mut tagged = ClipboardItem::new("完全无关的一段正文".to_string(), "text");
+        tagged.tags = Some(vec!["work".to_string(), "客户A".to_string()]);
+        repo.add(tagged);
+
+        let plain = ClipboardItem::new("普通条目".to_string(), "text");
+        repo.add(plain);
+
+        assert_eq!(repo.list(10, "all", "work").len(), 1);
+        assert_eq!(repo.list(10, "all", "客户A").len(), 1);
+        assert_eq!(repo.list(10, "all", "客户A")[0].content, "完全无关的一段正文");
+        assert!(repo.list(10, "all", "不存在的tag").is_empty());
+        // 正文搜索仍然有效
+        assert_eq!(repo.list(10, "all", "普通").len(), 1);
     }
 
     #[test]

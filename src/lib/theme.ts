@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { DEFAULT_STYLE } from "@/themes";
 
 export type ThemePref = "system" | "light" | "dark";
 
@@ -6,13 +7,19 @@ function darkQuery() {
   return window.matchMedia("(prefers-color-scheme: dark)");
 }
 
-/** 只负责把当前该用明还是暗画到 DOM 上 */
-export function paint(theme: ThemePref): boolean {
-  const isDark = theme === "dark" || (theme === "system" && darkQuery().matches);
+function isDarkPref(theme: ThemePref): boolean {
+  return theme === "dark" || (theme === "system" && darkQuery().matches);
+}
+
+/** 只负责把当前该用的明暗 + 风格画到 DOM 上 */
+export function paint(theme: ThemePref, style: string = DEFAULT_STYLE): boolean {
+  const isDark = isDarkPref(theme);
   const html = document.documentElement;
   html.classList.toggle("dark", isDark);
   html.classList.toggle("light", !isDark);
   html.setAttribute("data-theme", isDark ? "dark" : "light");
+  // 主题 token 挂在 html[data-style] 上，见 index.css
+  html.setAttribute("data-style", style || DEFAULT_STYLE);
   return isDark;
 }
 
@@ -22,7 +29,7 @@ export function paint(theme: ThemePref): boolean {
  * 所以从「浅色」切回「跟随系统」时，matchMedia 读到的还是刚才那个 light。
  * 必须先把外观交还系统（null），等它生效后再重画一次。
  */
-export function applyTheme(theme: ThemePref) {
+export function applyTheme(theme: ThemePref, style: string = DEFAULT_STYLE) {
   try {
     const win = getCurrentWindow();
     if (typeof win.setTheme === "function") {
@@ -32,12 +39,12 @@ export function applyTheme(theme: ThemePref) {
     // 非 Tauri 环境（浏览器里跑组件预览）忽略
   }
 
-  paint(theme);
+  paint(theme, style);
 
   if (theme === "system") {
     // 原生外观切换是异步的，media query 下一帧才更新
-    requestAnimationFrame(() => paint(theme));
-    window.setTimeout(() => paint(theme), 120);
+    requestAnimationFrame(() => paint(theme, style));
+    window.setTimeout(() => paint(theme, style), 120);
   }
 }
 

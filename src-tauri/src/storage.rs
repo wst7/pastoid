@@ -719,6 +719,7 @@ mod tests {
         let settings = Settings {
             language: "en".to_string(),
             theme: "dark".to_string(),
+            theme_style: "default".to_string(),
             autostart: true,
             max_items: 50,
             shortcut: "Ctrl+Alt+K".to_string(),

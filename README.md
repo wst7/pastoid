@@ -27,6 +27,9 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 - **🚀 Start with System** — Optional auto-start so Pastoid is always ready when you are.
 - **⌨️ Keyboard-First** — Open the quick paste panel with a global shortcut, navigate with arrow keys, and paste without touching your mouse.
 - **⚙️ Configurable Limits** — Set how many items to keep (1–100, or unlimited) to balance history depth and performance.
+- **🏷️ Custom Tags** — Tag any item and search tags alongside content; tagged items are protected from rolling deletion.
+- **✏️ Edit Items** — Fix a copied snippet in place (`⌘E`) before pasting it.
+- **🎨 Theme Styles** — Eleven looks including Glassmorphism, Swiss Style, Material 3, Document, OLED Noir and Fluent Mica.
 
 ## Screenshots
 

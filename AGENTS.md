@@ -58,6 +58,12 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - 横向卡片条的**滚轮映射**用原生 `wheel` 监听（`passive: false`），React 的 onWheel 拦不住页面滚动
 - 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
+- **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
+  面板/卡片的形状走 `--panel-*` / `--card-*`（见 `src/index.css` 的 `.pastoid-panel` / `.pastoid-card`）
+- 每个风格在 `src/themes/index.ts` 里声明支持的 `modes`：只支持单档的风格（OLED 只有深色、
+  侘寂只有浅色）切换时自动把明暗带过去，别允许"浅色 + OLED"这种不成立的组合
+- **编辑正文会撞内容唯一索引**：`repository.update` 返回 `Result`，命令把错误透传给前端，
+  前端显示"内容与已有条目重复"，不能假装保存成功
 
 ### 后端 (src-tauri/)
 - **Tauri 2 (Rust)**
@@ -89,6 +95,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - 图片有独立磁盘护栏 `db::MAX_IMAGES = 1000`：图片条目超过 1000 张按 `created_at DESC` 保留最新，
   删行 + 删文件（`enforce_image_limit`，由 `enforce_max_items` 在条数裁剪后调用，
   `max_items == 0` 的分支也调）——文本可以不限，图片不限会把磁盘吃光
+- **带 tag 的条目永不参与滚动删除**：`db::TAGGED_PREDICATE` 把它们从条数裁剪和图片护栏里排除。
+  打 tag 是明确的用户投入，复制新内容时不能把它挤掉；代价是上限变成"软上限"（tagged 不占名额）
+- **搜索同时命中正文和 tag**：`repository.list` 用 `json_each` 展开 tags 再 LIKE，
+  给条目打上 "work" 之后搜 "work" 能捞出来
+- 标签以 JSON 数组存在 `items.tags`（`["work","客户A"]`），空数组等价于没打标签
 - 数据目录可能在 exFAT / 网络盘上：开库时尝试 WAL，PRAGMA 退回原模式就改用回滚日志 + `synchronous=FULL`
 - `images/`、`settings.json`、`location.txt` 与历史库无关，数据目录搬家逻辑原样生效
 

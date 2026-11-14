@@ -19,6 +19,7 @@ import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
 import { FolderOpen, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
+import { THEMES, DEFAULT_STYLE, modeForTheme, themeById } from "@/themes";
 
 interface UpdateStatus {
   update: Update | null;
@@ -28,6 +29,7 @@ interface UpdateStatus {
 interface SettingsData {
   language: string;
   theme: string;
+  theme_style: string;
   autostart: boolean;
   max_items: number;
   shortcut: string;
@@ -49,6 +51,12 @@ const languages = [
   { id: "zh", name: "简体中文" },
   { id: "en", name: "English" },
 ];
+
+const styleOptions = (lang: string) =>
+  THEMES.map((style) => ({
+    id: style.id,
+    name: lang.startsWith("zh") ? style.name : style.nameEn,
+  }));
 
 const themes = (t: (key: string) => string) => [
   { id: "system", name: t("system") },
@@ -98,6 +106,7 @@ export default function SettingsApp() {
   const [settings, setSettings] = useState<SettingsData>({
     language: "zh",
     theme: "system",
+    theme_style: DEFAULT_STYLE,
     autostart: false,
     max_items: 20,
     shortcut: defaultShortcut,
@@ -105,6 +114,8 @@ export default function SettingsApp() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   // 系统明暗变化时要知道现在是不是「跟随系统」档
   const themeRef = useRef<ThemePref>("system");
+  // 风格要单独记一份：系统明暗变化时重画要带上它
+  const styleRef = useRef<string>(DEFAULT_STYLE);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -152,7 +163,7 @@ export default function SettingsApp() {
   // 系统外观变化（夜间自动变暗等）：只在「跟随系统」档响应
   useEffect(() => {
     return watchSystemTheme(() => {
-      if (themeRef.current === "system") paint("system");
+      if (themeRef.current === "system") paint("system", styleRef.current);
     });
   }, []);
 
@@ -165,12 +176,14 @@ export default function SettingsApp() {
       setSettings({
         language: data.language || "zh",
         theme: data.theme || "light",
+        theme_style: data.theme_style || DEFAULT_STYLE,
         autostart: data.autostart ?? false,
         max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
       themeRef.current = (data.theme as ThemePref) || "system";
-      applyTheme(themeRef.current);
+      styleRef.current = data.theme_style || DEFAULT_STYLE;
+      applyTheme(themeRef.current, styleRef.current);
       if (data.language) {
         i18n.changeLanguage(data.language === "zh" ? "zh" : "en");
       }
@@ -185,7 +198,8 @@ export default function SettingsApp() {
     try {
       await invoke("save_settings", { settings: newSettings });
       themeRef.current = newSettings.theme as ThemePref;
-      applyTheme(themeRef.current);
+      styleRef.current = newSettings.theme_style || DEFAULT_STYLE;
+      applyTheme(themeRef.current, styleRef.current);
       setSaveError(null);
       return true;
     } catch (error) {
@@ -220,7 +234,19 @@ export default function SettingsApp() {
   };
 
   const handleThemeChange = async (theme: string) => {
-    await persist({ ...settings, theme });
+    // 切明暗时，如果当前风格不支持这一档（比如 OLED 只有深色），自动换成它支持的
+    const style = themeById(settings.theme_style);
+    const mode = theme === "system" ? theme : modeForTheme(style, theme as "light" | "dark");
+    await persist({ ...settings, theme: mode });
+  };
+
+  const handleStyleChange = async (theme_style: string) => {
+    // 选了一个只支持单档的风格：明暗自动跟过去，避免出现「浅色 + OLED」这种不成立的组合
+    const style = themeById(theme_style);
+    const resolved = themeRef.current === "system" ? "system" : themeRef.current;
+    const theme =
+      resolved === "system" ? resolved : modeForTheme(style, resolved as "light" | "dark");
+    await persist({ ...settings, theme_style, theme });
   };
 
   const handleAutostartChange = async (isSelected: boolean) => {
@@ -574,6 +600,18 @@ export default function SettingsApp() {
                 onChange={handleThemeChange}
                 disabled={loadingSettings}
                 minWidth={120}
+              />
+            </div>
+          </Row>
+
+          <Row label={t("themeStyle")}>
+            <div className="relative flex items-center">
+              <Select
+                value={settings.theme_style}
+                options={styleOptions(settings.language)}
+                onChange={handleStyleChange}
+                disabled={loadingSettings}
+                minWidth={150}
               />
             </div>
           </Row>

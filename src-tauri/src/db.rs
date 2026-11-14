@@ -49,6 +49,13 @@ pub enum HistoryMigration {
 pub(crate) const LINK_PREDICATE: &str = "(TRIM(content, ' ' || char(9) || char(10) || char(13)) LIKE 'http://%' \
     OR TRIM(content, ' ' || char(9) || char(10) || char(13)) LIKE 'https://%')";
 
+/// 「这条被用户打过 tag」的 SQL 判定。
+///
+/// 打 tag 是明确的用户投入：这类条目不参与滚动删除（`max_items` 裁剪）
+/// 和图片数量护栏——否则用户刚标好的东西会在复制新内容时被悄悄挤掉。
+pub(crate) const TAGGED_PREDICATE: &str =
+    "(tags IS NOT NULL AND tags != '' AND tags != '[]')";
+
 /// 内容去重键：和图片 `imageHash` 同一套思路（blake3），
 /// 索引只存 32 字节摘要，不拿最长 512KB 的原文当索引键。
 pub fn content_hash(content: &str) -> String {
@@ -246,19 +253,37 @@ pub fn enforce_max_items(conn: &Connection, max_items: u32, data_dir: &Path) -> 
 fn trim_items(conn: &Connection, max_items: u32, data_dir: &Path) -> Result<(), String> {
     let max = max_items as usize;
 
-    let pinned_total = count(conn, "SELECT COUNT(*) FROM items WHERE is_pinned = 1")?;
+    // 带 tag 的条目：用户标过的，永远不参与滚动删除，也不占 max 的名额
+    let tagged_total = count(
+        conn,
+        &format!("SELECT COUNT(*) FROM items WHERE {}", TAGGED_PREDICATE),
+    )? as usize;
+
+    let pinned_untagged_total = count(
+        conn,
+        &format!(
+            "SELECT COUNT(*) FROM items WHERE is_pinned = 1 AND NOT {}",
+            TAGGED_PREDICATE
+        ),
+    )? as usize;
     // 置顶本身可能超过上限（用户把上限调小了），先砍掉多的，否则永远裁不干净
-    let pinned_kept = (pinned_total as usize).min(max);
-    let keep_normal = max - pinned_kept;
+    let pinned_kept = pinned_untagged_total.min(max);
+    let keep_normal = max.saturating_sub(tagged_total + pinned_kept);
 
     let mut overflow = Vec::new();
-    if (pinned_total as usize) > pinned_kept {
-        overflow.extend(overflow_rows(conn, 1, pinned_kept)?);
+    if pinned_untagged_total > pinned_kept {
+        overflow.extend(overflow_rows(conn, 1, pinned_kept, true)?);
     }
 
-    let normal_total = count(conn, "SELECT COUNT(*) FROM items WHERE is_pinned = 0")?;
+    let normal_total = count(
+        conn,
+        &format!(
+            "SELECT COUNT(*) FROM items WHERE is_pinned = 0 AND NOT {}",
+            TAGGED_PREDICATE
+        ),
+    )?;
     if (normal_total as usize) > keep_normal {
-        overflow.extend(overflow_rows(conn, 0, keep_normal)?);
+        overflow.extend(overflow_rows(conn, 0, keep_normal, true)?);
     }
     if overflow.is_empty() {
         return Ok(());
@@ -291,7 +316,14 @@ pub fn enforce_image_limit(
     data_dir: &Path,
     max_images: u32,
 ) -> Result<(), String> {
-    let total = count(conn, "SELECT COUNT(*) FROM items WHERE type = 'image'")?;
+    // 带 tag 的图片豁免：用户明确标记过，不参与自动清理（磁盘护栏只清"没人管"的截图）
+    let total = count(
+        conn,
+        &format!(
+            "SELECT COUNT(*) FROM items WHERE type = 'image' AND NOT {}",
+            TAGGED_PREDICATE
+        ),
+    )?;
     if total <= max_images as i64 {
         return Ok(());
     }
@@ -300,10 +332,13 @@ pub fn enforce_image_limit(
     let overflow = {
         let mut stmt = conn
             .prepare(
-                "SELECT id, content FROM items
-                 WHERE type = 'image'
-                 ORDER BY created_at DESC, rowid DESC
-                 LIMIT -1 OFFSET ?1",
+                &format!(
+                    "SELECT id, content FROM items
+                     WHERE type = 'image' AND NOT {}
+                     ORDER BY created_at DESC, rowid DESC
+                     LIMIT -1 OFFSET ?1",
+                    TAGGED_PREDICATE
+                ),
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
@@ -341,14 +376,20 @@ fn overflow_rows(
     conn: &Connection,
     is_pinned: i64,
     offset: usize,
+    exclude_tagged: bool,
 ) -> Result<Vec<(String, String, String)>, String> {
+    let tagged_clause = if exclude_tagged {
+        format!(" AND NOT {}", TAGGED_PREDICATE)
+    } else {
+        String::new()
+    };
     let mut stmt = conn
-        .prepare(
+        .prepare(&format!(
             "SELECT id, content, type FROM items
-             WHERE is_pinned = ?1
+             WHERE is_pinned = ?1{tagged_clause}
              ORDER BY created_at DESC, rowid DESC
-             LIMIT -1 OFFSET ?2",
-        )
+             LIMIT -1 OFFSET ?2"
+        ))
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![is_pinned, offset as i64], |row| {
@@ -606,6 +647,104 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM items WHERE content = 'a'", [], |r| r.get(0))
             .unwrap();
         assert_eq!(dropped, 0);
+    }
+
+    fn insert_tagged(conn: &Connection, item: &ClipboardItem, tags: &[&str]) {
+        let hash = content_hash(&item.content);
+        let tags_json = serde_json::to_string(tags).unwrap();
+        conn.execute(
+            INSERT_ITEM,
+            params![
+                item.id,
+                item.content,
+                item.item_type,
+                hash,
+                item.created_at,
+                item.updated_at,
+                item.is_pinned,
+                tags_json,
+                item.source,
+                item.image_hash,
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_tagged_items_survive_trimming() {
+        // 带 tag 的条目是用户明确标记过的，不参与滚动删除
+        let dir = temp();
+        let conn = open(dir.path());
+
+        let mut tagged = item_with("tagged old", 1);
+        tagged.is_pinned = false;
+        insert_tagged(&conn, &tagged, &["work"]);
+
+        for (i, created) in [("a", 2i64), ("b", 3), ("c", 4), ("d", 5)] {
+            insert(&conn, &item_with(i, created));
+        }
+
+        enforce_max_items(&conn, 3, dir.path()).unwrap();
+
+        // 1 条 tagged + 2 条最新的普通条目
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items").unwrap(), 3);
+        let tagged_left: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM items WHERE content = 'tagged old'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(tagged_left, 1, "带 tag 的条目不能被滚动删除");
+        // 被删的是最旧的两条普通条目
+        for gone in ["a", "b"] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM items WHERE content = ?1",
+                    [gone],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 0, "{gone} 应该被裁掉");
+        }
+    }
+
+    #[test]
+    fn test_tagged_image_exempt_from_image_limit() {
+        // 磁盘护栏只清"没人管"的截图，用户标过的图片要留下
+        let dir = temp();
+        let images_dir = dir.path().join("images");
+        fs::create_dir_all(&images_dir).unwrap();
+        let conn = open(dir.path());
+
+        // created_at 越大越新：old(2) < new(3)
+        for (i, name) in [(1i64, "tagged.png"), (2, "old.png"), (3, "new.png")] {
+            fs::write(images_dir.join(name), b"png").unwrap();
+            let mut item = ClipboardItem::new_image(format!("images/{name}"), format!("h{i}"));
+            item.created_at = i;
+            item.updated_at = i;
+            if name == "tagged.png" {
+                insert_tagged(&conn, &item, &["keep"]);
+            } else {
+                insert(&conn, &item);
+            }
+        }
+
+        enforce_image_limit(&conn, dir.path(), 1).unwrap();
+
+        let kept: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT content FROM items WHERE type = 'image' ORDER BY created_at")
+                .unwrap();
+            stmt.query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert!(kept.contains(&"images/tagged.png".to_string()), "带 tag 的图片要保留");
+        assert!(kept.contains(&"images/new.png".to_string()), "最新的一张普通图片要保留");
+        assert!(!kept.contains(&"images/old.png".to_string()), "最旧的普通图片应被清理");
+        assert!(!images_dir.join("old.png").exists());
     }
 
     #[test]

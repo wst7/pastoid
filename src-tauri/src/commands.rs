@@ -124,7 +124,7 @@ pub fn update_clipboard_item(
     item: ClipboardItem,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
-    state.repo.update(item);
+    state.repo.update(item)?;
     Ok(())
 }
 
@@ -421,9 +421,22 @@ pub fn save_settings(
     let old_shortcut = current_settings.shortcut.clone();
     let new_shortcut = settings.shortcut.clone();
 
-    // 如果主题变了，广播给所有窗口
-    if current_settings.theme != settings.theme {
-        let _ = app_handle.emit("theme-changed", settings.theme.clone());
+    // 如果明暗或风格变了，广播给所有窗口（面板是独立 webview，不会自动同步）
+    if current_settings.theme != settings.theme
+        || current_settings.theme_style != settings.theme_style
+    {
+        #[derive(Clone, serde::Serialize)]
+        struct ThemeChanged {
+            theme: String,
+            style: String,
+        }
+        let _ = app_handle.emit(
+            "theme-changed",
+            ThemeChanged {
+                theme: settings.theme.clone(),
+                style: settings.theme_style.clone(),
+            },
+        );
     }
 
     // 先落盘：写入失败就直接返回，此时内存仍是旧值，磁盘与内存保持一致

@@ -139,3 +139,563 @@
     animation-duration: 0.001ms !important;
   }
 }
+
+/* ============ 视觉风格（主题） =============
+   每个风格只覆盖语义 token，不动组件结构；面板/卡片的形状走
+   --panel-* / --card-* 这几个外观 token。*/
+/* 面板与卡片的形状/材质由主题决定 */
+.pastoid-panel{
+  background: var(--panel-bg, var(--background));
+  border: var(--panel-border, 1px solid var(--border));
+  border-radius: var(--panel-radius, 16px);
+  box-shadow: var(--panel-shadow, 0 20px 60px rgba(0,0,0,.25));
+  backdrop-filter: blur(var(--panel-blur, 24px)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--panel-blur, 24px)) saturate(1.3);
+  font-family: var(--font-ui, inherit);
+}
+.pastoid-card{
+  background: var(--card);
+  border: var(--card-border, 1px solid var(--border));
+  border-radius: var(--card-radius, 12px);
+}
+/* 置顶卡片的淡琥珀底：用叠层而不是背景色，主题换肤时不会被覆盖 */
+.pastoid-card.pinned::after{
+  content:"";
+  position:absolute;inset:0;pointer-events:none;
+  background:var(--warning);opacity:.07;
+  border-radius:inherit;
+}
+
+:root[data-style="default"].light{
+  --background:#ffffff;
+  --foreground:#0f0f0f;
+  --card:#ffffff;
+  --card-foreground:#0f0f0f;
+  --popover:#ffffff;
+  --popover-foreground:#0f0f0f;
+  --primary:#3b82f6;
+  --primary-foreground:#ffffff;
+  --secondary:#f5f5f5;
+  --secondary-foreground:#0f0f0f;
+  --muted:#f5f5f5;
+  --muted-foreground:#737373;
+  --accent:#f5f5f5;
+  --accent-foreground:#0f0f0f;
+  --border:#e5e5e5;
+  --input:#e5e5e5;
+  --ring:#3b82f6;
+  --default:#f1f2f4;
+  --warning:#d97706;
+  --panel-bg:#ffffff;
+  --panel-border:1px solid #e5e5e5;
+  --panel-radius:16px;
+  --panel-shadow:0 20px 50px rgba(0,0,0,.18);
+  --panel-blur:24px;
+  --card-border:1px solid #e5e5e5;
+  --card-radius:12px;
+}
+
+:root[data-style="default"].dark{
+  --background:#1e1e2e;
+  --foreground:#fafafa;
+  --card:#27273a;
+  --card-foreground:#fafafa;
+  --popover:#27273a;
+  --popover-foreground:#fafafa;
+  --primary:#60a5fa;
+  --primary-foreground:#0f172a;
+  --secondary:#313244;
+  --secondary-foreground:#fafafa;
+  --muted:#313244;
+  --muted-foreground:#d4d4d8;
+  --accent:#313244;
+  --accent-foreground:#fafafa;
+  --border:#45475a;
+  --input:#45475a;
+  --ring:#60a5fa;
+  --default:#383a52;
+  --warning:#fbbf24;
+  --panel-bg:rgba(30,30,46,.88);
+  --panel-border:1px solid rgba(255,255,255,.10);
+  --panel-radius:16px;
+  --panel-shadow:0 24px 70px rgba(0,0,0,.55);
+  --panel-blur:24px;
+  --card-border:1px solid #2c2c40;
+  --card-radius:12px;
+}
+
+:root[data-style="glass"].light{
+  --background:#f4f2fb;
+  --foreground:#242143;
+  --card:rgba(255,255,255,.86);
+  --card-foreground:#242143;
+  --popover:rgba(255,255,255,.86);
+  --popover-foreground:#242143;
+  --primary:#6B79FF;
+  --primary-foreground:#ffffff;
+  --secondary:rgba(36,33,67,.08);
+  --secondary-foreground:#242143;
+  --muted:rgba(36,33,67,.08);
+  --muted-foreground:#6b6a86;
+  --accent:rgba(36,33,67,.08);
+  --accent-foreground:#242143;
+  --border:rgba(36,33,67,.12);
+  --input:rgba(36,33,67,.12);
+  --ring:#6B79FF;
+  --default:rgba(36,33,67,.06);
+  --warning:#B45309;
+  --panel-bg:rgba(255,255,255,.72);
+  --panel-border:1px solid rgba(255,255,255,.9);
+  --panel-radius:20px;
+  --panel-shadow:0 24px 70px rgba(71,54,120,.22);
+  --panel-blur:24px;
+  --card-border:1px solid rgba(36,33,67,.10);
+  --card-radius:14px;
+}
+
+:root[data-style="glass"].dark{
+  --background:#12121f;
+  --foreground:#F2F1FA;
+  --card:rgba(255,255,255,.07);
+  --card-foreground:#F2F1FA;
+  --popover:rgba(255,255,255,.07);
+  --popover-foreground:#F2F1FA;
+  --primary:#8D96FF;
+  --primary-foreground:#0b0b18;
+  --secondary:rgba(255,255,255,.12);
+  --secondary-foreground:#F2F1FA;
+  --muted:rgba(255,255,255,.12);
+  --muted-foreground:#A6A4C0;
+  --accent:rgba(255,255,255,.12);
+  --accent-foreground:#F2F1FA;
+  --border:rgba(255,255,255,.12);
+  --input:rgba(255,255,255,.12);
+  --ring:#8D96FF;
+  --default:rgba(255,255,255,.07);
+  --warning:#FBBF24;
+  --panel-bg:rgba(28,28,44,.72);
+  --panel-border:1px solid rgba(255,255,255,.14);
+  --panel-radius:20px;
+  --panel-shadow:0 24px 70px rgba(0,0,0,.55);
+  --panel-blur:24px;
+  --card-border:1px solid rgba(255,255,255,.10);
+  --card-radius:14px;
+}
+
+:root[data-style="swiss"].light{
+  --background:#F7F7F5;
+  --foreground:#111111;
+  --card:#FFFFFF;
+  --card-foreground:#111111;
+  --popover:#FFFFFF;
+  --popover-foreground:#111111;
+  --primary:#FF2B21;
+  --primary-foreground:#FFFFFF;
+  --secondary:#111111;
+  --secondary-foreground:#FFFFFF;
+  --muted:#111111;
+  --muted-foreground:#6F6F6A;
+  --accent:#111111;
+  --accent-foreground:#111111;
+  --border:#C9C9C5;
+  --input:#C9C9C5;
+  --ring:#FF2B21;
+  --default:#EFEFEC;
+  --warning:#B45309;
+  --panel-bg:#F7F7F5;
+  --panel-border:1px solid #C9C9C5;
+  --panel-radius:0px;
+  --panel-shadow:0 18px 50px rgba(0,0,0,.28);
+  --panel-blur:0px;
+  --card-border:1px solid #C9C9C5;
+  --card-radius:0px;
+}
+
+:root[data-style="swiss"].dark{
+  --background:#111111;
+  --foreground:#F7F7F5;
+  --card:#1A1A1A;
+  --card-foreground:#F7F7F5;
+  --popover:#1A1A1A;
+  --popover-foreground:#F7F7F5;
+  --primary:#FF2B21;
+  --primary-foreground:#FFFFFF;
+  --secondary:#F7F7F5;
+  --secondary-foreground:#111111;
+  --muted:#F7F7F5;
+  --muted-foreground:#B4B4AE;
+  --accent:#F7F7F5;
+  --accent-foreground:#F7F7F5;
+  --border:#3A3A3A;
+  --input:#3A3A3A;
+  --ring:#FF2B21;
+  --default:#222222;
+  --warning:#FBBF24;
+  --panel-bg:#111111;
+  --panel-border:1px solid #3A3A3A;
+  --panel-radius:0px;
+  --panel-shadow:0 18px 50px rgba(0,0,0,.6);
+  --panel-blur:0px;
+  --card-border:1px solid #3A3A3A;
+  --card-radius:0px;
+}
+
+:root[data-style="material"].light{
+  --background:#F7F2FA;
+  --foreground:#1D192B;
+  --card:#FFFFFF;
+  --card-foreground:#1D192B;
+  --popover:#FFFFFF;
+  --popover-foreground:#1D192B;
+  --primary:#6750A4;
+  --primary-foreground:#FFFFFF;
+  --secondary:#EADDFF;
+  --secondary-foreground:#21005D;
+  --muted:#EADDFF;
+  --muted-foreground:#625B71;
+  --accent:#EADDFF;
+  --accent-foreground:#1D192B;
+  --border:#D9D0E3;
+  --input:#D9D0E3;
+  --ring:#6750A4;
+  --default:#ECE6F0;
+  --warning:#9A5B00;
+  --panel-bg:#F7F2FA;
+  --panel-border:1px solid transparent;
+  --panel-radius:28px;
+  --panel-shadow:0 18px 50px rgba(29,25,43,.18);
+  --panel-blur:0px;
+  --card-border:1px solid transparent;
+  --card-radius:20px;
+}
+
+:root[data-style="material"].dark{
+  --background:#1D1B20;
+  --foreground:#E6E0E9;
+  --card:#2B2930;
+  --card-foreground:#E6E0E9;
+  --popover:#2B2930;
+  --popover-foreground:#E6E0E9;
+  --primary:#D0BCFF;
+  --primary-foreground:#21005D;
+  --secondary:#4F378B;
+  --secondary-foreground:#EADDFF;
+  --muted:#4F378B;
+  --muted-foreground:#CAC4D0;
+  --accent:#4F378B;
+  --accent-foreground:#E6E0E9;
+  --border:#49454F;
+  --input:#49454F;
+  --ring:#D0BCFF;
+  --default:#36343B;
+  --warning:#F8BC66;
+  --panel-bg:#1D1B20;
+  --panel-border:1px solid transparent;
+  --panel-radius:28px;
+  --panel-shadow:0 18px 50px rgba(0,0,0,.5);
+  --panel-blur:0px;
+  --card-border:1px solid transparent;
+  --card-radius:20px;
+}
+
+:root[data-style="notion"].light{
+  --background:#FFFFFF;
+  --foreground:#292929;
+  --card:#FFFFFF;
+  --card-foreground:#292929;
+  --popover:#FFFFFF;
+  --popover-foreground:#292929;
+  --primary:#2E64A5;
+  --primary-foreground:#FFFFFF;
+  --secondary:#EFEFEC;
+  --secondary-foreground:#292929;
+  --muted:#EFEFEC;
+  --muted-foreground:#9B9B96;
+  --accent:#EFEFEC;
+  --accent-foreground:#292929;
+  --border:#E6E6E2;
+  --input:#E6E6E2;
+  --ring:#2E64A5;
+  --default:#F7F7F5;
+  --warning:#B45309;
+  --panel-bg:#FFFFFF;
+  --panel-border:1px solid #E6E6E2;
+  --panel-radius:12px;
+  --panel-shadow:0 20px 50px rgba(0,0,0,.22);
+  --panel-blur:0px;
+  --card-border:1px solid #E6E6E2;
+  --card-radius:7px;
+}
+
+:root[data-style="notion"].dark{
+  --background:#202020;
+  --foreground:#EDEDED;
+  --card:#262626;
+  --card-foreground:#EDEDED;
+  --popover:#262626;
+  --popover-foreground:#EDEDED;
+  --primary:#6EA8FF;
+  --primary-foreground:#0b1220;
+  --secondary:#333333;
+  --secondary-foreground:#EDEDED;
+  --muted:#333333;
+  --muted-foreground:#9B9B96;
+  --accent:#333333;
+  --accent-foreground:#EDEDED;
+  --border:#383838;
+  --input:#383838;
+  --ring:#6EA8FF;
+  --default:#2A2A2A;
+  --warning:#F8BC66;
+  --panel-bg:#202020;
+  --panel-border:1px solid #383838;
+  --panel-radius:12px;
+  --panel-shadow:0 20px 50px rgba(0,0,0,.5);
+  --panel-blur:0px;
+  --card-border:1px solid #383838;
+  --card-radius:7px;
+}
+
+:root[data-style="oled"].dark{
+  --background:#050505;
+  --foreground:#D8D8D8;
+  --card:#101010;
+  --card-foreground:#D8D8D8;
+  --popover:#101010;
+  --popover-foreground:#D8D8D8;
+  --primary:#88F4C2;
+  --primary-foreground:#04140d;
+  --secondary:#1E1E1E;
+  --secondary-foreground:#EDEDED;
+  --muted:#1E1E1E;
+  --muted-foreground:#8A8A8A;
+  --accent:#1E1E1E;
+  --accent-foreground:#D8D8D8;
+  --border:#262626;
+  --input:#262626;
+  --ring:#88F4C2;
+  --default:#141414;
+  --warning:#F8BC66;
+  --panel-bg:#050505;
+  --panel-border:1px solid #262626;
+  --panel-radius:14px;
+  --panel-shadow:0 26px 70px rgba(0,0,0,.85);
+  --panel-blur:0px;
+  --card-border:1px solid #262626;
+  --card-radius:10px;
+}
+
+:root[data-style="soft"].light{
+  --background:#F8F5FF;
+  --foreground:#403C59;
+  --card:rgba(255,255,255,.9);
+  --card-foreground:#403C59;
+  --popover:rgba(255,255,255,.9);
+  --popover-foreground:#403C59;
+  --primary:#6C61AF;
+  --primary-foreground:#FFFFFF;
+  --secondary:rgba(108,97,175,.12);
+  --secondary-foreground:#403C59;
+  --muted:rgba(108,97,175,.12);
+  --muted-foreground:#7A7690;
+  --accent:rgba(108,97,175,.12);
+  --accent-foreground:#403C59;
+  --border:rgba(97,80,150,.16);
+  --input:rgba(97,80,150,.16);
+  --ring:#6C61AF;
+  --default:rgba(108,97,175,.08);
+  --warning:#B45309;
+  --panel-bg:linear-gradient(135deg,#FFFEFF,#F7F3FF 55%,#EFF6FF);
+  --panel-border:1px solid rgba(255,255,255,.9);
+  --panel-radius:26px;
+  --panel-shadow:0 24px 64px rgba(97,80,150,.22);
+  --panel-blur:0px;
+  --card-border:1px solid rgba(255,255,255,.9);
+  --card-radius:18px;
+}
+
+:root[data-style="mica"].light{
+  --background:#E8EDF7;
+  --foreground:#202E45;
+  --card:rgba(255,255,255,.9);
+  --card-foreground:#202E45;
+  --popover:rgba(255,255,255,.9);
+  --popover-foreground:#202E45;
+  --primary:#2E64A5;
+  --primary-foreground:#FFFFFF;
+  --secondary:rgba(46,100,165,.12);
+  --secondary-foreground:#1B3E66;
+  --muted:rgba(46,100,165,.12);
+  --muted-foreground:#5B6B80;
+  --accent:rgba(46,100,165,.12);
+  --accent-foreground:#202E45;
+  --border:rgba(45,74,112,.16);
+  --input:rgba(45,74,112,.16);
+  --ring:#2E64A5;
+  --default:rgba(46,100,165,.08);
+  --warning:#B45309;
+  --panel-bg:rgba(247,249,252,.92);
+  --panel-border:1px solid rgba(45,74,112,.14);
+  --panel-radius:12px;
+  --panel-shadow:0 22px 60px rgba(45,74,112,.24);
+  --panel-blur:18px;
+  --card-border:1px solid rgba(45,74,112,.12);
+  --card-radius:8px;
+}
+
+:root[data-style="mica"].dark{
+  --background:#1B1B1B;
+  --foreground:#EDEDED;
+  --card:rgba(255,255,255,.06);
+  --card-foreground:#EDEDED;
+  --popover:rgba(255,255,255,.06);
+  --popover-foreground:#EDEDED;
+  --primary:#4CC2FF;
+  --primary-foreground:#04222e;
+  --secondary:rgba(76,194,255,.14);
+  --secondary-foreground:#BFE9FF;
+  --muted:rgba(76,194,255,.14);
+  --muted-foreground:#B0B0B0;
+  --accent:rgba(76,194,255,.14);
+  --accent-foreground:#EDEDED;
+  --border:#3A3A3A;
+  --input:#3A3A3A;
+  --ring:#4CC2FF;
+  --default:rgba(255,255,255,.06);
+  --warning:#F8BC66;
+  --panel-bg:rgba(32,32,32,.92);
+  --panel-border:1px solid #3A3A3A;
+  --panel-radius:12px;
+  --panel-shadow:0 22px 60px rgba(0,0,0,.55);
+  --panel-blur:18px;
+  --card-border:1px solid #3A3A3A;
+  --card-radius:8px;
+}
+
+:root[data-style="aurora"].dark{
+  --background:#0E1026;
+  --foreground:#F6F4FF;
+  --card:rgba(255,255,255,.07);
+  --card-foreground:#F6F4FF;
+  --popover:rgba(255,255,255,.07);
+  --popover-foreground:#F6F4FF;
+  --primary:#8B8CFF;
+  --primary-foreground:#0b0b1c;
+  --secondary:rgba(255,255,255,.14);
+  --secondary-foreground:#fff;
+  --muted:rgba(255,255,255,.14);
+  --muted-foreground:#A9A6C9;
+  --accent:rgba(255,255,255,.14);
+  --accent-foreground:#F6F4FF;
+  --border:rgba(255,255,255,.16);
+  --input:rgba(255,255,255,.16);
+  --ring:#8B8CFF;
+  --default:rgba(255,255,255,.08);
+  --warning:#FFD166;
+  --panel-bg:rgba(13,16,38,.62);
+  --panel-border:1px solid rgba(255,255,255,.18);
+  --panel-radius:22px;
+  --panel-shadow:0 26px 70px rgba(0,0,0,.6);
+  --panel-blur:22px;
+  --card-border:1px solid rgba(255,255,255,.12);
+  --card-radius:14px;
+}
+
+:root[data-style="zen"].light{
+  --background:#EEE9DF;
+  --foreground:#252822;
+  --card:#F7F3EA;
+  --card-foreground:#252822;
+  --popover:#F7F3EA;
+  --popover-foreground:#252822;
+  --primary:#8B3A2F;
+  --primary-foreground:#EEE9DF;
+  --secondary:#252822;
+  --secondary-foreground:#EEE9DF;
+  --muted:#252822;
+  --muted-foreground:#6F7568;
+  --accent:#252822;
+  --accent-foreground:#252822;
+  --border:#D7D0C2;
+  --input:#D7D0C2;
+  --ring:#8B3A2F;
+  --default:#E4DED2;
+  --warning:#8B3A2F;
+  --panel-bg:#EEE9DF;
+  --panel-border:1px solid #D7D0C2;
+  --panel-radius:4px;
+  --panel-shadow:0 22px 60px rgba(60,54,44,.28);
+  --panel-blur:0px;
+  --card-border:1px solid #D7D0C2;
+  --card-radius:2px;
+}
+
+:root[data-style="academia"].dark{
+  --background:#19140F;
+  --foreground:#D9C8A9;
+  --card:#221B14;
+  --card-foreground:#D9C8A9;
+  --popover:#221B14;
+  --popover-foreground:#D9C8A9;
+  --primary:#B5836B;
+  --primary-foreground:#19140F;
+  --secondary:rgba(217,200,169,.14);
+  --secondary-foreground:#E6DBC3;
+  --muted:rgba(217,200,169,.14);
+  --muted-foreground:#A08F72;
+  --accent:rgba(217,200,169,.14);
+  --accent-foreground:#D9C8A9;
+  --border:rgba(217,200,169,.22);
+  --input:rgba(217,200,169,.22);
+  --ring:#B5836B;
+  --default:#221B14;
+  --warning:#C98A5B;
+  --panel-bg:#19140F;
+  --panel-border:1px solid rgba(217,200,169,.28);
+  --panel-radius:6px;
+  --panel-shadow:0 26px 70px rgba(0,0,0,.7);
+  --panel-blur:0px;
+  --card-border:1px solid rgba(217,200,169,.18);
+  --card-radius:3px;
+}
+
+:root[data-style="brutal"].light{
+  --background:#FFFDF3;
+  --foreground:#101010;
+  --card:#FFFFFF;
+  --card-foreground:#101010;
+  --popover:#FFFFFF;
+  --popover-foreground:#101010;
+  --primary:#A16207;
+  --primary-foreground:#FFFFFF;
+  --secondary:#FFDD00;
+  --secondary-foreground:#101010;
+  --muted:#FFDD00;
+  --muted-foreground:#4A4A4A;
+  --accent:#FFDD00;
+  --accent-foreground:#101010;
+  --border:#101010;
+  --input:#101010;
+  --ring:#FFDD00;
+  --default:#F4F0DF;
+  --warning:#B45309;
+  --panel-bg:#FFFDF3;
+  --panel-border:3px solid #101010;
+  --panel-radius:0px;
+  --panel-shadow:10px 10px 0 #101010;
+  --panel-blur:0px;
+  --card-border:2px solid #101010;
+  --card-radius:0px;
+}
+
+
+/* 需要衬线的风格（中文用宋体回退，Windows 上用 Noto Serif SC） */
+:root[data-style="zen"],
+:root[data-style="academia"]{
+  --font-ui: "Songti SC", "Noto Serif SC", Georgia, serif;
+}
+
+/* 粗野主义的硬阴影只有 6px：窗口外层 p-2 只留了 8px，10px 会被裁掉 */
+:root[data-style="brutal"]{
+  --panel-shadow: 6px 6px 0 #101010;
+}

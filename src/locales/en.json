@@ -91,5 +91,13 @@
   "cancel": "Cancel",
   "confirmClear": "Clear",
   "cleared": "Cleared",
-  "orderFrozen": "Order updates after closing"
+  "orderFrozen": "Order updates after closing",
+  "themeStyle": "Theme style",
+  "edit": "Edit",
+  "tags": "Tags",
+  "addTag": "Add tag…",
+  "tagHint": "Enter to add · Esc to close",
+  "editHint": "⌘↩ save · Esc cancel",
+  "save": "Save",
+  "duplicateContent": "This content already exists"
 }

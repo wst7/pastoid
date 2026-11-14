@@ -13,6 +13,8 @@ import {
   Link2,
   Type,
   AlertCircle,
+  Tag,
+  Pencil,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
@@ -22,6 +24,7 @@ import { formatRelativeTime, itemKind, linkDomain } from "@/lib/clipboard";
 
 interface SettingsData {
   theme: string;
+  theme_style: string;
   language: string;
 }
 
@@ -112,9 +115,15 @@ export default function QuickPaste() {
   const [activeId, setActiveId] = useState<string | null>(null);
   // 面板打开期间冻结排序，避免卡片在指针下方跳动；关闭后再重排
   const [orderFrozen, setOrderFrozen] = useState(false);
+  // 标签编辑条 / 正文编辑弹层（同一时间只开一个）
+  const [tagEditor, setTagEditor] = useState<{ id: string; value: string } | null>(null);
+  const [editor, setEditor] = useState<{ id: string; draft: string; error?: string } | null>(
+    null
+  );
   const [language, setLanguage] = useState("zh");
   // 跟随系统时，系统夜间切暗也要跟着变
   const themeRef = useRef<ThemePref>("system");
+  const styleRef = useRef<string>("default");
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -232,6 +241,72 @@ export default function QuickPaste() {
     }
   }, []);
 
+  /** 把一条修改写回后端并同步本地列表 */
+  const persistItem = useCallback(async (next: ClipboardItem) => {
+    await invoke("update_clipboard_item", { item: next });
+    setItems((prev) => prev.map((i) => (i.id === next.id ? next : i)));
+  }, []);
+
+  /** 加标签：去掉前导 #、限长、去重；标签是用户投入，后端不会滚动删除这类条目 */
+  const addTag = useCallback(
+    async (item: ClipboardItem, raw: string) => {
+      const tag = raw.trim().replace(/^#+/, "").slice(0, 24);
+      if (!tag) return;
+      const existing = item.tags ?? [];
+      if (existing.includes(tag)) return;
+      try {
+        await persistItem({ ...item, tags: [...existing, tag], updatedAt: Date.now() });
+      } catch (e) {
+        console.error("Add tag failed:", e);
+      }
+    },
+    [persistItem]
+  );
+
+  const removeTag = useCallback(
+    async (item: ClipboardItem, tag: string) => {
+      const next = (item.tags ?? []).filter((t) => t !== tag);
+      try {
+        await persistItem({ ...item, tags: next, updatedAt: Date.now() });
+      } catch (e) {
+        console.error("Remove tag failed:", e);
+      }
+    },
+    [persistItem]
+  );
+
+  const openTagEditor = useCallback((item: ClipboardItem) => {
+    setEditor(null);
+    setTagEditor({ id: item.id, value: "" });
+  }, []);
+
+  const openEditor = useCallback((item: ClipboardItem) => {
+    if (item.type === "image") return;
+    setTagEditor(null);
+    setEditor({ id: item.id, draft: item.content });
+  }, []);
+
+  const saveEditor = useCallback(async () => {
+    if (!editor) return;
+    const item = items.find((i) => i.id === editor.id);
+    if (!item) {
+      setEditor(null);
+      return;
+    }
+    if (editor.draft === item.content) {
+      setEditor(null);
+      return;
+    }
+    try {
+      await persistItem({ ...item, content: editor.draft, updatedAt: Date.now() });
+      setEditor(null);
+    } catch (e) {
+      // 内容哈希有唯一索引：改成了另一条已有的内容会撞约束
+      const message = String(e).includes("UNIQUE") ? t("duplicateContent") : String(e);
+      setEditor((prev) => (prev ? { ...prev, error: message } : prev));
+    }
+  }, [editor, items, persistItem, t]);
+
   const deleteItem = useCallback(async (item: ClipboardItem) => {
     try {
       const list = filteredItemsRef.current;
@@ -292,6 +367,10 @@ export default function QuickPaste() {
   deleteItemRef.current = deleteItem;
   const clearAllRef = useRef(clearAll);
   clearAllRef.current = clearAll;
+  const openEditorRef = useRef(openEditor);
+  openEditorRef.current = openEditor;
+  const openTagEditorRef = useRef(openTagEditor);
+  openTagEditorRef.current = openTagEditor;
 
   /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
   const playEnter = useCallback(() => {
@@ -327,7 +406,7 @@ export default function QuickPaste() {
 
   useEffect(() => {
     return watchSystemTheme(() => {
-      if (themeRef.current === "system") paint("system");
+      if (themeRef.current === "system") paint("system", styleRef.current);
     });
   }, []);
 
@@ -335,7 +414,8 @@ export default function QuickPaste() {
     invoke<SettingsData>("get_settings")
       .then((data) => {
         themeRef.current = (data.theme as ThemePref) || "system";
-        paint(themeRef.current);
+        styleRef.current = data.theme_style || "default";
+        paint(themeRef.current, styleRef.current);
         if (data.language) {
           setLanguage(data.language);
           // quick-paste 是独立窗口，i18n 初始化时用的是系统语言。
@@ -343,7 +423,7 @@ export default function QuickPaste() {
           void i18n.changeLanguage(data.language);
         }
       })
-      .catch(() => paint("light"));
+      .catch(() => paint("light", "default"));
 
     const unlistenPanel = listen("panel-opened", () => {
       if (closeTimerRef.current !== null) {
@@ -380,10 +460,20 @@ export default function QuickPaste() {
       }
     });
 
-    const unlistenTheme = listen<string>("theme-changed", (event) => {
-      themeRef.current = (event.payload as ThemePref) || "system";
-      paint(themeRef.current);
-    });
+    const unlistenTheme = listen<ThemePref | { theme: string; style: string }>(
+      "theme-changed",
+      (event) => {
+        const payload = event.payload;
+        if (typeof payload === "string") {
+          // 旧版只发明暗字符串
+          themeRef.current = payload || "system";
+        } else if (payload) {
+          themeRef.current = (payload.theme as ThemePref) || "system";
+          styleRef.current = payload.style || "default";
+        }
+        paint(themeRef.current, styleRef.current);
+      }
+    );
 
     const unlistenChanged = listen("clipboard_changed", () => {
       // 不 reset：面板开着时新复制进来，选中不该被拽走
@@ -448,6 +538,14 @@ export default function QuickPaste() {
         e.preventDefault();
         const item = list[current];
         if (item) togglePinRef.current(item);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        const item = list[current];
+        if (item) openEditorRef.current(item);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        const item = list[current];
+        if (item) openTagEditorRef.current(item);
       } else if (
         (e.metaKey || e.ctrlKey) &&
         (e.key === "Backspace" || e.key === "Delete")
@@ -585,11 +683,14 @@ export default function QuickPaste() {
     );
   };
 
+  // 标签编辑条要展示当前条目的已有标签
+  const tagTarget = tagEditor ? items.find((i) => i.id === tagEditor.id) ?? null : null;
+
   return (
     <div className="h-screen w-screen p-2">
       <div
         ref={panelRef}
-        className="h-full flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-background/90 backdrop-blur-2xl shadow-xl shadow-black/10"
+        className="pastoid-panel relative h-full flex flex-col overflow-hidden"
       >
         {/* 顶部：搜索 + 分类 */}
         <div className="shrink-0 flex items-center gap-2 px-3 pt-3 pb-2">
@@ -679,15 +780,13 @@ export default function QuickPaste() {
                     tabIndex={-1}
                     onClick={() => paste(item)}
                     onMouseEnter={() => hoverItem(item.id)}
-                    className={`group relative shrink-0 w-[190px] h-full flex flex-col text-left rounded-xl border overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.985] ${
+                    className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.985] ${
                       isActive
-                        ? item.isPinned
-                          ? "border-primary/80 ring-2 ring-primary/30 bg-warning/[0.06] shadow-sm"
-                          : "border-primary/80 ring-2 ring-primary/30 bg-card shadow-sm"
+                        ? "ring-2 ring-primary/40 shadow-sm"
                         : item.isPinned
-                          ? "border-warning/30 bg-warning/[0.06] hover:border-warning/50"
-                          : "border-border bg-card/70 hover:border-border/80"
-                    }`}
+                          ? "hover:brightness-[0.98]"
+                          : "hover:brightness-[0.98]"
+                    } ${item.isPinned ? "pinned" : ""}`}
                   >
                     <div className="shrink-0 flex items-center gap-1.5 px-2.5 pt-2 pb-1">
                       <KindIcon kind={kind} />
@@ -709,8 +808,51 @@ export default function QuickPaste() {
                       {renderPreview(item)}
                     </div>
 
+                    {/* 用户打的标签：最多显示 3 个，其余折成 +N */}
+                    {item.tags?.length ? (
+                      <div className="shrink-0 flex items-center gap-1 px-2.5 pb-1.5 overflow-hidden">
+                        {item.tags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-[9px] leading-[14px] px-1 rounded bg-primary/10 text-primary truncate max-w-[80px]"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                        {item.tags.length > 3 && (
+                          <span className="text-[9px] text-muted-foreground shrink-0">
+                            +{item.tags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+
                     {/* 悬浮操作 */}
                     <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTagEditor(item);
+                        }}
+                        className={`w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-default ${
+                          item.tags?.length ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        aria-label={t("tags")}
+                      >
+                        <Tag size={11} />
+                      </button>
+                      {item.type !== "image" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditor(item);
+                          }}
+                          className="w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-default text-muted-foreground hover:text-foreground"
+                          aria-label={t("edit")}
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -741,11 +883,109 @@ export default function QuickPaste() {
           )}
         </div>
 
+        {/* 标签编辑条：贴着底部快捷键栏，不遮挡卡片 */}
+        {tagEditor && tagTarget && (
+          <div className="absolute inset-x-0 bottom-8 z-20 flex items-center gap-1.5 px-3 py-2 border-t border-border/60 bg-background/95">
+            <Tag size={12} className="text-muted-foreground shrink-0" />
+            {(tagTarget.tags ?? []).map((tag) => (
+              <button
+                key={tag}
+                onClick={() => void removeTag(tagTarget, tag)}
+                className="shrink-0 flex items-center gap-1 text-[10.5px] px-1.5 py-[2px] rounded bg-primary/10 text-primary"
+                aria-label={t("delete")}
+              >
+                #{tag}
+                <X size={9} />
+              </button>
+            ))}
+            <input
+              autoFocus
+              value={tagEditor.value}
+              onChange={(e) => setTagEditor({ ...tagEditor, value: e.target.value })}
+              onKeyDown={(e) => {
+                // 别让 Esc / 方向键漏到面板的全局快捷键
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void addTag(tagTarget, tagEditor.value);
+                  setTagEditor({ ...tagEditor, value: "" });
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setTagEditor(null);
+                } else if (
+                  e.key === "Backspace" &&
+                  !tagEditor.value &&
+                  (tagTarget.tags ?? []).length > 0
+                ) {
+                  e.preventDefault();
+                  const tags = tagTarget.tags ?? [];
+                  void removeTag(tagTarget, tags[tags.length - 1]);
+                }
+              }}
+              placeholder={t("addTag")}
+              spellCheck={false}
+              className="flex-1 min-w-0 bg-transparent text-[11.5px] text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <span className="shrink-0 text-[10px] text-muted-foreground">{t("tagHint")}</span>
+          </div>
+        )}
+
+        {/* 正文编辑弹层：图片不支持改内容 */}
+        {editor && (
+          <div className="absolute inset-0 z-30 flex flex-col gap-2 p-3 bg-background/95 backdrop-blur">
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <Pencil size={12} />
+              <span>{t("edit")}</span>
+            </div>
+            <textarea
+              autoFocus
+              value={editor.draft}
+              onChange={(e) =>
+                setEditor({ ...editor, draft: e.target.value, error: undefined })
+              }
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditor(null);
+                } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  void saveEditor();
+                }
+              }}
+              spellCheck={false}
+              className="flex-1 min-h-0 w-full resize-none rounded-lg border border-border bg-card p-3 text-[12.5px] leading-relaxed text-card-foreground outline-none focus:ring-2 focus:ring-ring/40"
+            />
+            {editor.error && (
+              <div className="text-[11px] text-destructive">{editor.error}</div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">{t("editHint")}</span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setEditor(null)}
+                  className="rounded-md border border-border px-2.5 py-1 text-[11.5px] text-muted-foreground hover:bg-default"
+                >
+                  {t("cancel")}
+                </button>
+                <button
+                  onClick={() => void saveEditor()}
+                  className="rounded-md bg-primary px-2.5 py-1 text-[11.5px] text-primary-foreground hover:opacity-90"
+                >
+                  {t("save")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 底部：快捷键提示（按平台显示 ⌘ 还是 Ctrl） */}
         <div className="shrink-0 flex items-center gap-3 px-3 h-8 border-t border-border/60 text-[10.5px] text-muted-foreground">
           <Hint keys={["←", "→"]} label={t("nav")} />
           <Hint keys={[enterLabel]} label={t("paste")} />
           <Hint keys={[modKey, "P"]} label={t("pin")} />
+          <Hint keys={[modKey, "E"]} label={t("edit")} />
+          <Hint keys={[modKey, "T"]} label={t("tags")} />
           <Hint keys={[modKey, backspaceLabel]} label={t("delete")} />
           <Hint keys={[modKey, shiftLabel, "X"]} label={t("clearAll")} />
           <span className="ml-auto flex items-center gap-2">
