@@ -17,13 +17,8 @@ import {
 import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { isMac, modKeyLabel } from "@/lib/platform";
-import type { ClipboardItem, ClipboardFilter } from "@/types/clipboard";
-import {
-  formatRelativeTime,
-  itemKind,
-  linkDomain,
-  sortItems,
-} from "@/lib/clipboard";
+import type { ClipboardCounts, ClipboardItem, ClipboardFilter } from "@/types/clipboard";
+import { formatRelativeTime, itemKind, linkDomain } from "@/lib/clipboard";
 
 interface SettingsData {
   theme: string;
@@ -39,6 +34,13 @@ const escLabel = isMac ? "esc" : "Esc";
 
 /** 面板退场动画时长，必须和 index.css 里的 .panel-anim-out 一致 */
 const PANEL_EXIT_MS = 70;
+
+/** 后端一次返回的窗口大小：历史可以无限增长，前端只拿面板用得上的那一截 */
+const PANEL_WINDOW = 200;
+/** 面板上最多摆多少张卡，更多靠搜索找 */
+const PANEL_VISIBLE = 40;
+/** 搜索防抖：每敲一个字符就打一次后端没有意义 */
+const SEARCH_DEBOUNCE_MS = 120;
 
 /** 图片内容只拉一次，后续复用 data URL */
 const imageCache = new Map<string, string>();
@@ -103,6 +105,8 @@ export default function QuickPaste() {
   const [filter, setFilter] = useState<ClipboardFilter>("all");
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 筛选 chip 的计数是全量统计（后端 SQL 出），不是当前窗口的条数
+  const [counts, setCounts] = useState<ClipboardCounts>({ all: 0, text: 0, image: 0, link: 0 });
   // 选中态用 id 而不是下标：卡片重排（置顶、删除、新条目插入）时，
   // 选中的应该始终是「同一条内容」，否则回车会粘错东西。
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -126,55 +130,44 @@ export default function QuickPaste() {
   const searchRef = useRef(search);
   searchRef.current = search;
 
-  const loadItems = useCallback(async (resetSelection = false) => {
-    try {
-      const data: ClipboardItem[] = await invoke("get_clipboard_items");
-      const sorted = sortItems(data);
-      setItems(sorted);
-      setActiveId((prev) => {
-        if (!resetSelection && prev && sorted.some((i) => i.id === prev)) return prev;
-        return sorted[0]?.id ?? null;
-      });
-      setLoadError(null);
-    } catch (e) {
-      console.error("Failed to load items:", e);
-      // 出错和「剪贴板是空的」长得一样，必须区分，否则用户以为记录丢了
-      setLoadError(String(e));
-    }
-  }, []);
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
 
-  const searchLower = search.trim().toLowerCase();
-
-  const filteredItems = useMemo(() => {
-    const bySearch = searchLower
-      ? items.filter((item) => item.content.toLowerCase().includes(searchLower))
-      : items;
-
-    const byKind = bySearch.filter((item) => {
-      switch (filter) {
-        case "image":
-          return item.type === "image";
-        case "link":
-          return itemKind(item) === "link";
-        case "text":
-          return itemKind(item) === "text";
-        default:
-          return true;
+  /**
+   * 拉一次面板数据：窗口、筛选、搜索全在后端（SQL）完成。
+   * `reset` 时选中落到第一张（搜索/筛选/重开面板）；否则尽量保持选中同一条内容。
+   */
+  const refresh = useCallback(
+    async (opts?: { reset?: boolean; query?: string; filter?: ClipboardFilter }) => {
+      const query = opts?.query ?? searchRef.current;
+      const flt = opts?.filter ?? filterRef.current;
+      try {
+        const [data, countsData] = await Promise.all([
+          invoke<ClipboardItem[]>("list_clipboard_items", {
+            limit: PANEL_WINDOW,
+            filter: flt,
+            query,
+          }),
+          invoke<ClipboardCounts>("get_clipboard_counts"),
+        ]);
+        setItems(data);
+        setCounts(countsData);
+        setActiveId((prev) => {
+          if (!opts?.reset && prev && data.some((i) => i.id === prev)) return prev;
+          return data[0]?.id ?? null;
+        });
+        setLoadError(null);
+      } catch (e) {
+        console.error("Failed to load items:", e);
+        // 出错和「剪贴板是空的」长得一样，必须区分，否则用户以为记录丢了
+        setLoadError(String(e));
       }
-    });
-
-    return byKind.slice(0, 40);
-  }, [items, searchLower, filter]);
-
-  const counts = useMemo(
-    () => ({
-      all: items.length,
-      text: items.filter((i) => itemKind(i) === "text").length,
-      image: items.filter((i) => i.type === "image").length,
-      link: items.filter((i) => itemKind(i) === "link").length,
-    }),
-    [items]
+    },
+    []
   );
+
+  // 前端只负责展示窗口里的前 40 张，其余靠搜索
+  const filteredItems = useMemo(() => items.slice(0, PANEL_VISIBLE), [items]);
 
   const paste = useCallback(async (item: ClipboardItem) => {
     try {
@@ -191,7 +184,7 @@ export default function QuickPaste() {
       const updated = { ...item, isPinned: !item.isPinned, updatedAt: Date.now() };
       await invoke("update_clipboard_item", { item: updated });
       // 只换图钉，不重排：面板开着的时候卡片不能从指针下面跑掉。
-      // 下次打开时 loadItems() 会按置顶/时间重新排序。
+      // 下次打开时 refresh() 会按置顶/时间重新排序。
       setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
       setOrderFrozen(true);
     } catch (e) {
@@ -310,17 +303,16 @@ export default function QuickPaste() {
       })
       .catch(() => paint("light"));
 
-    loadItems(true);
-
     const unlistenPanel = listen("panel-opened", () => {
       if (closeTimerRef.current !== null) {
         clearTimeout(closeTimerRef.current);
         closeTimerRef.current = null;
       }
       closingRef.current = false;
-      loadItems(true);
       setSearch("");
       setFilter("all");
+      // 状态是异步的，这里显式带上空查询/全筛选，别依赖 ref 已经更新
+      void refresh({ reset: true, query: "", filter: "all" });
       setOrderFrozen(false);
       // 上次关窗时可能停在列表中间，重开必须回到最左边，
       // 否则第一张卡在视口外，回车粘的是看不见的内容
@@ -345,7 +337,8 @@ export default function QuickPaste() {
     });
 
     const unlistenChanged = listen("clipboard_changed", () => {
-      loadItems();
+      // 不 reset：面板开着时新复制进来，选中不该被拽走
+      void refresh();
     });
 
     const unlistenCleared = listen("clipboard-cleared", () => {
@@ -439,7 +432,7 @@ export default function QuickPaste() {
     };
     // search 只用于 Esc 判断，不希望在打字时重建监听
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadItems, playEnter, requestClose, selectIndex]);
+  }, [refresh, playEnter, requestClose, selectIndex]);
 
   // 选中项跟着滚动，别跑出可视区。hover 触发的选中不滚（scrollNext=false）。
   useEffect(() => {
@@ -459,12 +452,14 @@ export default function QuickPaste() {
     scrollNext.current = true;
   }, [activeId]);
 
-  // 搜索或筛选变化后，选中落到第一张
+  // 搜索防抖、筛选立即刷新，结果都由后端出（首帧挂载时也会跑一次，即初始加载）
   useEffect(() => {
-    const first = filteredItemsRef.current[0];
-    scrollNext.current = true;
-    setActiveId(first ? first.id : null);
-  }, [searchLower, filter]);
+    const timer = window.setTimeout(
+      () => void refresh({ reset: true }),
+      search ? SEARCH_DEBOUNCE_MS : 0
+    );
+    return () => window.clearTimeout(timer);
+  }, [search, filter, refresh]);
 
   // 鼠标滚轮上下 = 横向滚动。React 的 onWheel 是 passive 的，拦不住页面滚动，
   // 所以这里用原生监听 + preventDefault。
@@ -583,7 +578,7 @@ export default function QuickPaste() {
                   {t("loadFailed")}: {loadError}
                 </span>
                 <button
-                  onClick={() => void loadItems(true)}
+                  onClick={() => void refresh({ reset: true })}
                   className="rounded-md border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-destructive/10"
                 >
                   {t("retry")}

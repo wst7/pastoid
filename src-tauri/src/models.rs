@@ -25,6 +25,18 @@ pub struct ClipboardItem {
     pub image_hash: Option<String>,
 }
 
+/// 各筛选维度的条目数。
+///
+/// 前端筛选 chip 直接用它：历史可以无限增长之后，把全量条目拉到前端
+/// 再数一遍既慢又不现实，统计就在 SQL 里做。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ClipboardCounts {
+    pub all: usize,
+    pub text: usize,
+    pub image: usize,
+    pub link: usize,
+}
+
 // 应用状态
 use std::collections::HashSet;
 use std::path::PathBuf;

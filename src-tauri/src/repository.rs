@@ -181,6 +181,75 @@ impl ClipboardRepository {
         self.len() == 0
     }
 
+    /// 面板列表：筛选 + 模糊搜索 + 窗口，全部在 SQL 里完成。
+    ///
+    /// `filter`: `all` | `text` | `image` | `link`；`query` 为空表示不加内容条件。
+    /// 历史可以无限增长之后，前端只拿一个窗口（面板最多显示 40 张卡），
+    /// 搜索命中全表但同样只回一个窗口——这是不再「全量拉取」的关键。
+    pub fn list(&self, limit: usize, filter: &str, query: &str) -> Vec<ClipboardItem> {
+        let limit = limit.clamp(1, 1_000) as i64;
+
+        let filter_cond = match filter {
+            "image" => "type = 'image'".to_string(),
+            "text" => format!("type = 'text' AND NOT {}", db::LINK_PREDICATE),
+            "link" => format!("type = 'text' AND {}", db::LINK_PREDICATE),
+            _ => "1 = 1".to_string(),
+        };
+
+        // LIKE 里 % _ \ 是通配符，用户输入的要转义掉，否则搜 "100%" 会命中一切
+        let pattern = {
+            let trimmed = query.trim();
+            if trimmed.is_empty() {
+                "%%".to_string()
+            } else {
+                let escaped = trimmed
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                format!("%{escaped}%")
+            }
+        };
+
+        self.with_conn(|conn| {
+            let sql = format!(
+                "SELECT * FROM items
+                 WHERE {filter_cond} AND content LIKE ?2 ESCAPE '\\'
+                 ORDER BY is_pinned DESC, created_at DESC, rowid DESC
+                 LIMIT ?1"
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params![limit, pattern], db::row_to_item)
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        })
+        .unwrap_or_default()
+    }
+
+    /// 各筛选维度的全量计数（筛选 chip 用），不把历史拉到前端去数。
+    pub fn counts(&self) -> crate::models::ClipboardCounts {
+        self.with_conn(|conn| {
+            let sql = format!(
+                "SELECT COUNT(*),
+                        COALESCE(SUM(CASE WHEN type = 'text' AND NOT {p} THEN 1 ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN type = 'image' THEN 1 ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN type = 'text' AND {p} THEN 1 ELSE 0 END), 0)
+                 FROM items",
+                p = db::LINK_PREDICATE
+            );
+            conn.query_row(&sql, [], |row| {
+                Ok(crate::models::ClipboardCounts {
+                    all: row.get::<_, i64>(0)? as usize,
+                    text: row.get::<_, i64>(1)? as usize,
+                    image: row.get::<_, i64>(2)? as usize,
+                    link: row.get::<_, i64>(3)? as usize,
+                })
+            })
+            .map_err(|e| e.to_string())
+        })
+        .unwrap_or_default()
+    }
+
     // ==================== 写入（写穿，立即落盘） ====================
 
     /// 添加条目。
@@ -569,6 +638,76 @@ mod tests {
         let refs = repo.referenced_image_paths();
         assert_eq!(refs.len(), 1);
         assert!(refs.contains("images/keep.png"));
+    }
+
+    #[test]
+    fn test_list_filters_searches_and_limits() {
+        let (_dir, repo) = text_repo(100);
+        repo.add(ClipboardItem::new("hello world".to_string(), "text"));
+        repo.add(ClipboardItem::new(
+            "https://example.com/page".to_string(),
+            "text",
+        ));
+        repo.add(ClipboardItem::new_image(
+            "images/x.png".to_string(),
+            "hx".to_string(),
+        ));
+
+        assert_eq!(repo.list(10, "all", "").len(), 3);
+
+        let images = repo.list(10, "image", "");
+        assert_eq!(images.len(), 1);
+        assert!(images[0].is_image());
+
+        // link 是「文本里是链接」，不是独立 type
+        let links = repo.list(10, "link", "");
+        assert_eq!(links.len(), 1);
+        assert!(links[0].content.starts_with("https://"));
+
+        // text 不含链接
+        let texts = repo.list(10, "text", "");
+        assert_eq!(texts.len(), 1);
+        assert_eq!(texts[0].content, "hello world");
+
+        // 模糊搜索命中全表
+        assert_eq!(repo.list(10, "all", "EXAMPLE").len(), 1);
+        assert!(repo.list(10, "all", "nothing-match").is_empty());
+
+        // LIKE 通配符按字面处理：搜 "%" 不能命中所有内容
+        assert_eq!(repo.list(10, "all", "%").len(), 0);
+
+        // 窗口截断
+        assert_eq!(repo.list(2, "all", "").len(), 2);
+    }
+
+    #[test]
+    fn test_list_orders_pinned_first() {
+        let (_dir, repo) = text_repo(100);
+        let mut pinned = ClipboardItem::new("pinned".to_string(), "text");
+        pinned.is_pinned = true;
+        repo.add(ClipboardItem::new("normal".to_string(), "text"));
+        repo.add(pinned);
+
+        let listed = repo.list(10, "all", "");
+        assert!(listed[0].is_pinned);
+        assert!(!listed[1].is_pinned);
+    }
+
+    #[test]
+    fn test_counts_by_kind() {
+        let (_dir, repo) = text_repo(100);
+        repo.add(ClipboardItem::new("hello".to_string(), "text"));
+        repo.add(ClipboardItem::new(
+            "https://example.com".to_string(),
+            "text",
+        ));
+        repo.add(ClipboardItem::new_image(
+            "images/c.png".to_string(),
+            "hc".to_string(),
+        ));
+
+        let c = repo.counts();
+        assert_eq!((c.all, c.text, c.image, c.link), (3, 1, 1, 1));
     }
 
     #[test]

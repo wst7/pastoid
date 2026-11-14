@@ -1,4 +1,4 @@
-use crate::models::{AppState, ClipboardItem, Settings};
+use crate::models::{AppState, ClipboardCounts, ClipboardItem, Settings};
 use crate::storage;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager};
@@ -63,9 +63,24 @@ fn restore_clipboard(snapshot: ClipboardSnapshot) {
 
 // === 历史条目 ===
 
+/// 面板列表：窗口 + 筛选 + 模糊搜索，全部在 SQL 里完成。
+///
+/// 历史可以无限增长之后不能再全量返回（把 100 万条序列化过 IPC 会拖死 webview），
+/// 前端面板最多显示 40 张卡，默认给 200 的窗口留出滚动余量。
 #[tauri::command]
-pub fn get_clipboard_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
-    Ok(state.repo.get_items())
+pub fn list_clipboard_items(
+    limit: usize,
+    filter: String,
+    query: String,
+    state: tauri::State<AppState>,
+) -> Result<Vec<ClipboardItem>, String> {
+    Ok(state.repo.list(limit, &filter, &query))
+}
+
+/// 各筛选维度的全量计数（筛选 chip 用），不把历史拉到前端去数
+#[tauri::command]
+pub fn get_clipboard_counts(state: tauri::State<AppState>) -> Result<ClipboardCounts, String> {
+    Ok(state.repo.counts())
 }
 
 #[tauri::command]

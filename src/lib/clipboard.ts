@@ -57,11 +57,3 @@ export function formatRelativeTime(timestamp: number, lang: string): string {
   const md = `${date.getMonth() + 1}/${date.getDate()}`;
   return `${md} ${hhmm}`;
 }
-
-/** 列表排序：置顶优先，其次按时间倒序 */
-export function sortItems(items: ClipboardItem[]): ClipboardItem[] {
-  return [...items].sort((a, b) => {
-    if (a.isPinned !== b.isPinned) return Number(b.isPinned) - Number(a.isPinned);
-    return b.createdAt - a.createdAt;
-  });
-}

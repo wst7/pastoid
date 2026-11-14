@@ -18,3 +18,11 @@ export interface ClipboardItem {
 }
 
 export type ClipboardFilter = "all" | "text" | "image" | "link";
+
+/** 各筛选维度的全量计数（后端 SQL 统计，筛选 chip 用） */
+export interface ClipboardCounts {
+  all: number;
+  text: number;
+  image: number;
+  link: number;
+}

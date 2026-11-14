@@ -39,6 +39,12 @@ pub enum HistoryMigration {
     JsonCorrupt,
 }
 
+/// 「这是一条链接」的 SQL 判定，和前端 `isLink()` 对齐：
+/// 去掉首尾空白（空格/Tab/换行）后以 http:// 或 https:// 开头。
+/// LIKE 默认对 ASCII 忽略大小写，等价于前端的 `/i` 标志。
+pub(crate) const LINK_PREDICATE: &str = "(TRIM(content, ' ' || char(9) || char(10) || char(13)) LIKE 'http://%' \
+    OR TRIM(content, ' ' || char(9) || char(10) || char(13)) LIKE 'https://%')";
+
 /// 内容去重键：和图片 `imageHash` 同一套思路（blake3），
 /// 索引只存 32 字节摘要，不拿最长 512KB 的原文当索引键。
 pub fn content_hash(content: &str) -> String {
