@@ -43,6 +43,62 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - `src/quick-paste-entry.tsx` → `quick-paste.html` → `src/app/QuickPaste.tsx`（快速粘贴面板）
 - Vite 配置多入口: `vite.config.ts` 中 `build.rollupOptions.input`
 
+**快速粘贴面板交互约定（重要）：**
+- **选中态用 `activeId`（id），不要用下标**：置顶/删除/新条目插入都会重排列表，
+  下标会让选中漂到别的卡上，回车粘错内容
+- **面板打开期间冻结排序**：置顶只换图钉不重排，下次打开 `loadItems()` 时才重新排序；
+  面板开着时卡片不能从指针下面跑掉
+- **hover 只改选中、不滚动**；滚动只由键盘触发（`scrollNext` ref 区分），否则鼠标下的卡片会自己跑
+- **hover 反馈由 React 状态控制，不用 CSS `:hover`**（`hoveredId`）：键盘换卡后要立刻收掉悬浮样式，
+  否则鼠标停留的那张卡会一直显示按钮/变暗，看起来像"还选中着"；键盘操作后鼠标要移动 ≥4px 才恢复 hover
+- 卡片操作按钮的**四个槽位始终渲染**（隐藏只用 opacity + pointer-events:none），
+  这样图钉按钮在「只显示固定状态」和「四个按钮全显示」时位置完全一致，不会点错。
+  顺序是 标签/编辑/删除/固定——图钉放最后一个槽位，单独显示时贴着右边缘，
+  和按钮全显示时的位置一致（rightGap 恒为 7px）
+- **图片卡片没有编辑按钮，那一格直接不渲染**（不是 opacity 0）：否则中间会留一个 20px 的空洞，
+  三个按钮看起来间距不匀。图片卡片因此是 3 个槽位，头部留白也按 76px 算
+- 按钮 20×20、图标 10px；卡片头部在按钮可见时留 `pr-[96px]`，否则长的时间文案会被盖住
+- 操作按钮的说明气泡用自定义 tooltip，且坐标要**减去面板左上角**：
+  `.pastoid-panel` 有 `backdrop-filter`，会为 fixed 子元素创建 containing block
+- 面板里不再有「清空全部记录」：这个能力只在设置页（避免在快速粘贴时误清空）
+- **键盘换卡用指数逼近滚动**（`animateScrollLeft`，时间常数 60ms、差值 <1.2px 时吸附），
+  不要直接赋值 `scrollLeft`，也不要用 `scrollIntoView({behavior:"smooth"})`：
+  原生时长不可控，连续按键会拖沓；固定起止点的补间每次按键都要重启动画，会顿。
+  指数逼近只改目标值，动画顺着新目标继续走
+- 右边缘留 **28px peek**：滑到最右时露出下一张的边，既提示"后面还有"，也让每按一次都有可见滑动
+- **滚动容器的 `padding-right` 不计入 `scrollWidth`**：滑到最右时最后一张会贴边。
+  右边距要靠滚动内容里的**末尾垫片**（`w-3 -ml-2.5`，抵消 flex gap）做进内容宽度，
+  别指望容器 padding
+- 滚动补间期间要**锁住 hover 选中**（`hoverLockUntil`）：卡片从静止的指针下经过会补发 `mouseover`，
+  不锁的话键盘选中的卡会被抢走；开面板重置滚动位置时同样要锁
+- **出入场动画**在 `src/index.css`：入场 90ms（panel-opened 事件重放 class）、退场 70ms；
+  粘贴路径不走退场动画（Rust 侧 hide 后还有 Cmd+Tab 的等待），`prefers-reduced-motion` 下归零
+- 横向卡片条的**滚轮映射**用原生 `wheel` 监听（`passive: false`），React 的 onWheel 拦不住页面滚动
+- 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
+  隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
+- **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
+  面板/卡片的形状走 `--panel-*` / `--card-*`（见 `src/index.css` 的 `.pastoid-panel` / `.pastoid-card`）
+- **外观 = 7 套风格 + 3 个明暗按钮**（自动/浅/深）：风格只保差异最大的 7 套。
+  Material 3 / 柔雾 / 云母 / 学院与已有风格太像，玻璃拟态在无系统 vibrancy 时只是半透明，
+  五套已从 `THEMES` 移除（前四套 CSS token 还在，恢复加一行；glass 的 token 已删）
+- `backdrop-filter` 在透明窗口里**没有可模糊的内容**，别再用它假装毛玻璃；
+  真玻璃需要窗口级 vibrancy（macOS NSVisualEffectView / Windows Acrylic）
+- 内层控件圆角用 `--control-radius` / `--chip-radius`（由 `--card-radius` 派生），
+  不要写死 `rounded-md`——否则粗野/侘寂会出现"外方内圆"
+- 对比度改动后跑 `npm run check:themes`：校验每套风格两版齐全、核心 token 齐全、
+  正文/次要/主色/选中环/搜索底全部达到阈值
+- 加新风格时两版都要写：结构（圆角/边框/阴影/blur）保持一致，只换颜色，
+  否则切换明暗时会像换了一套主题
+- `modes` 现在全是 `["light","dark"]`，留着是能力声明；`paint()` 的单档兜底仍然保留
+- **明暗是两层**：CSS 层靠 `html.dark/.light` 切 token；原生层靠 `getCurrentWindow().setTheme(null|light|dark)`。
+  两个窗口（面板/设置）都要设，只改 class 会让原生滚动条、输入控件停在旧明暗
+- CSS 里 `html{color-scheme:light}` / `.dark{color-scheme:dark}`，否则浏览器自绘部分不跟主题
+- `setTheme` 是异步的，media query 之后才更新：`applyTheme` 先画一次、promise 落地再画一次，
+  另有 rAF + 120ms 兜底
+- `Settings.theme` 保留但统一写 `system`，只为兼容旧配置文件
+- **编辑正文会撞内容唯一索引**：`repository.update` 返回 `Result`，命令把错误透传给前端，
+  前端显示"内容与已有条目重复"，不能假装保存成功
+
 ### 后端 (src-tauri/)
 - **Tauri 2 (Rust)**
 - **rust-i18n** 托盘菜单国际化: `src-tauri/locales/app.yml`
@@ -51,10 +107,45 @@ npm run release:major     # 0.1.0 -> 1.0.0
   - `src/commands.rs` - Tauri IPC 命令（剪贴板操作、设置管理、图片读取）
   - `src/clipboard.rs` - 剪贴板监控逻辑（文本 + 图片，按内容哈希去重）
   - `src/tray.rs` - 系统托盘菜单（显示快捷键 accelerator）
-  - `src/storage.rs` - 数据持久化、日志轮转、孤儿图片回收
+  - `src/storage.rs` - 数据目录、日志轮转、孤儿图片回收（历史数据的读写在 db.rs）
+  - `src/db.rs` - 历史库（SQLite）：schema、JSON 迁移、上限裁剪
   - `src/models.rs` - 数据结构定义
   - `src/shortcut.rs` - 全局快捷键注册/注销、健康监控、面板定位
-  - `src/repository.rs` - ClipboardRepository（内存缓存 + 定期 flush）
+  - `src/repository.rs` - ClipboardRepository（SQLite 写穿，单条操作即时落盘）
+
+**历史数据存储约定（重要）：**
+- 历史存 `history.db`（rusqlite bundled，自带 SQLite 编译，无系统依赖），**SQLite 是唯一数据源**：
+  单条操作即时落盘（写穿），没有内存全量缓存、没有定时快照、没有 flush 线程——
+  旧的「全量序列化 + 覆写」是 O(N)，条目一多就是卡顿源，而且 `fs::write` 非原子，崩溃截断会丢历史
+- `clipboard_data.json` **只当迁移源和备份：永远不写、不删、不改名**。
+  `PRAGMA user_version >= 1` 表示已迁移过；迁移在 `ClipboardRepository::new` 里跑：
+  单事务导入、按 id/内容去重，成功后才写 version
+- JSON 读失败 / 解析失败都**不写 version**（下次启动重试）；解析失败时原文件保持不动，
+  日志里给出路径供手动恢复——别把「解析失败」和「读失败」混成一个分支
+- 去重靠唯一索引 `ux_items_dedup (type, content_hash)`，`content_hash = blake3(内容)`：
+  最长 512KB 的原文不能当索引键；图片另有 `image_hash` 唯一索引
+- `max_items = 0` 表示不限（无限保存）：条数裁剪跳过，`get_history` 也不拼 LIMIT
+  （`LIMIT 0` 会永远返回空）；非 0 时裁剪置顶优先保留，被砍掉的图片条目同步删文件
+- 图片有独立磁盘护栏 `db::MAX_IMAGES = 1000`：图片条目超过 1000 张按 `created_at DESC` 保留最新，
+  删行 + 删文件（`enforce_image_limit`，由 `enforce_max_items` 在条数裁剪后调用，
+  `max_items == 0` 的分支也调）——文本可以不限，图片不限会把磁盘吃光
+- **带 tag 的条目永不参与滚动删除**：`db::TAGGED_PREDICATE` 把它们从条数裁剪和图片护栏里排除。
+  打 tag 是明确的用户投入，复制新内容时不能把它挤掉。
+  注意 tagged **仍然计入** `max_items` 名额（上限 3 且 1 条 tagged → 只留 2 条普通），
+  只有 pinned/tagged 本身就超过上限时总数才会突破上限
+- **搜索同时命中正文和 tag**：`repository.list` 用 `json_each` 展开 tags 再 LIKE，
+  给条目打上 "work" 之后搜 "work" 能捞出来
+- **调低上限 / 关闭「不限」会删数据**：`set_max_items` 在 `new_max > 0 && (old_max == 0 || new_max < old_max)`
+  时立刻裁剪（0 是无穷大，所以 0→n 也要裁）。设置页提交前必须用 `preview_trim_history`
+  算一遍会删多少条并弹确认，用户取消就保持原设置
+- **`#` 前缀是标签专用查询**：`#work` 只匹配 tags、不碰正文（否则正文里的 "work" 会污染结果）；
+  前端输入 `#` 时用 `get_clipboard_tags` 的建议列表补全，点卡片上的标签 chip 也会切到 `#tag`
+- 标签以 JSON 数组存在 `items.tags`（`["work","客户A"]`），空数组等价于没打标签
+- **按标签批量删除**（`db::delete_by_tag`）：`json_each.value = ?` 精确匹配，不是 LIKE；
+  图片条目同步删磁盘文件。这是用户明确要求的删除，所以不做"tagged 保护"，
+  但设置页必须先弹确认（不可恢复）
+- 数据目录可能在 exFAT / 网络盘上：开库时尝试 WAL，PRAGMA 退回原模式就改用回滚日志 + `synchronous=FULL`
+- `images/`、`settings.json`、`location.txt` 与历史库无关，数据目录搬家逻辑原样生效
 
 **剪贴板采集约定（重要）：**
 - 文本按「内容 + 类型」去重，图片按 `imageHash`（blake3）去重

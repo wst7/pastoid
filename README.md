@@ -9,6 +9,8 @@
   <img src="https://github.com/wst7/pastoid/actions/workflows/release.yml/badge.svg" alt="Build Status">
 </p>
 
+<p align="center">English | <a href="README_zh.md">简体中文</a></p>
+
 Pastoid is a lightweight, fast clipboard manager for macOS and Windows. Built with Tauri and React, it runs quietly in the background and keeps your clipboard history always within reach.
 
 ## Why Pastoid?
@@ -20,11 +22,13 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 - **📋 Automatic History** — Everything you copy is recorded in the background without any extra steps.
 - **📌 Pin Important Items** — Keep frequently used snippets at the top of your list for instant access.
 - **🔍 Instant Search** — Find any copied item in seconds with real-time search as you type.
-- **🌙 Theme Support** — Choose between Light, Dark, or follow your system automatically.
 - **🌍 Bilingual** — Full support for both English and Chinese interfaces.
 - **🚀 Start with System** — Optional auto-start so Pastoid is always ready when you are.
 - **⌨️ Keyboard-First** — Open the quick paste panel with a global shortcut, navigate with arrow keys, and paste without touching your mouse.
-- **⚙️ Configurable Limits** — Set how many items to keep (1–100) to balance history depth and performance.
+- **⚙️ Configurable Limits** — Set how many items to keep (1–100, or unlimited) to balance history depth and performance.
+- **🏷️ Custom Tags** — Tag any item and search tags alongside content; type `#` for suggestions or click a tag on a card to filter. Tagged items are protected from rolling deletion, and Settings can delete everything under a tag in one go.
+- **✏️ Edit Items** — Fix a copied snippet in place (`⌘E`) before pasting it.
+- **🎨 Theme Styles** — Seven looks: Default, Document, Swiss Style, Aurora, OLED Pure, Wabi-sabi and Neo Brutalism. Each comes in light and dark — pick a mode, or let it follow the system.
 
 ## Screenshots
 
@@ -43,11 +47,16 @@ Inside the panel (same actions, platform-specific keys):
 | Action | macOS | Windows |
 | --- | --- | --- |
 | Navigate | `←` `→` | `←` `→` |
+| Jump to first / last | `Home` `End` | `Home` `End` |
 | Paste | `↵` | `Enter` |
 | Pin / unpin | `⌘P` | `Ctrl+P` |
+| Edit item | `⌘E` | `Ctrl+E` |
+| Edit tags | `⌘T` | `Ctrl+T` |
+| Filter category | `⌘1`–`⌘4` | `Ctrl+1`–`Ctrl+4` |
 | Delete item | `⌘⌫` | `Ctrl+Backspace` |
-| Clear all history | `⌘⇧X` | `Ctrl+Shift+X` |
 | Close panel | `Esc` | `Esc` |
+
+> Pinning and unpinning never make cards jump around while the panel is open: only the pin state changes on the spot, and the order is re-sorted the next time the panel opens (the footer says so). The selection follows the same item, so copying something new won't move the highlight onto a different card.
 
 > On Windows the panel pastes with the system `Ctrl+V` and skips the macOS-style "switch back to the previous app" step — hiding the panel already returns focus.
 
@@ -68,7 +77,16 @@ History and images live in a single folder:
 
 **It is configurable.** On first launch Pastoid asks where to keep its data — accept the default or pick another drive (e.g. `D:\PastoidData`). You can change it later in Settings → Data folder. Pastoid restarts, moves the existing history over, and keeps working. If the target drive is unavailable at startup (an unplugged external disk, say), it falls back to the default folder instead of failing, and the data is left untouched.
 
-Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100) caps it: items beyond the limit are dropped and their image files are deleted, so the folder does not grow without bound.
+What's in the folder:
+
+| File | Purpose |
+| --- | --- |
+| `history.db` | Clipboard history, stored in SQLite — every change is written through immediately, so a crash can't lose it |
+| `clipboard_data.json` | Snapshot from older versions. It is imported into `history.db` automatically on upgrade, then kept as a backup and never modified |
+| `images/` | Screenshots and copied images, named by content hash — the same image is only ever stored once |
+| `settings.json` | Settings |
+
+Disk usage ≈ number of items × size per item, with images dominating. The **history limit** setting (1–100, or unlimited) caps it. Lowering the limit tells you how many items will be removed and trims right after you confirm — it never deletes behind your back. Items you tagged are exempt from that rolling deletion, and images have their own guard (the 1000 newest untagged images are kept).
 
 ## Installation
 

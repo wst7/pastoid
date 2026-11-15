@@ -82,7 +82,7 @@ pub fn toggle_quick_paste(app: &AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            position_panel(&window);
+            position_panel(app, &window);
             let _ = window.show();
             let _ = window.set_focus();
             let _ = window.emit("panel-opened", ());
@@ -90,15 +90,52 @@ pub fn toggle_quick_paste(app: &AppHandle) {
     }
 }
 
-/// 把面板摆在屏幕下方居中，像 Paste 那样贴着底边弹出。
-fn position_panel(window: &tauri::WebviewWindow) {
-    let monitor = match window.current_monitor() {
-        Ok(Some(monitor)) => monitor,
-        _ => return,
+/// 面板要弹在光标所在的那块屏上。
+///
+/// 隐藏中的窗口 `current_monitor()` 返回的是「上次停留的位置」——
+/// 在第二块屏按快捷键，面板会弹回第一块去，所以先按光标查屏，
+/// 拿不到再退回窗口自己那块。
+fn monitor_for_panel(app: &AppHandle, window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
+    if let Ok(cursor) = app.cursor_position() {
+        if let Ok(Some(monitor)) = app.monitor_from_point(cursor.x, cursor.y) {
+            return Some(monitor);
+        }
+    }
+    window.current_monitor().ok().flatten()
+}
+
+/// 把面板摆在光标所在屏的工作区下方居中，像 Paste 那样贴着底边弹出。
+///
+/// `work_area` 已经排除了 Dock（macOS 可以在左/右侧）和任务栏（Windows 可以在顶部），
+/// 所以底部留白不再按平台写死 110 / 60。个别平台拿不到真实工作区时
+/// （work_area 等于整块屏），退回原先的写死值，宁可留白大一点也不让面板压在 Dock 下面。
+fn position_panel(app: &AppHandle, window: &tauri::WebviewWindow) {
+    let monitor = match monitor_for_panel(app, window) {
+        Some(monitor) => monitor,
+        None => return,
     };
 
     let scale = monitor.scale_factor();
-    let screen = monitor.size().to_logical::<f64>(scale);
+    let work = monitor.work_area();
+
+    // work_area 是物理像素，先换算成逻辑坐标再和窗口尺寸对齐
+    let area_x = work.position.x as f64 / scale;
+    let area_y = work.position.y as f64 / scale;
+    let area_w = work.size.width as f64 / scale;
+    let area_h = work.size.height as f64 / scale;
+
+    let screen_bottom =
+        (monitor.position().y as f64 + monitor.size().height as f64) / scale;
+    let area_bottom = area_y + area_h;
+    // 工作区底部没有被扣掉 → 平台没给真实值，用回老的写死留白
+    let has_real_work_area = (screen_bottom - area_bottom).abs() > 1.0;
+    let bottom_margin = if has_real_work_area {
+        24.0
+    } else if cfg!(target_os = "macos") {
+        110.0
+    } else {
+        60.0
+    };
 
     let (win_width, win_height) = match window.outer_size() {
         Ok(size) => {
@@ -108,10 +145,8 @@ fn position_panel(window: &tauri::WebviewWindow) {
         Err(_) => return,
     };
 
-    // 距离屏幕底部留一点余量：macOS 避开 Dock，Windows 避开任务栏（矮得多）
-    let bottom_margin = if cfg!(target_os = "macos") { 110.0 } else { 60.0 };
-    let x = ((screen.width - win_width) / 2.0).max(0.0);
-    let y = (screen.height - win_height - bottom_margin).max(0.0);
+    let x = (area_x + (area_w - win_width) / 2.0).max(area_x);
+    let y = (area_bottom - win_height - bottom_margin).max(area_y);
 
     let _ = window.set_position(tauri::LogicalPosition::new(x, y));
 }

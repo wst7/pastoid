@@ -13,12 +13,14 @@ import { check, Update } from "@tauri-apps/plugin-updater";
 import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, message, confirm } from "@tauri-apps/plugin-dialog";
 import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
-import { FolderOpen, Trash2, X } from "lucide-react";
+import type { TagCount } from "@/types/clipboard";
+import { FolderOpen, Monitor, Moon, Sun, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
+import { THEMES, DEFAULT_STYLE } from "@/themes";
 
 interface UpdateStatus {
   update: Update | null;
@@ -28,6 +30,7 @@ interface UpdateStatus {
 interface SettingsData {
   language: string;
   theme: string;
+  theme_style: string;
   autostart: boolean;
   max_items: number;
   shortcut: string;
@@ -50,11 +53,22 @@ const languages = [
   { id: "en", name: "English" },
 ];
 
-const themes = (t: (key: string) => string) => [
-  { id: "system", name: t("system") },
-  { id: "light", name: t("light") },
-  { id: "dark", name: t("dark") },
-];
+/**
+ * 外观 = 风格 × 明暗，但只用一个下拉：每套风格直接展开成「浅色 / 深色」两项，
+ * 外加一个「跟随系统」。这样既能显式选深浅，又不用第二个控件。
+ */
+const styleOptions = (lang: string) =>
+  THEMES.map((style) => ({
+    id: style.id,
+    name: lang.startsWith("zh") ? style.name : style.nameEn,
+  }));
+
+/** 明暗三段：自动 / 浅色 / 深色 */
+const THEME_MODES = [
+  { id: "system", icon: Monitor },
+  { id: "light", icon: Sun },
+  { id: "dark", icon: Moon },
+] as const;
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
@@ -85,7 +99,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="mb-1.5 px-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+      <div className="overflow-hidden rounded-[var(--card-radius)] bg-card shadow-sm ring-1 ring-black/5 dark:ring-white/10">
         {children}
       </div>
     </section>
@@ -98,13 +112,14 @@ export default function SettingsApp() {
   const [settings, setSettings] = useState<SettingsData>({
     language: "zh",
     theme: "system",
+    theme_style: DEFAULT_STYLE,
     autostart: false,
     max_items: 20,
     shortcut: defaultShortcut,
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
-  // 系统明暗变化时要知道现在是不是「跟随系统」档
-  const themeRef = useRef<ThemePref>("system");
+  // 风格要单独记一份：系统明暗变化时重画要带上它
+  const styleRef = useRef<string>(DEFAULT_STYLE);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -124,11 +139,19 @@ export default function SettingsApp() {
   // 插件没报错、但远端确实有更新时，给一个手动下载的兜底（平台 key 不匹配等静默失败）
   const [manualUpdate, setManualUpdate] = useState<string | null>(null);
 
+  const themeRef = useRef<ThemePref>("system");
   const oldShortcutRef = useRef(settings.shortcut);
+  // 「不限」期间 max_items 存 0，取消勾选时要恢复成之前的数值
+  const lastMaxItemsRef = useRef(20);
+  // 输入框用草稿值，失焦/回车才提交，避免每敲一位就弹一次裁剪确认
+  const [maxDraft, setMaxDraft] = useState("20");
+  // 标签列表（设置页的「按标签删除」用）
+  const [tags, setTags] = useState<TagCount[]>([]);
 
   useEffect(() => {
     loadSettings();
     loadStorage();
+    loadTags();
   }, []);
 
   useEffect(() => {
@@ -147,25 +170,29 @@ export default function SettingsApp() {
     };
   }, []);
 
-  // 系统外观变化（夜间自动变暗等）：只在「跟随系统」档响应
+  // 系统外观变化（夜间自动变暗等）：双模式风格跟着重画
   useEffect(() => {
-    return watchSystemTheme(() => {
-      if (themeRef.current === "system") paint("system");
-    });
+    return watchSystemTheme(() => paint(styleRef.current, themeRef.current));
   }, []);
 
   const loadSettings = async () => {
     try {
       const data = await invoke<SettingsData>("get_settings");
+      const loadedMax = data.max_items ?? 20;
+      // 0（不限）没有可恢复的数值，保持 ref 里的默认值
+      if (loadedMax > 0) lastMaxItemsRef.current = loadedMax;
       setSettings({
         language: data.language || "zh",
-        theme: data.theme || "light",
+        theme: data.theme || "system",
+        theme_style: data.theme_style || DEFAULT_STYLE,
         autostart: data.autostart ?? false,
-        max_items: data.max_items ?? 20,
+        max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
+      setMaxDraft(String(loadedMax > 0 ? loadedMax : lastMaxItemsRef.current));
+      styleRef.current = data.theme_style || DEFAULT_STYLE;
       themeRef.current = (data.theme as ThemePref) || "system";
-      applyTheme(themeRef.current);
+      applyTheme(styleRef.current, themeRef.current);
       if (data.language) {
         i18n.changeLanguage(data.language === "zh" ? "zh" : "en");
       }
@@ -179,8 +206,9 @@ export default function SettingsApp() {
   const saveSettings = async (newSettings: SettingsData): Promise<boolean> => {
     try {
       await invoke("save_settings", { settings: newSettings });
-      themeRef.current = newSettings.theme as ThemePref;
-      applyTheme(themeRef.current);
+      styleRef.current = newSettings.theme_style || DEFAULT_STYLE;
+      themeRef.current = (newSettings.theme as ThemePref) || "system";
+      applyTheme(styleRef.current, themeRef.current);
       setSaveError(null);
       return true;
     } catch (error) {
@@ -199,6 +227,14 @@ export default function SettingsApp() {
     return ok;
   };
 
+  const loadTags = async () => {
+    try {
+      setTags(await invoke<TagCount[]>("get_clipboard_tags"));
+    } catch (error) {
+      console.error("Failed to load tags:", error);
+    }
+  };
+
   const loadStorage = async () => {
     try {
       setStorage(await invoke<StorageInfo>("get_storage_info"));
@@ -214,7 +250,11 @@ export default function SettingsApp() {
     if (ok) i18n.changeLanguage(language === "zh" ? "zh" : "en");
   };
 
-  const handleThemeChange = async (theme: string) => {
+  const handleStyleChange = async (theme_style: string) => {
+    await persist({ ...settings, theme_style });
+  };
+
+  const handleThemeModeChange = async (theme: "system" | "light" | "dark") => {
     await persist({ ...settings, theme });
   };
 
@@ -222,9 +262,63 @@ export default function SettingsApp() {
     await persist({ ...settings, autostart: isSelected });
   };
 
-  const handleMaxItemsChange = async (value: string) => {
-    const max_items = Math.max(1, Math.min(100, parseInt(value) || 20));
-    await persist({ ...settings, max_items });
+  /** 调低上限前先问一句：会删多少条、能不能接受 */
+  const confirmTrim = async (max: number): Promise<boolean> => {
+    let willDelete = 0;
+    try {
+      willDelete = await invoke<number>("preview_trim_history", { maxItems: max });
+    } catch (e) {
+      console.error("Preview trim failed:", e);
+    }
+    if (willDelete <= 0) return true;
+    return await confirm(t("trimConfirm", { count: willDelete }), {
+      title: t("trimConfirmTitle"),
+      kind: "warning",
+    });
+  };
+
+  const commitMaxDraft = async () => {
+    const parsed = Math.max(1, Math.min(100, parseInt(maxDraft) || 20));
+    setMaxDraft(String(parsed));
+    if (parsed === settings.max_items) return;
+
+    if (!(await confirmTrim(parsed))) {
+      setMaxDraft(String(settings.max_items));
+      return;
+    }
+    lastMaxItemsRef.current = parsed;
+    await persist({ ...settings, max_items: parsed });
+    // 裁剪后条目数变了，页脚的「当前 N 条」要跟着更新
+    void loadStorage();
+  };
+
+  const handleUnlimitedChange = async (isSelected: boolean) => {
+    if (isSelected) {
+      if (settings.max_items > 0) lastMaxItemsRef.current = settings.max_items;
+      await persist({ ...settings, max_items: 0 });
+    } else {
+      // 恢复勾选前的数值；没有（首次运行 / 之前存的就是 0）就回默认 20
+      const cap = lastMaxItemsRef.current || 20;
+      // 解除「不限」会立刻按上限裁剪，先确认，别让用户不知不觉丢记录
+      if (!(await confirmTrim(cap))) return;
+      await persist({ ...settings, max_items: cap });
+      void loadStorage();
+    }
+  };
+
+  const handleDeleteTag = async (tag: string, count: number) => {
+    const ok = await confirm(t("deleteTagConfirm", { tag, count }), {
+      title: t("deleteTagTitle"),
+      kind: "warning",
+    });
+    if (!ok) return;
+    try {
+      await invoke<number>("delete_items_by_tag", { tag });
+      await loadTags();
+      await loadStorage();
+    } catch (error) {
+      console.error("Delete by tag failed:", error);
+    }
   };
 
   const handleChangeDataDir = async () => {
@@ -423,11 +517,13 @@ export default function SettingsApp() {
     }
   };
 
-  const themeOptions = themes(t);
 
-  const maxItems = settings.max_items || 20;
+  const isUnlimited = settings.max_items === 0;
   const itemCount = storage?.item_count ?? 0;
-  const usageRatio = Math.min(100, Math.round((itemCount / maxItems) * 100));
+  // 不限模式没有分母：除零 + `|| 20` 会把 0 当 20，这里干脆不算百分比
+  const usageRatio = isUnlimited
+    ? null
+    : Math.min(100, Math.round((itemCount / settings.max_items) * 100));
 
   const hasUpdate = Boolean(updateStatus?.update);
   const statusDot = updateError
@@ -547,15 +643,39 @@ export default function SettingsApp() {
             </div>
           </Row>
 
-          <Row label={t("theme")}>
+          <Row label={t("appearance")}>
             <div className="relative flex items-center">
               <Select
-                value={settings.theme}
-                options={themeOptions}
-                onChange={handleThemeChange}
+                value={settings.theme_style}
+                options={styleOptions(settings.language)}
+                onChange={handleStyleChange}
                 disabled={loadingSettings}
-                minWidth={120}
+                minWidth={150}
               />
+              {/* 明暗只留三个小按钮，不再占一个下拉 */}
+              <div className="flex items-center gap-0.5 rounded-full bg-default p-0.5">
+                {THEME_MODES.map(({ id, icon: Icon }) => {
+                  const active = settings.theme === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => void handleThemeModeChange(id)}
+                      disabled={loadingSettings}
+                      title={t(id)}
+                      aria-label={t(id)}
+                      aria-pressed={active}
+                      className={`flex h-5 w-5 items-center justify-center rounded-full transition-colors ${
+                        active
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Icon size={11} strokeWidth={2} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </Row>
 
@@ -584,11 +704,32 @@ export default function SettingsApp() {
               type="number"
               min={1}
               max={100}
-              value={String(settings.max_items)}
-              onChange={(e) => handleMaxItemsChange(e.target.value)}
-              disabled={loadingSettings}
-              className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-ring/40"
+              value={isUnlimited ? String(lastMaxItemsRef.current) : maxDraft}
+              onChange={(e) => setMaxDraft(e.target.value)}
+              onBlur={() => void commitMaxDraft()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+              disabled={loadingSettings || isUnlimited}
+              className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:border-dashed disabled:bg-default disabled:text-muted-foreground"
             />
+            <span className="text-[12px] text-muted-foreground">{t("unlimited")}</span>
+            <Switch
+              isSelected={isUnlimited}
+              onChange={handleUnlimitedChange}
+              isDisabled={loadingSettings}
+              aria-label={t("unlimited")}
+              style={
+                {
+                  "--color-accent": "var(--primary)",
+                  "--accent-foreground": "#ffffff",
+                } as React.CSSProperties
+              }
+            >
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch>
           </Row>
 
           <div className="border-t border-border/70 px-3 py-2.5">
@@ -670,18 +811,25 @@ export default function SettingsApp() {
             </div>
 
             <div className="mt-2 flex items-center gap-2">
-              <div className="h-1 flex-1 overflow-hidden rounded-full bg-default">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${usageRatio}%` }}
-                />
-              </div>
+              {usageRatio !== null && (
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-default">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${usageRatio}%` }}
+                  />
+                </div>
+              )}
               <span className="shrink-0 text-[11px] text-muted-foreground">
-                {t("storageUsage", {
-                  items: itemCount,
-                  max: maxItems,
-                  size: formatBytes(storage?.total_bytes ?? 0),
-                })}
+                {usageRatio !== null
+                  ? t("storageUsage", {
+                      items: itemCount,
+                      max: settings.max_items,
+                      size: formatBytes(storage?.total_bytes ?? 0),
+                    })
+                  : t("storageUsageUnlimited", {
+                      items: itemCount,
+                      size: formatBytes(storage?.total_bytes ?? 0),
+                    })}
                 {" · "}
                 {t("storageImages", { count: storage?.image_count ?? 0 })}
               </span>
@@ -704,6 +852,27 @@ export default function SettingsApp() {
             )}
           </div>
         </Section>
+
+        {tags.length > 0 && (
+          <Section title={t("sectionTags")}>
+            {tags.map((tag) => (
+              <Row key={tag.tag} label={`#${tag.tag}`}>
+                <span className="text-[12px] text-muted-foreground">
+                  {t("tagItemCount", { count: tag.count })}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-none text-destructive"
+                  onPress={() => void handleDeleteTag(tag.tag, tag.count)}
+                  aria-label={t("deleteTagTitle")}
+                >
+                  <Trash2 size={13} />
+                </Button>
+              </Row>
+            ))}
+          </Section>
+        )}
 
         <Section title={t("sectionShortcut")}>
           <Row label={t("shortcutAction")}>

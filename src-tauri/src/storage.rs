@@ -1,4 +1,4 @@
-use crate::models::{ClipboardItem, Settings};
+use crate::models::Settings;
 use log::{LevelFilter, Log, Metadata, Record};
 use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode};
 use std::fs;
@@ -519,7 +519,7 @@ fn copy_dir_recursive(src: &Path, dest: &Path) {
     }
 }
 
-fn get_data_file_path(data_dir: &Path) -> PathBuf {
+pub(crate) fn get_data_file_path(data_dir: &Path) -> PathBuf {
     data_dir.join("clipboard_data.json")
 }
 
@@ -630,91 +630,6 @@ pub(crate) fn delete_image_file(data_dir: &Path, relative_path: &str) {
     }
 }
 
-/// 截断条目到 max_items，保留 pinned 项目，优先保留最新的非 pinned 项目
-/// 被截断的图片条目会同步清理磁盘文件
-pub(crate) fn enforce_max_items(items: &mut Vec<ClipboardItem>, max_items: u32, data_dir: &Path) {
-    let max = max_items as usize;
-    if items.len() <= max {
-        return;
-    }
-
-    let mut pinned: Vec<_> = items.iter().filter(|i| i.is_pinned).cloned().collect();
-    pinned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    // 置顶条目本身也可能多于上限（用户可以把上限调小），先按时间砍掉多的，
-    // 否则 items.len() 会永远大于 max_items，历史无上限增长。
-    // 被砍掉的置顶图片同样要删文件，不能只在非置顶分支里清理。
-    if pinned.len() > max {
-        for item in pinned.drain(max..) {
-            if item.item_type == "image" && !item.content.is_empty() {
-                delete_image_file(data_dir, &item.content);
-            }
-        }
-    }
-
-    let mut non_pinned: Vec<_> = items.iter().filter(|i| !i.is_pinned).cloned().collect();
-
-    non_pinned.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    // 清理被截断的图片文件
-    for item in non_pinned.iter().skip(max.saturating_sub(pinned.len())) {
-        if item.item_type == "image" && !item.content.is_empty() {
-            delete_image_file(data_dir, &item.content);
-        }
-    }
-
-    non_pinned.truncate(max.saturating_sub(pinned.len()));
-
-    items.clear();
-    items.extend(pinned);
-    items.extend(non_pinned);
-}
-
-pub fn load_clipboard_data(data_dir: &Path, max_items: u32) -> Vec<ClipboardItem> {
-    let data_file = get_data_file_path(data_dir);
-
-    if !data_file.exists() {
-        return Vec::new();
-    }
-
-    match fs::read_to_string(&data_file) {
-        Ok(content) => match serde_json::from_str::<Vec<ClipboardItem>>(&content) {
-            Ok(mut items) => {
-                enforce_max_items(&mut items, max_items, data_dir);
-                items
-            }
-            Err(e) => {
-                log::error!("Failed to parse clipboard data: {}", e);
-                Vec::new()
-            }
-        },
-        Err(e) => {
-            log::error!("Failed to read clipboard data file: {}", e);
-            Vec::new()
-        }
-    }
-}
-
-pub fn save_clipboard_data(
-    data_dir: &Path,
-    items: &mut Vec<ClipboardItem>,
-    max_items: u32,
-) -> Result<(), String> {
-    enforce_max_items(items, max_items, data_dir);
-
-    let data_file = get_data_file_path(data_dir);
-
-    let json = match serde_json::to_string(items) {
-        Ok(json) => json,
-        Err(e) => return Err(format!("Failed to serialize data: {}", e)),
-    };
-
-    match fs::write(&data_file, json) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Failed to write data file: {}", e)),
-    }
-}
-
 fn get_settings_file_path(data_dir: &Path) -> PathBuf {
     data_dir.join("settings.json")
 }
@@ -787,28 +702,7 @@ mod tests {
         assert!(path.ends_with("settings.json"));
     }
 
-    #[test]
-    fn test_load_clipboard_data_empty_dir() {
-        let temp_dir = create_temp_dir();
-        let items = load_clipboard_data(temp_dir.path(), 100);
-        assert!(items.is_empty());
-    }
 
-    #[test]
-    fn test_save_and_load_clipboard_data() {
-        let temp_dir = create_temp_dir();
-        let mut items = vec![
-            ClipboardItem::new("item 1".to_string(), "text"),
-            ClipboardItem::new("item 2".to_string(), "text"),
-        ];
-
-        save_clipboard_data(temp_dir.path(), &mut items, 100).unwrap();
-
-        let loaded = load_clipboard_data(temp_dir.path(), 100);
-        assert_eq!(loaded.len(), 2);
-        assert_eq!(loaded[0].content, "item 1");
-        assert_eq!(loaded[1].content, "item 2");
-    }
 
     #[test]
     fn test_load_settings_default() {
@@ -825,6 +719,7 @@ mod tests {
         let settings = Settings {
             language: "en".to_string(),
             theme: "dark".to_string(),
+            theme_style: "default".to_string(),
             autostart: true,
             max_items: 50,
             shortcut: "Ctrl+Alt+K".to_string(),
@@ -851,64 +746,9 @@ mod tests {
         assert_eq!(settings.language, "zh");
     }
 
-    #[test]
-    fn test_save_clipboard_data_empty() {
-        let temp_dir = create_temp_dir();
-        let mut items: Vec<ClipboardItem> = vec![];
 
-        save_clipboard_data(temp_dir.path(), &mut items, 100).unwrap();
 
-        let loaded = load_clipboard_data(temp_dir.path(), 100);
-        assert!(loaded.is_empty());
-    }
 
-    #[test]
-    fn test_save_clipboard_data_trims_to_max() {
-        let temp_dir = create_temp_dir();
-        let mut items = vec![
-            ClipboardItem::new("item 1".to_string(), "text"),
-            ClipboardItem::new("item 2".to_string(), "text"),
-            ClipboardItem::new("item 3".to_string(), "text"),
-        ];
-
-        save_clipboard_data(temp_dir.path(), &mut items, 2).unwrap();
-
-        let loaded = load_clipboard_data(temp_dir.path(), 2);
-        assert_eq!(loaded.len(), 2);
-    }
-
-    #[test]
-    fn test_load_clipboard_data_trims_excess() {
-        let temp_dir = create_temp_dir();
-        let mut items = vec![
-            ClipboardItem::new("item 1".to_string(), "text"),
-            ClipboardItem::new("item 2".to_string(), "text"),
-            ClipboardItem::new("item 3".to_string(), "text"),
-        ];
-
-        save_clipboard_data(temp_dir.path(), &mut items, 100).unwrap();
-
-        // 加载时使用更小的 max_items，应该被截断
-        let loaded = load_clipboard_data(temp_dir.path(), 2);
-        assert_eq!(loaded.len(), 2);
-    }
-
-    #[test]
-    fn test_save_clipboard_data_keeps_pinned() {
-        let temp_dir = create_temp_dir();
-        let mut item1 = ClipboardItem::new("item 1".to_string(), "text");
-        item1.is_pinned = true;
-        let item2 = ClipboardItem::new("item 2".to_string(), "text");
-        let item3 = ClipboardItem::new("item 3".to_string(), "text");
-        let mut items = vec![item3.clone(), item2.clone(), item1.clone()];
-
-        save_clipboard_data(temp_dir.path(), &mut items, 2).unwrap();
-
-        let loaded = load_clipboard_data(temp_dir.path(), 2);
-        assert_eq!(loaded.len(), 2);
-        // pinned 项目应该保留
-        assert!(loaded.iter().any(|i| i.content == "item 1"));
-    }
 
     #[test]
     fn test_rotate_logs_under_threshold_noop() {
@@ -1078,27 +918,6 @@ mod tests {
         delete_image_file(&data_dir, "images/nope.png");
     }
 
-    #[test]
-    fn test_enforce_max_items_deletes_trimmed_image_file() {
-        let temp_dir = create_temp_dir();
-        let data_dir = temp_dir.path().join("data");
-        let images_dir = data_dir.join("images");
-        fs::create_dir_all(&images_dir).unwrap();
-        let image = images_dir.join("old.png");
-        fs::write(&image, b"png").unwrap();
-
-        let mut old_image = ClipboardItem::new("images/old.png".to_string(), "image");
-        old_image.created_at = 1_000;
-        let mut newer_text = ClipboardItem::new("newer".to_string(), "text");
-        newer_text.created_at = 2_000;
-        let mut items = vec![old_image, newer_text];
-
-        enforce_max_items(&mut items, 1, &data_dir);
-
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].content, "newer");
-        assert!(!image.exists(), "trimmed image file should be removed");
-    }
 
     #[test]
     fn test_cleanup_orphan_images_keeps_referenced() {
@@ -1236,28 +1055,4 @@ mod tests {
         assert_eq!(bytes, 2 + 5 + 3);
     }
 
-    #[test]
-    fn test_enforce_max_items_truncates_pinned_when_over_limit() {
-        // 置顶条目多于上限时也要截断，否则历史会无上限增长
-        let temp_dir = create_temp_dir();
-
-        let mut a = ClipboardItem::new("a".to_string(), "text");
-        a.is_pinned = true;
-        a.created_at = 1;
-        let mut b = ClipboardItem::new("b".to_string(), "text");
-        b.is_pinned = true;
-        b.created_at = 2;
-        let mut c = ClipboardItem::new("c".to_string(), "text");
-        c.is_pinned = true;
-        c.created_at = 3;
-
-        let mut items = vec![a, b, c];
-        enforce_max_items(&mut items, 2, temp_dir.path());
-
-        assert_eq!(items.len(), 2);
-        // 保留最新的两条
-        assert!(items.iter().any(|i| i.content == "b"));
-        assert!(items.iter().any(|i| i.content == "c"));
-        assert!(!items.iter().any(|i| i.content == "a"));
-    }
 }

@@ -1,5 +1,6 @@
 pub mod clipboard;
 pub mod commands;
+pub mod db;
 pub mod models;
 pub mod repository;
 pub mod shortcut;
@@ -66,10 +67,6 @@ pub fn run() {
                 data_dir.clone(),
                 settings.max_items,
             ));
-
-            // 启动后台自动 flush（每 5 秒）
-            let repo_flush = repo.clone();
-            repo_flush.start_auto_flush(5);
 
             // 后台清理没有被任何条目引用的图片文件。
             // 旧版本的采集 bug 会留下大量重复文件，这里在启动时顺手收干净。
@@ -210,7 +207,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::get_clipboard_items,
+            commands::list_clipboard_items,
+            commands::get_clipboard_counts,
+            commands::get_clipboard_tags,
+            commands::preview_trim_history,
+            commands::delete_items_by_tag,
             commands::add_clipboard_item,
             commands::delete_clipboard_item,
             commands::update_clipboard_item,

@@ -1,4 +1,4 @@
-use crate::models::{AppState, ClipboardItem, Settings};
+use crate::models::{AppState, ClipboardCounts, ClipboardItem, Settings, TagCount};
 use crate::storage;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager};
@@ -63,9 +63,45 @@ fn restore_clipboard(snapshot: ClipboardSnapshot) {
 
 // === 历史条目 ===
 
+/// 面板列表：窗口 + 筛选 + 模糊搜索，全部在 SQL 里完成。
+///
+/// 历史可以无限增长之后不能再全量返回（把 100 万条序列化过 IPC 会拖死 webview），
+/// 前端面板最多显示 40 张卡，默认给 200 的窗口留出滚动余量。
 #[tauri::command]
-pub fn get_clipboard_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
-    Ok(state.repo.get_items())
+pub fn list_clipboard_items(
+    limit: usize,
+    filter: String,
+    query: String,
+    state: tauri::State<AppState>,
+) -> Result<Vec<ClipboardItem>, String> {
+    Ok(state.repo.list(limit, &filter, &query))
+}
+
+/// 各筛选维度的全量计数（筛选 chip 用），不把历史拉到前端去数
+#[tauri::command]
+pub fn get_clipboard_counts(state: tauri::State<AppState>) -> Result<ClipboardCounts, String> {
+    Ok(state.repo.counts())
+}
+
+/// 把上限调到 `max_items` 会删掉多少条（不执行）。设置页调低上限前确认用。
+#[tauri::command]
+pub fn preview_trim_history(
+    max_items: u32,
+    state: tauri::State<AppState>,
+) -> Result<usize, String> {
+    Ok(state.repo.preview_trim(max_items))
+}
+
+/// 按标签批量删除，返回删除条数
+#[tauri::command]
+pub fn delete_items_by_tag(tag: String, state: tauri::State<AppState>) -> Result<usize, String> {
+    Ok(state.repo.delete_by_tag(&tag))
+}
+
+/// 所有标签及使用次数（搜索框的标签建议用）
+#[tauri::command]
+pub fn get_clipboard_tags(state: tauri::State<AppState>) -> Result<Vec<TagCount>, String> {
+    Ok(state.repo.list_tags())
 }
 
 #[tauri::command]
@@ -109,7 +145,7 @@ pub fn update_clipboard_item(
     item: ClipboardItem,
     state: tauri::State<AppState>,
 ) -> Result<(), String> {
-    state.repo.update(item);
+    state.repo.update(item)?;
     Ok(())
 }
 
@@ -132,10 +168,8 @@ pub fn clear_clipboard_items(
         }
     }
 
+    // 写穿存储：clear 已经即时落盘，不存在「退出后历史复活」的窗口
     state.repo.clear();
-    // 立即落盘：清空是用户主动操作，不能等 5 秒自动 flush 才写，
-    // 否则这期间退出应用，重启后历史会「复活」。
-    let _ = state.repo.flush_now();
     // 历史清空后，所有图片文件都成了孤儿
     storage::cleanup_orphan_images(&state.data_dir, &std::collections::HashSet::new());
 
@@ -408,9 +442,22 @@ pub fn save_settings(
     let old_shortcut = current_settings.shortcut.clone();
     let new_shortcut = settings.shortcut.clone();
 
-    // 如果主题变了，广播给所有窗口
-    if current_settings.theme != settings.theme {
-        let _ = app_handle.emit("theme-changed", settings.theme.clone());
+    // 如果明暗或风格变了，广播给所有窗口（面板是独立 webview，不会自动同步）
+    if current_settings.theme != settings.theme
+        || current_settings.theme_style != settings.theme_style
+    {
+        #[derive(Clone, serde::Serialize)]
+        struct ThemeChanged {
+            theme: String,
+            style: String,
+        }
+        let _ = app_handle.emit(
+            "theme-changed",
+            ThemeChanged {
+                theme: settings.theme.clone(),
+                style: settings.theme_style.clone(),
+            },
+        );
     }
 
     // 先落盘：写入失败就直接返回，此时内存仍是旧值，磁盘与内存保持一致
@@ -479,7 +526,7 @@ pub fn save_settings(
 #[tauri::command]
 pub fn get_history_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardItem>, String> {
     let settings = state.settings.lock().map_err(|e| e.to_string())?;
-    let max_items = settings.max_items as usize;
+    let max_items = settings.max_items;
     drop(settings);
 
     Ok(state.repo.get_history(max_items))
