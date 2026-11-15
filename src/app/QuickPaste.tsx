@@ -137,6 +137,9 @@ export default function QuickPaste() {
   const scrollNext = useRef(true);
   // 横向滚动的补间句柄（同一时间只允许一个）
   const scrollAnimRef = useRef<number | null>(null);
+  // 指数逼近的当前目标与上一帧时间
+  const scrollTargetRef = useRef(0);
+  const scrollLastFrameRef = useRef(0);
   // 显式 hover 状态：键盘操作后要关掉 hover 反馈，
   // 否则鼠标停留的那张卡会一直保留悬浮样式（按钮、变暗），看起来像"还选中着"。
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -154,27 +157,35 @@ export default function QuickPaste() {
    * 这里自己补间，时长按距离给，封顶 220ms。
    */
   function animateScrollLeft(strip: HTMLDivElement, target: number) {
-    if (scrollAnimRef.current !== null) {
-      cancelAnimationFrame(scrollAnimRef.current);
-      scrollAnimRef.current = null;
-    }
-    const start = strip.scrollLeft;
-    const delta = target - start;
-    if (Math.abs(delta) < 1) return;
-
     if (prefersReducedMotion()) {
       strip.scrollLeft = target;
       return;
     }
 
-    const duration = Math.min(220, 110 + Math.abs(delta) * 0.35);
-    const started = performance.now();
+    // 指数逼近而不是「起点→终点」的固定补间：
+    // 连续按键时只更新目标，正在跑的动画会顺着新目标继续走，不会每按一次就顿一下。
+    scrollTargetRef.current = target;
+    if (scrollAnimRef.current !== null) return;
+
+    scrollLastFrameRef.current = performance.now();
     const step = (now: number) => {
-      const p = Math.min(1, (now - started) / duration);
-      // easeOutCubic：起步快、收尾稳，和面板入场的 decelerate 一致
-      const eased = 1 - Math.pow(1 - p, 3);
-      strip.scrollLeft = start + delta * eased;
-      scrollAnimRef.current = p < 1 ? requestAnimationFrame(step) : null;
+      const dt = Math.min(32, now - scrollLastFrameRef.current);
+      scrollLastFrameRef.current = now;
+
+      const current = strip.scrollLeft;
+      const goal = scrollTargetRef.current;
+      const diff = goal - current;
+
+      if (Math.abs(diff) < 1.2) {
+        strip.scrollLeft = goal;
+        scrollAnimRef.current = null;
+        return;
+      }
+
+      // 时间常数 60ms：约 3 帧走完 90%，收尾再快一点，不留长尾
+      const k = 1 - Math.exp(-dt / 60);
+      strip.scrollLeft = current + diff * k;
+      scrollAnimRef.current = requestAnimationFrame(step);
     };
     scrollAnimRef.current = requestAnimationFrame(step);
   }
@@ -492,6 +503,7 @@ export default function QuickPaste() {
         cancelAnimationFrame(scrollAnimRef.current);
         scrollAnimRef.current = null;
       }
+      scrollTargetRef.current = 0;
       if (listRef.current) listRef.current.scrollLeft = 0;
       // 列表瞬间回到最左，指针下的卡片会换人，别让 hover 抢选中
       hoverEnabledRef.current = false;
@@ -657,11 +669,14 @@ export default function QuickPaste() {
       const viewLeft = strip.scrollLeft;
       const viewRight = viewLeft + strip.clientWidth;
 
+      // 右侧留 28px 的 peek：滑到最右时还能看到下一张的边，
+      // 既提示"后面还有"，也让每按一次都有可见的滑动
+      const PEEK = 28;
       let target: number | null = null;
       if (left < viewLeft) {
         target = left - 8;
-      } else if (right > viewRight) {
-        target = right - strip.clientWidth + 8;
+      } else if (right > viewRight - PEEK) {
+        target = right - strip.clientWidth + PEEK;
       }
 
       if (target !== null) {
@@ -710,6 +725,8 @@ export default function QuickPaste() {
         scrollAnimRef.current = null;
       }
       strip.scrollLeft += e.deltaY;
+      // 用户自己滚了，补间目标跟着当前值，别在松手后弹回去
+      scrollTargetRef.current = strip.scrollLeft;
     };
     strip.addEventListener("wheel", onWheel, { passive: false });
     return () => strip.removeEventListener("wheel", onWheel);
