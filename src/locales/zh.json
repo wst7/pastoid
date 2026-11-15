@@ -100,5 +100,7 @@
   "editHint": "⌘↩ 保存 · Esc 取消",
   "save": "保存",
   "duplicateContent": "内容与已有条目重复",
-  "appearance": "外观"
+  "appearance": "外观",
+  "trimConfirmTitle": "调整保存上限",
+  "trimConfirm": "将删除 {{count}} 条记录（带标签的会保留），继续？"
 }

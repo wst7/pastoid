@@ -100,5 +100,7 @@
   "editHint": "⌘↩ save · Esc cancel",
   "save": "Save",
   "duplicateContent": "This content already exists",
-  "appearance": "Appearance"
+  "appearance": "Appearance",
+  "trimConfirmTitle": "Adjust history limit",
+  "trimConfirm": "This will delete {{count}} item(s). Tagged items are kept. Continue?"
 }

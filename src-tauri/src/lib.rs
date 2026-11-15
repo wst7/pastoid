@@ -210,6 +210,7 @@ pub fn run() {
             commands::list_clipboard_items,
             commands::get_clipboard_counts,
             commands::get_clipboard_tags,
+            commands::preview_trim_history,
             commands::add_clipboard_item,
             commands::delete_clipboard_item,
             commands::update_clipboard_item,

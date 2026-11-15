@@ -114,9 +114,14 @@ npm run release:major     # 0.1.0 -> 1.0.0
   删行 + 删文件（`enforce_image_limit`，由 `enforce_max_items` 在条数裁剪后调用，
   `max_items == 0` 的分支也调）——文本可以不限，图片不限会把磁盘吃光
 - **带 tag 的条目永不参与滚动删除**：`db::TAGGED_PREDICATE` 把它们从条数裁剪和图片护栏里排除。
-  打 tag 是明确的用户投入，复制新内容时不能把它挤掉；代价是上限变成"软上限"（tagged 不占名额）
+  打 tag 是明确的用户投入，复制新内容时不能把它挤掉。
+  注意 tagged **仍然计入** `max_items` 名额（上限 3 且 1 条 tagged → 只留 2 条普通），
+  只有 pinned/tagged 本身就超过上限时总数才会突破上限
 - **搜索同时命中正文和 tag**：`repository.list` 用 `json_each` 展开 tags 再 LIKE，
   给条目打上 "work" 之后搜 "work" 能捞出来
+- **调低上限 / 关闭「不限」会删数据**：`set_max_items` 在 `new_max > 0 && (old_max == 0 || new_max < old_max)`
+  时立刻裁剪（0 是无穷大，所以 0→n 也要裁）。设置页提交前必须用 `preview_trim_history`
+  算一遍会删多少条并弹确认，用户取消就保持原设置
 - **`#` 前缀是标签专用查询**：`#work` 只匹配 tags、不碰正文（否则正文里的 "work" 会污染结果）；
   前端输入 `#` 时用 `get_clipboard_tags` 的建议列表补全，点卡片上的标签 chip 也会切到 `#tag`
 - 标签以 JSON 数组存在 `items.tags`（`["work","客户A"]`），空数组等价于没打标签

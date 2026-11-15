@@ -249,8 +249,41 @@ pub fn enforce_max_items(conn: &Connection, max_items: u32, data_dir: &Path) -> 
     enforce_image_limit(conn, data_dir, MAX_IMAGES)
 }
 
+/// 调低上限 / 关闭「不限」时，先算一下会删掉多少条（不删），给设置页确认用。
+pub fn preview_trim(conn: &Connection, max_items: u32) -> Result<usize, String> {
+    if max_items == 0 {
+        return Ok(0);
+    }
+    Ok(plan_trim(conn, max_items)?.len())
+}
+
 /// 条数裁剪的实现，只在 `max_items > 0` 时由 [`enforce_max_items`] 调用。
 fn trim_items(conn: &Connection, max_items: u32, data_dir: &Path) -> Result<(), String> {
+    let overflow = plan_trim(conn, max_items)?;
+    if overflow.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("begin: {e}"))?;
+    for (id, _, _) in &overflow {
+        tx.execute("DELETE FROM items WHERE id = ?1", [id.as_str()])
+            .map_err(|e| format!("delete: {e}"))?;
+    }
+    tx.commit().map_err(|e| format!("commit: {e}"))?;
+
+    // 行已删掉，对应的图片文件也没人引用了
+    for (_, content, item_type) in overflow {
+        if item_type == "image" && !content.is_empty() {
+            storage::delete_image_file(data_dir, &content);
+        }
+    }
+    Ok(())
+}
+
+/// 裁剪计划：返回所有会被删掉的行（id、content、type），不落库。
+fn plan_trim(conn: &Connection, max_items: u32) -> Result<Vec<(String, String, String)>, String> {
     let max = max_items as usize;
 
     // 带 tag 的条目：用户标过的，永远不参与滚动删除，也不占 max 的名额
@@ -285,26 +318,7 @@ fn trim_items(conn: &Connection, max_items: u32, data_dir: &Path) -> Result<(), 
     if (normal_total as usize) > keep_normal {
         overflow.extend(overflow_rows(conn, 0, keep_normal, true)?);
     }
-    if overflow.is_empty() {
-        return Ok(());
-    }
-
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| format!("begin: {e}"))?;
-    for (id, _, _) in &overflow {
-        tx.execute("DELETE FROM items WHERE id = ?1", [id.as_str()])
-            .map_err(|e| format!("delete: {e}"))?;
-    }
-    tx.commit().map_err(|e| format!("commit: {e}"))?;
-
-    // 行已删掉，对应的图片文件也没人引用了
-    for (_, content, item_type) in overflow {
-        if item_type == "image" && !content.is_empty() {
-            storage::delete_image_file(data_dir, &content);
-        }
-    }
-    Ok(())
+    Ok(overflow)
 }
 
 /// 图片条目磁盘护栏：超过 `max_images` 张时按 `created_at DESC` 保留最新 N 张，

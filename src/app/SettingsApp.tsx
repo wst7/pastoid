@@ -13,7 +13,7 @@ import { check, Update } from "@tauri-apps/plugin-updater";
 import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, message, confirm } from "@tauri-apps/plugin-dialog";
 import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
@@ -140,6 +140,8 @@ export default function SettingsApp() {
   const oldShortcutRef = useRef(settings.shortcut);
   // 「不限」期间 max_items 存 0，取消勾选时要恢复成之前的数值
   const lastMaxItemsRef = useRef(20);
+  // 输入框用草稿值，失焦/回车才提交，避免每敲一位就弹一次裁剪确认
+  const [maxDraft, setMaxDraft] = useState("20");
 
   useEffect(() => {
     loadSettings();
@@ -181,6 +183,7 @@ export default function SettingsApp() {
         max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
+      setMaxDraft(String(loadedMax > 0 ? loadedMax : lastMaxItemsRef.current));
       styleRef.current = data.theme_style || DEFAULT_STYLE;
       themeRef.current = (data.theme as ThemePref) || "system";
       applyTheme(styleRef.current, themeRef.current);
@@ -246,10 +249,34 @@ export default function SettingsApp() {
     await persist({ ...settings, autostart: isSelected });
   };
 
-  const handleMaxItemsChange = async (value: string) => {
-    const max_items = Math.max(1, Math.min(100, parseInt(value) || 20));
-    lastMaxItemsRef.current = max_items;
-    await persist({ ...settings, max_items });
+  /** 调低上限前先问一句：会删多少条、能不能接受 */
+  const confirmTrim = async (max: number): Promise<boolean> => {
+    let willDelete = 0;
+    try {
+      willDelete = await invoke<number>("preview_trim_history", { maxItems: max });
+    } catch (e) {
+      console.error("Preview trim failed:", e);
+    }
+    if (willDelete <= 0) return true;
+    return await confirm(t("trimConfirm", { count: willDelete }), {
+      title: t("trimConfirmTitle"),
+      kind: "warning",
+    });
+  };
+
+  const commitMaxDraft = async () => {
+    const parsed = Math.max(1, Math.min(100, parseInt(maxDraft) || 20));
+    setMaxDraft(String(parsed));
+    if (parsed === settings.max_items) return;
+
+    if (!(await confirmTrim(parsed))) {
+      setMaxDraft(String(settings.max_items));
+      return;
+    }
+    lastMaxItemsRef.current = parsed;
+    await persist({ ...settings, max_items: parsed });
+    // 裁剪后条目数变了，页脚的「当前 N 条」要跟着更新
+    void loadStorage();
   };
 
   const handleUnlimitedChange = async (isSelected: boolean) => {
@@ -258,7 +285,11 @@ export default function SettingsApp() {
       await persist({ ...settings, max_items: 0 });
     } else {
       // 恢复勾选前的数值；没有（首次运行 / 之前存的就是 0）就回默认 20
-      await persist({ ...settings, max_items: lastMaxItemsRef.current || 20 });
+      const cap = lastMaxItemsRef.current || 20;
+      // 解除「不限」会立刻按上限裁剪，先确认，别让用户不知不觉丢记录
+      if (!(await confirmTrim(cap))) return;
+      await persist({ ...settings, max_items: cap });
+      void loadStorage();
     }
   };
 
@@ -625,8 +656,12 @@ export default function SettingsApp() {
               type="number"
               min={1}
               max={100}
-              value={String(isUnlimited ? lastMaxItemsRef.current : settings.max_items)}
-              onChange={(e) => handleMaxItemsChange(e.target.value)}
+              value={isUnlimited ? String(lastMaxItemsRef.current) : maxDraft}
+              onChange={(e) => setMaxDraft(e.target.value)}
+              onBlur={() => void commitMaxDraft()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
               disabled={loadingSettings || isUnlimited}
               className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:border-dashed disabled:bg-default disabled:text-muted-foreground"
             />

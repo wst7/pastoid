@@ -491,8 +491,10 @@ impl ClipboardRepository {
 
         *self.max_items.lock().unwrap() = new_max;
 
-        // 只有调小才需要立刻裁；写穿之后没有「等 flush」这回事了
-        if new_max < old_max {
+        // 调小才裁；注意 0 表示"不限"（无穷大），从 0 收紧到具体数值同样要裁，
+        // 否则用户关了「不限」之后要等到下次复制/重启才被静默裁剪
+        let shrinking = new_max > 0 && (old_max == 0 || new_max < old_max);
+        if shrinking {
             let conn = self.db.lock().unwrap();
             if let Err(e) = db::enforce_max_items(&conn, new_max, &self.data_dir) {
                 log::error!("按上限裁剪历史失败：{}", e);
@@ -502,6 +504,12 @@ impl ClipboardRepository {
 
     pub fn max_items(&self) -> u32 {
         *self.max_items.lock().unwrap()
+    }
+
+    /// 把上限调到 `max_items` 会删掉多少条（不执行删除），设置页确认用。
+    pub fn preview_trim(&self, max_items: u32) -> usize {
+        self.with_conn(|conn| db::preview_trim(conn, max_items))
+            .unwrap_or(0)
     }
 }
 
@@ -611,6 +619,40 @@ mod tests {
         ok.content = "renamed".to_string();
         assert!(repo.update(ok).is_ok());
         assert_eq!(repo.find_by_id(&a.id).unwrap().content, "renamed");
+    }
+
+    #[test]
+    fn test_set_max_items_trims_after_unlimited() {
+        // 先不限（0）存 5 条，再把上限收到 2：应该立刻裁到 2 条，
+        // 而不是等下一次复制或重启才静默删除
+        let (_dir, repo) = text_repo(0);
+        for i in 0..5 {
+            repo.add(ClipboardItem::new(format!("item {i}"), "text"));
+        }
+        assert_eq!(repo.list(100, "all", "").len(), 5);
+
+        assert_eq!(repo.preview_trim(2), 3);
+        repo.set_max_items(2);
+        assert_eq!(repo.list(100, "all", "").len(), 2);
+        assert_eq!(repo.preview_trim(2), 0);
+    }
+
+    #[test]
+    fn test_preview_trim_keeps_tagged() {
+        // 带 tag 的条目不计入上限，预览也不该把它们算成待删
+        let (_dir, repo) = text_repo(0);
+        let mut tagged = ClipboardItem::new("tagged".to_string(), "text");
+        tagged.tags = Some(vec!["keep".to_string()]);
+        repo.add(tagged);
+        for i in 0..4 {
+            repo.add(ClipboardItem::new(format!("plain {i}"), "text"));
+        }
+        // 上限 2：tagged 也算在 2 条之内，所以只留 1 条普通 + 1 条 tagged → 删 3 条
+        assert_eq!(repo.preview_trim(2), 3);
+        repo.set_max_items(2);
+        let left = repo.list(100, "all", "");
+        assert_eq!(left.len(), 2);
+        assert!(left.iter().any(|i| i.tags.is_some()));
     }
 
     #[test]

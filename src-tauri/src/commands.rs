@@ -83,6 +83,15 @@ pub fn get_clipboard_counts(state: tauri::State<AppState>) -> Result<ClipboardCo
     Ok(state.repo.counts())
 }
 
+/// 把上限调到 `max_items` 会删掉多少条（不执行）。设置页调低上限前确认用。
+#[tauri::command]
+pub fn preview_trim_history(
+    max_items: u32,
+    state: tauri::State<AppState>,
+) -> Result<usize, String> {
+    Ok(state.repo.preview_trim(max_items))
+}
+
 /// 所有标签及使用次数（搜索框的标签建议用）
 #[tauri::command]
 pub fn get_clipboard_tags(state: tauri::State<AppState>) -> Result<Vec<TagCount>, String> {
