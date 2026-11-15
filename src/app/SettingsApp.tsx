@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check, Update } from "@tauri-apps/plugin-updater";
-import { applyTheme, paint, watchSystemTheme } from "@/lib/theme";
+import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
@@ -53,14 +53,19 @@ const languages = [
 ];
 
 /**
- * 外观只有风格这一维：
- * 双模式风格跟随系统明暗，单模式风格固定用自己的那一档。
+ * 外观 = 风格 × 明暗，但只用一个下拉：每套风格直接展开成「浅色 / 深色」两项，
+ * 外加一个「跟随系统」。这样既能显式选深浅，又不用第二个控件。
  */
-const styleOptions = (lang: string) =>
-  THEMES.map((style) => ({
-    id: style.id,
-    name: lang.startsWith("zh") ? style.name : style.nameEn,
-  }));
+const appearanceOptions = (lang: string, t: (key: string) => string) => [
+  { id: "system", name: t("system") },
+  ...THEMES.flatMap((style) => {
+    const name = lang.startsWith("zh") ? style.name : style.nameEn;
+    return [
+      { id: `${style.id}:light`, name: `${name} · ${t("light")}` },
+      { id: `${style.id}:dark`, name: `${name} · ${t("dark")}` },
+    ];
+  }),
+];
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
@@ -131,6 +136,7 @@ export default function SettingsApp() {
   // 插件没报错、但远端确实有更新时，给一个手动下载的兜底（平台 key 不匹配等静默失败）
   const [manualUpdate, setManualUpdate] = useState<string | null>(null);
 
+  const themeRef = useRef<ThemePref>("system");
   const oldShortcutRef = useRef(settings.shortcut);
   // 「不限」期间 max_items 存 0，取消勾选时要恢复成之前的数值
   const lastMaxItemsRef = useRef(20);
@@ -158,7 +164,7 @@ export default function SettingsApp() {
 
   // 系统外观变化（夜间自动变暗等）：双模式风格跟着重画
   useEffect(() => {
-    return watchSystemTheme(() => paint(styleRef.current));
+    return watchSystemTheme(() => paint(styleRef.current, themeRef.current));
   }, []);
 
   const loadSettings = async () => {
@@ -169,15 +175,15 @@ export default function SettingsApp() {
       if (loadedMax > 0) lastMaxItemsRef.current = loadedMax;
       setSettings({
         language: data.language || "zh",
-        // 明暗不再是用户设置：统一 system，双模式风格跟随系统
-        theme: "system",
+        theme: data.theme || "system",
         theme_style: data.theme_style || DEFAULT_STYLE,
         autostart: data.autostart ?? false,
         max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
       styleRef.current = data.theme_style || DEFAULT_STYLE;
-      applyTheme(styleRef.current);
+      themeRef.current = (data.theme as ThemePref) || "system";
+      applyTheme(styleRef.current, themeRef.current);
       if (data.language) {
         i18n.changeLanguage(data.language === "zh" ? "zh" : "en");
       }
@@ -192,7 +198,8 @@ export default function SettingsApp() {
     try {
       await invoke("save_settings", { settings: newSettings });
       styleRef.current = newSettings.theme_style || DEFAULT_STYLE;
-      applyTheme(styleRef.current);
+      themeRef.current = (newSettings.theme as ThemePref) || "system";
+      applyTheme(styleRef.current, themeRef.current);
       setSaveError(null);
       return true;
     } catch (error) {
@@ -226,10 +233,13 @@ export default function SettingsApp() {
     if (ok) i18n.changeLanguage(language === "zh" ? "zh" : "en");
   };
 
-  const handleStyleChange = async (theme_style: string) => {
-    // 明暗不再单独设置：双模式风格跟随系统，单模式风格固定用自己的那一档。
-    // theme 字段保留但统一写 system，兼容旧配置文件。
-    await persist({ ...settings, theme_style, theme: "system" });
+  const handleAppearanceChange = async (id: string) => {
+    if (id === "system") {
+      await persist({ ...settings, theme: "system" });
+      return;
+    }
+    const [theme_style, theme] = id.split(":") as [string, "light" | "dark"];
+    await persist({ ...settings, theme_style, theme });
   };
 
   const handleAutostartChange = async (isSelected: boolean) => {
@@ -577,11 +587,15 @@ export default function SettingsApp() {
           <Row label={t("appearance")}>
             <div className="relative flex items-center">
               <Select
-                value={settings.theme_style}
-                options={styleOptions(settings.language)}
-                onChange={handleStyleChange}
+                value={
+                  settings.theme === "system"
+                    ? "system"
+                    : `${settings.theme_style}:${settings.theme}`
+                }
+                options={appearanceOptions(settings.language, t)}
+                onChange={handleAppearanceChange}
                 disabled={loadingSettings}
-                minWidth={170}
+                minWidth={210}
               />
             </div>
           </Row>

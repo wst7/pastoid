@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { paint, watchSystemTheme } from "@/lib/theme";
+import { paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -126,6 +126,7 @@ export default function QuickPaste() {
   const [language, setLanguage] = useState("zh");
   // 双模式风格跟随系统明暗，系统切暗时要重画
   const styleRef = useRef<string>("default");
+  const themeRef = useRef<ThemePref>("system");
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -463,7 +464,7 @@ export default function QuickPaste() {
 
   useEffect(() => {
     return watchSystemTheme(() => {
-      paint(styleRef.current);
+      paint(styleRef.current, themeRef.current);
     });
   }, []);
 
@@ -471,7 +472,8 @@ export default function QuickPaste() {
     invoke<SettingsData>("get_settings")
       .then((data) => {
         styleRef.current = data.theme_style || "default";
-        paint(styleRef.current);
+        themeRef.current = (data.theme as ThemePref) || "system";
+        paint(styleRef.current, themeRef.current);
         if (data.language) {
           setLanguage(data.language);
           // quick-paste 是独立窗口，i18n 初始化时用的是系统语言。
@@ -479,7 +481,7 @@ export default function QuickPaste() {
           void i18n.changeLanguage(data.language);
         }
       })
-      .catch(() => paint("default"));
+      .catch(() => paint("default", "system"));
 
     // 首帧也拉一次标签，别等面板第一次打开才有建议
     void loadTags();
@@ -529,7 +531,10 @@ export default function QuickPaste() {
         if (event.payload?.style) {
           styleRef.current = event.payload.style;
         }
-        paint(styleRef.current);
+        if (event.payload?.theme) {
+          themeRef.current = event.payload.theme as ThemePref;
+        }
+        paint(styleRef.current, themeRef.current);
       }
     );
 
