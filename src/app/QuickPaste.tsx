@@ -1015,6 +1015,9 @@ export default function QuickPaste() {
                   </div>
                 );
               })}
+              {/* 右边距垫片：滚动容器的 padding-right 不计入 scrollWidth，
+                  没有它滑到最右时最后一张会贴边。负 margin 抵消 flex gap。 */}
+              <div aria-hidden="true" className="shrink-0 w-3 -ml-2.5" />
             </div>
           )}
         </div>
