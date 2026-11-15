@@ -628,7 +628,7 @@ export default function SettingsApp() {
               value={String(isUnlimited ? lastMaxItemsRef.current : settings.max_items)}
               onChange={(e) => handleMaxItemsChange(e.target.value)}
               disabled={loadingSettings || isUnlimited}
-              className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums focus:outline-none focus:ring-2 focus:ring-ring/40"
+              className="h-7 w-14 rounded-md border border-border bg-transparent px-2 text-center text-[13px] tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:border-dashed disabled:bg-default disabled:text-muted-foreground"
             />
             <span className="text-[12px] text-muted-foreground">{t("unlimited")}</span>
             <Switch
