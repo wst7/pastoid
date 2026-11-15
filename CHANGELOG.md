@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.11.0](https://github.com/wst7/pastoid/compare/v1.10.9...v1.11.0) (2026-11-15)
+
+### ✨ Features | 新功能
+
+* custom tags, inline editing and 11 theme styles ([b169fd8](https://github.com/wst7/pastoid/commit/b169fd8b8994fd83a47e03d8e3efa71cc7da9531))
+* **db:** allow unlimited history and cap images at 1000 ([44c8895](https://github.com/wst7/pastoid/commit/44c8895e209161402b2302d09bb48aa473da679c))
+* **panel:** move list, search and counts into SQL for unlimited history ([f9aa702](https://github.com/wst7/pastoid/commit/f9aa70289552da350583682e5b927103b2a45f91))
+* **quick-paste:** keyboard-visible actions, stable pin, tooltips ([85a0e68](https://github.com/wst7/pastoid/commit/85a0e684e612c3cf5798edcd8f6c890371fb2c98))
+* **quick-paste:** smoother keyboard scrolling ([0bba2b3](https://github.com/wst7/pastoid/commit/0bba2b350f42bb2e600309799116960139687889))
+* **search:** dedicated tag search with # syntax and suggestions ([5731367](https://github.com/wst7/pastoid/commit/57313675113a85675b32b72bb4533ffa6c10a7c8))
+* **settings:** add unlimited toggle and fix usage display ([75b73b6](https://github.com/wst7/pastoid/commit/75b73b6837f89d9f3eca354ab01e1522b93a580a))
+* **settings:** batch delete by tag ([dd385e0](https://github.com/wst7/pastoid/commit/dd385e0a92e6d9b6d5b28e910b5ddba8c78c4100)), closes [#tag](https://github.com/wst7/pastoid/issues/tag)
+* **settings:** drop the light/dark control, keep only the style ([492dead](https://github.com/wst7/pastoid/commit/492deadf5f1f08ec220cce50d043a2d20d27208e))
+* **settings:** expose light and dark for every style ([07a43a7](https://github.com/wst7/pastoid/commit/07a43a7bb807f5550d5fd8d7d8e2e6a1f837a897))
+* **storage:** move clipboard history to SQLite with transparent JSON migration ([3ec82fe](https://github.com/wst7/pastoid/commit/3ec82fe646e0689e38920128fc8e008fd627dd0b))
+* **themes:** give every style a light and a dark variant ([2b497c3](https://github.com/wst7/pastoid/commit/2b497c3fdd321b3e68d346e466e72c7abcbcaf78)), closes [#6B6B6B](https://github.com/wst7/pastoid/issues/6B6B6B)
+
+### 🐛 Bug Fixes | Bug 修复
+
+* **quick-paste:** drop hover feedback when the keyboard takes over ([e8d8724](https://github.com/wst7/pastoid/commit/e8d87247c6506c23e141623198c17d2bfc7ed5e4))
+* **quick-paste:** glide the card strip when navigating with arrow keys ([90d9ebc](https://github.com/wst7/pastoid/commit/90d9ebc5b4baf7a4d12c1e1fc84eec6502955d86))
+* **quick-paste:** keep selection by id, freeze order while open ([7b8cc74](https://github.com/wst7/pastoid/commit/7b8cc74a04cfa708e0304118625d41eb928cc8e3))
+* **quick-paste:** keep the right margin when scrolled to the end ([e57831d](https://github.com/wst7/pastoid/commit/e57831dc708871ccb8c148b010f581cf7e753265))
+* **quick-paste:** leave Home/End to the search box, add press feedback ([c17d8c3](https://github.com/wst7/pastoid/commit/c17d8c3e49ba874f7d5d167fd42cce772535bb95))
+* **quick-paste:** no empty slot for the missing edit button on images ([3c5fe5e](https://github.com/wst7/pastoid/commit/3c5fe5e59fcb40d3c76cc67558a70d4c34ae4d33))
+* **quick-paste:** smaller action buttons that don't cover the header ([45c0c88](https://github.com/wst7/pastoid/commit/45c0c88e0d2358ae2c4898943debda4da5ce1493))
+* **settings:** confirm before lowering the history cap ([8ceea5b](https://github.com/wst7/pastoid/commit/8ceea5b60dc1056211bbb5f401816ecece4b2562))
+* **settings:** merge appearance controls and repair the dropdown overlay ([debddb0](https://github.com/wst7/pastoid/commit/debddb05648d8949bb593fc789e769f17a9a2e87))
+* **settings:** show a disabled state on the max-items input ([068265a](https://github.com/wst7/pastoid/commit/068265abbb0873a294eb804fe9bf3dc0b8bb49ed))
+* **shortcut:** open the panel on the cursor's monitor, aligned to the work area ([771ab3d](https://github.com/wst7/pastoid/commit/771ab3d67ba3c273368641c94a4d1649d17e3ad5))
+* **theme:** apply the native window appearance from the panel too ([9136774](https://github.com/wst7/pastoid/commit/9136774b8c62da2a1d9c9d05b43db8a396965104))
+* **theme:** never render a single-mode style in the wrong mode ([76da6ab](https://github.com/wst7/pastoid/commit/76da6abda4c68d153404bc913535bb36db18e01f))
+* **ui:** give dropdowns an opaque surface ([5d796fe](https://github.com/wst7/pastoid/commit/5d796fea9b4676b5419fc02b8813da1dc1564249))
+
+### ⚡️ Performance Improvements | 性能优化
+
+* **db:** index item type for the image-limit count ([6a551d7](https://github.com/wst7/pastoid/commit/6a551d74d555c1c50df7dea55999046dc25fbd40))
+
 ## [1.10.3](https://github.com/wst7/pastoid/compare/v1.10.2...v1.10.3) (2026-11-06)
 
 ### ✨ Features | 新功能
