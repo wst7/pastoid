@@ -51,6 +51,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - **hover 只改选中、不滚动**；滚动只由键盘触发（`scrollNext` ref 区分），否则鼠标下的卡片会自己跑
 - **hover 反馈由 React 状态控制，不用 CSS `:hover`**（`hoveredId`）：键盘换卡后要立刻收掉悬浮样式，
   否则鼠标停留的那张卡会一直显示按钮/变暗，看起来像"还选中着"；键盘操作后鼠标要移动 ≥4px 才恢复 hover
+- 卡片操作按钮的**四个槽位始终渲染**（隐藏只用 opacity + pointer-events:none），
+  这样图钉按钮在「只显示固定状态」和「四个按钮全显示」时位置完全一致，不会点错
+- 操作按钮的说明气泡用自定义 tooltip，且坐标要**减去面板左上角**：
+  `.pastoid-panel` 有 `backdrop-filter`，会为 fixed 子元素创建 containing block
+- 面板里不再有「清空全部记录」：这个能力只在设置页（避免在快速粘贴时误清空）
 - **键盘换卡用指数逼近滚动**（`animateScrollLeft`，时间常数 60ms、差值 <1.2px 时吸附），
   不要直接赋值 `scrollLeft`，也不要用 `scrollIntoView({behavior:"smooth"})`：
   原生时长不可控，连续按键会拖沓；固定起止点的补间每次按键都要重启动画，会顿。

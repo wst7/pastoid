@@ -30,7 +30,6 @@ interface SettingsData {
 
 /** 平台相关的按键显示：macOS 用符号，Windows 用文字 */
 const modKey = modKeyLabel;
-const shiftLabel = isMac ? "⇧" : "Shift";
 const backspaceLabel = isMac ? "⌫" : "Backspace";
 const enterLabel = isMac ? "↵" : "Enter";
 const escLabel = isMac ? "esc" : "Esc";
@@ -144,6 +143,8 @@ export default function QuickPaste() {
   // 显式 hover 状态：键盘操作后要关掉 hover 反馈，
   // 否则鼠标停留的那张卡会一直保留悬浮样式（按钮、变暗），看起来像"还选中着"。
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // 操作按钮的说明气泡：卡片有 overflow-hidden，不能靠 CSS 挂在按钮上
+  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
   const hoverEnabledRef = useRef(true);
   // 键盘操作时记下指针位置：之后鼠标要有 4px 以上位移才算"用户真的在动鼠标"，
   // 避免手放在触控板上轻轻一碰就把选中抢回去
@@ -371,17 +372,6 @@ export default function QuickPaste() {
     }
   }, []);
 
-  const clearAll = useCallback(async () => {
-    try {
-      await invoke("clear_clipboard_items");
-      setItems([]);
-      setActiveId(null);
-      imageCache.clear();
-    } catch (e) {
-      console.error("Clear all failed:", e);
-    }
-  }, []);
-
   /** 按方向键移动选中：先算下标，再落到 id */
   const selectIndex = useCallback((index: number, scroll = true) => {
     const list = filteredItemsRef.current;
@@ -394,6 +384,19 @@ export default function QuickPaste() {
     setHoveredId(null);
     setActiveId(list[clamped].id);
   }, []);
+
+  const showTip = useCallback((e: React.MouseEvent<HTMLElement>, text: string) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    // 面板有 backdrop-filter，会为 fixed 子元素创建 containing block，
+    // 所以坐标要换算成「相对面板」而不是相对视口
+    const panel = panelRef.current?.getBoundingClientRect();
+    const originX = panel?.left ?? 0;
+    const originY = panel?.top ?? 0;
+    const width = panel?.width ?? window.innerWidth;
+    const x = Math.min(Math.max(r.left + r.width / 2 - originX, 56), width - 56);
+    setTip({ text, x, y: r.top - originY - 6 });
+  }, []);
+  const hideTip = useCallback(() => setTip(null), []);
 
   const hoverItem = useCallback((id: string) => {
     // hover 只改选中，不滚动：否则鼠标下的卡片会自己跑，感觉"追不上"
@@ -414,8 +417,6 @@ export default function QuickPaste() {
   togglePinRef.current = togglePin;
   const deleteItemRef = useRef(deleteItem);
   deleteItemRef.current = deleteItem;
-  const clearAllRef = useRef(clearAll);
-  clearAllRef.current = clearAll;
   const openEditorRef = useRef(openEditor);
   openEditorRef.current = openEditor;
   const openTagEditorRef = useRef(openTagEditor);
@@ -634,9 +635,6 @@ export default function QuickPaste() {
         e.preventDefault();
         const item = list[current];
         if (item) deleteItemRef.current(item);
-      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "x") {
-        e.preventDefault();
-        clearAllRef.current();
       } else if ((e.metaKey || e.ctrlKey) && ["1", "2", "3", "4"].includes(e.key)) {
         e.preventDefault();
         const map: Record<string, ClipboardFilter> = {
@@ -900,6 +898,13 @@ export default function QuickPaste() {
               {filteredItems.map((item) => {
                 const isActive = item.id === activeId;
                 const kind = itemKind(item);
+                // 键盘选中的卡片同样把操作按钮亮出来，不用先动鼠标
+                const showActions = isActive || hoveredId === item.id;
+                const canEdit = item.type !== "image";
+                const actionBtn = (visible: boolean, extra = "") =>
+                  `w-6 h-6 flex items-center justify-center rounded-md transition-opacity ${
+                    visible ? "opacity-100" : "opacity-0 pointer-events-none"
+                  } ${extra}`;
                 return (
                   <div
                     key={item.id}
@@ -925,17 +930,7 @@ export default function QuickPaste() {
                       <span className="text-[10.5px] text-muted-foreground truncate">
                         {formatRelativeTime(item.createdAt, language)}
                       </span>
-                      {item.isPinned && (
-                        // 悬浮按钮就覆盖在右上角，两个图层会叠在一起，
-                        // 所以悬浮时把这枚图钉淡出，交给按钮接管这块空间
-                        <Pin
-                          size={10}
-                          className={`ml-auto text-warning shrink-0 transition-opacity ${
-                          hoveredId === item.id ? "opacity-0" : ""
-                        }`}
-                          fill="currentColor"
-                        />
-                      )}
+
                     </div>
 
                     <div className="flex-1 min-h-0 px-2.5 pb-2 overflow-hidden">
@@ -966,42 +961,62 @@ export default function QuickPaste() {
                       </div>
                     ) : null}
 
-                    {/* 悬浮操作 */}
-                    <div className={`absolute right-1 top-1 flex items-center gap-0.5 transition-opacity ${
-                      hoveredId === item.id ? "opacity-100" : "opacity-0"
-                    }`}>
+                    {/* 操作按钮：悬浮或键盘选中时出现。
+                        四个槽位始终占位（隐藏用 opacity），图钉按钮的位置在
+                        「仅显示固定状态」和「四个按钮全显示」时完全一致，不会点错。 */}
+                    <div className="absolute right-1 top-1 flex items-center gap-0.5">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openTagEditor(item);
                         }}
-                        className={`w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-default ${
-                          item.tags?.length ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        onMouseEnter={(e) => showTip(e, `${t("tags")} (${modKey}T)`)}
+                        onMouseLeave={hideTip}
+                        className={actionBtn(
+                          showActions,
+                          `bg-card/90 hover:bg-default ${
+                            item.tags?.length
+                              ? "text-primary"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`,
+                        )}
                         aria-label={t("tags")}
                       >
                         <Tag size={11} />
                       </button>
-                      {item.type !== "image" && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditor(item);
-                          }}
-                          className="w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-default text-muted-foreground hover:text-foreground"
-                          aria-label={t("edit")}
-                        >
-                          <Pencil size={11} />
-                        </button>
-                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (canEdit) openEditor(item);
+                        }}
+                        onMouseEnter={(e) => showTip(e, `${t("edit")} (${modKey}E)`)}
+                        onMouseLeave={hideTip}
+                        tabIndex={canEdit ? 0 : -1}
+                        className={actionBtn(
+                          showActions && canEdit,
+                          "bg-card/90 hover:bg-default text-muted-foreground hover:text-foreground",
+                        )}
+                        aria-label={t("edit")}
+                      >
+                        <Pencil size={11} />
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           togglePin(item);
                         }}
-                        className={`w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-default ${
-                          item.isPinned ? "text-warning" : "text-muted-foreground hover:text-foreground"
-                        }`}
+                        onMouseEnter={(e) =>
+                          showTip(e, `${item.isPinned ? t("unpin") : t("pin")} (${modKey}P)`)
+                        }
+                        onMouseLeave={hideTip}
+                        className={actionBtn(
+                          showActions || item.isPinned,
+                          `${showActions ? "bg-card/90 hover:bg-default" : "bg-transparent"} ${
+                            item.isPinned
+                              ? "text-warning"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`,
+                        )}
                         aria-label={item.isPinned ? t("unpin") : t("pin")}
                       >
                         <Pin size={11} fill={item.isPinned ? "currentColor" : "none"} />
@@ -1011,7 +1026,14 @@ export default function QuickPaste() {
                           e.stopPropagation();
                           deleteItem(item);
                         }}
-                        className="w-6 h-6 flex items-center justify-center rounded-md bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        onMouseEnter={(e) =>
+                          showTip(e, `${t("delete")} (${modKey}${backspaceLabel})`)
+                        }
+                        onMouseLeave={hideTip}
+                        className={actionBtn(
+                          showActions,
+                          "bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive",
+                        )}
                         aria-label={t("delete")}
                       >
                         <Trash2 size={11} />
@@ -1026,6 +1048,16 @@ export default function QuickPaste() {
             </div>
           )}
         </div>
+
+        {tip && (
+          <div
+            className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground shadow-lg"
+            style={{ left: tip.x, top: tip.y, transform: "translate(-50%, -100%)" }}
+            role="tooltip"
+          >
+            {tip.text}
+          </div>
+        )}
 
         {/* 标签编辑条：贴着底部快捷键栏，不遮挡卡片 */}
         {tagEditor && tagTarget && (
@@ -1131,7 +1163,6 @@ export default function QuickPaste() {
           <Hint keys={[modKey, "E"]} label={t("edit")} />
           <Hint keys={[modKey, "T"]} label={t("tags")} />
           <Hint keys={[modKey, backspaceLabel]} label={t("delete")} />
-          <Hint keys={[modKey, shiftLabel, "X"]} label={t("clearAll")} />
           <span className="ml-auto flex items-center gap-2">
             {orderFrozen && (
               <span className="text-warning/90">{t("orderFrozen")}</span>

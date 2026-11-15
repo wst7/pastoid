@@ -52,7 +52,6 @@ Inside the panel (same actions, platform-specific keys):
 | Paste | `↵` | `Enter` |
 | Pin / unpin | `⌘P` | `Ctrl+P` |
 | Delete item | `⌘⌫` | `Ctrl+Backspace` |
-| Clear all history | `⌘⇧X` | `Ctrl+Shift+X` |
 | Close panel | `Esc` | `Esc` |
 
 > Pinning and unpinning never make cards jump around while the panel is open: only the pin state changes on the spot, and the order is re-sorted the next time the panel opens (the footer says so). The selection follows the same item, so copying something new won't move the highlight onto a different card.
