@@ -927,7 +927,11 @@ export default function QuickPaste() {
                   >
                     <div
                       className={`shrink-0 flex items-center gap-1.5 pl-2.5 pt-2 pb-1 ${
-                        showActions || item.isPinned ? "pr-[96px]" : "pr-2.5"
+                        showActions || item.isPinned
+                          ? canEdit
+                            ? "pr-[96px]"
+                            : "pr-[76px]"
+                          : "pr-2.5"
                       }`}
                     >
                       <KindIcon kind={kind} />
@@ -988,22 +992,23 @@ export default function QuickPaste() {
                       >
                         <Tag size={10} />
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (canEdit) openEditor(item);
-                        }}
-                        onMouseEnter={(e) => showTip(e, `${t("edit")} (${modKey}E)`)}
-                        onMouseLeave={hideTip}
-                        tabIndex={canEdit ? 0 : -1}
-                        className={actionBtn(
-                          showActions && canEdit,
-                          "bg-card/90 hover:bg-default text-muted-foreground hover:text-foreground",
-                        )}
-                        aria-label={t("edit")}
-                      >
-                        <Pencil size={10} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditor(item);
+                          }}
+                          onMouseEnter={(e) => showTip(e, `${t("edit")} (${modKey}E)`)}
+                          onMouseLeave={hideTip}
+                          className={actionBtn(
+                            showActions,
+                            "bg-card/90 hover:bg-default text-muted-foreground hover:text-foreground",
+                          )}
+                          aria-label={t("edit")}
+                        >
+                          <Pencil size={10} />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
