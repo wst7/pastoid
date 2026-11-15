@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
+import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -474,7 +474,9 @@ export default function QuickPaste() {
       .then((data) => {
         styleRef.current = data.theme_style || "default";
         themeRef.current = (data.theme as ThemePref) || "system";
-        paint(styleRef.current, themeRef.current);
+        // 面板也是独立窗口：除了换 class，还要把原生窗口外观一起设上，
+        // 否则用户选「深色」而系统是浅色时，原生滚动条/输入控件仍是浅色
+        applyTheme(styleRef.current, themeRef.current);
         if (data.language) {
           setLanguage(data.language);
           // quick-paste 是独立窗口，i18n 初始化时用的是系统语言。
@@ -482,7 +484,7 @@ export default function QuickPaste() {
           void i18n.changeLanguage(data.language);
         }
       })
-      .catch(() => paint("default", "system"));
+      .catch(() => applyTheme("default", "system"));
 
     // 首帧也拉一次标签，别等面板第一次打开才有建议
     void loadTags();
@@ -528,14 +530,14 @@ export default function QuickPaste() {
     const unlistenTheme = listen<{ theme: string; style: string }>(
       "theme-changed",
       (event) => {
-        // 明暗不再由用户设置，只关心风格
         if (event.payload?.style) {
           styleRef.current = event.payload.style;
         }
         if (event.payload?.theme) {
           themeRef.current = event.payload.theme as ThemePref;
         }
-        paint(styleRef.current, themeRef.current);
+        // 同步原生窗口外观，避免只有 CSS 变了、系统控件还是旧明暗
+        applyTheme(styleRef.current, themeRef.current);
       }
     );
 

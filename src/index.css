@@ -30,7 +30,11 @@
   --success: #16a34a;
 }
 
+/* 让浏览器自绘部分（滚动条、输入控件、光标）跟随明暗 */
+html{ color-scheme: light; }
+
 .dark {
+  color-scheme: dark;
   --background: #1e1e2e;
   --foreground: #fafafa;
   --card: #27273a;

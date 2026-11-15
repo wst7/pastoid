@@ -84,6 +84,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - 加新风格时两版都要写：结构（圆角/边框/阴影/blur）保持一致，只换颜色，
   否则切换明暗时会像换了一套主题
 - `modes` 现在全是 `["light","dark"]`，留着是能力声明；`paint()` 的单档兜底仍然保留
+- **明暗是两层**：CSS 层靠 `html.dark/.light` 切 token；原生层靠 `getCurrentWindow().setTheme(null|light|dark)`。
+  两个窗口（面板/设置）都要设，只改 class 会让原生滚动条、输入控件停在旧明暗
+- CSS 里 `html{color-scheme:light}` / `.dark{color-scheme:dark}`，否则浏览器自绘部分不跟主题
+- `setTheme` 是异步的，media query 之后才更新：`applyTheme` 先画一次、promise 落地再画一次，
+  另有 rAF + 120ms 兜底
 - `Settings.theme` 保留但统一写 `system`，只为兼容旧配置文件
 - **编辑正文会撞内容唯一索引**：`repository.update` 返回 `Result`，命令把错误透传给前端，
   前端显示"内容与已有条目重复"，不能假装保存成功

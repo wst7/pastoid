@@ -34,19 +34,26 @@ export function paint(style: string = DEFAULT_STYLE, theme: ThemePref = "system"
  * 选了明确的明暗就把窗口外观固定住，选「跟随系统」则交还系统（null）。
  */
 export function applyTheme(style: string = DEFAULT_STYLE, theme: ThemePref = "system") {
+  let applied: Promise<void> = Promise.resolve();
   try {
     const win = getCurrentWindow();
     if (typeof win.setTheme === "function") {
-      void win.setTheme(theme === "system" ? null : theme).catch(() => {});
+      applied = win
+        .setTheme(theme === "system" ? null : theme)
+        .then(() => undefined)
+        .catch(() => undefined);
     }
   } catch {
     // 非 Tauri 环境（浏览器里跑组件预览）忽略
   }
 
+  // 先按当前已知状态画一次，避免等原生窗口
   paint(style, theme);
 
-  // 原生外观是异步生效的，media query 下一帧才更新
+  // 原生外观生效后 media query 才会更新，再画一次把「跟随系统」校正到真正的系统明暗
+  void applied.then(() => paint(style, theme));
   requestAnimationFrame(() => paint(style, theme));
+  // 兜底：个别平台 setTheme 的 promise 与 media query 更新不同步
   window.setTimeout(() => paint(style, theme), 120);
 }
 
