@@ -191,7 +191,7 @@ export function Select({
               width: pos.width,
               maxHeight: pos.maxHeight,
             }}
-            className="fixed z-[60] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-1 shadow-xl ring-1 ring-black/5 dark:ring-white/10"
+            className="pastoid-menu fixed z-[60] overflow-y-auto overscroll-contain rounded-xl p-1"
           >
             {options.map((option, index) => {
               const selected = option.id === value;

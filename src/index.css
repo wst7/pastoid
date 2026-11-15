@@ -158,6 +158,24 @@
   border: var(--card-border, 1px solid var(--border));
   border-radius: var(--card-radius, 12px);
 }
+/* 浮层（下拉菜单、标签建议）：必须用不透明的表面。
+   卡片色在玻璃/云母主题里是半透明的（rgba(255,255,255,.06)），
+   浮层用 bg-card 会把下面的设置项透上来，看起来像"菜单没渲染好"。 */
+.pastoid-menu{
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  /* 长列表要能看出"还能滚"：macOS 的覆盖式滚动条平时是隐藏的 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.pastoid-menu::-webkit-scrollbar{width:8px}
+.pastoid-menu::-webkit-scrollbar-track{background:transparent}
+.pastoid-menu::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
 /* 置顶卡片的淡琥珀底：用叠层而不是背景色，主题换肤时不会被覆盖 */
 .pastoid-card.pinned::after{
   content:"";

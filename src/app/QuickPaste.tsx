@@ -810,7 +810,7 @@ export default function QuickPaste() {
 
         {/* 标签建议：输入 # 时出现 */}
         {showSuggestions && (
-          <div className="absolute left-3 top-[50px] z-30 w-[340px] overflow-hidden rounded-xl border border-border bg-card p-1 shadow-xl">
+          <div className="pastoid-menu absolute left-3 top-[50px] z-30 w-[340px] overflow-hidden rounded-xl p-1">
             {suggestions.map((s, index) => (
               <button
                 key={s.tag}
@@ -978,7 +978,7 @@ export default function QuickPaste() {
 
         {/* 标签编辑条：贴着底部快捷键栏，不遮挡卡片 */}
         {tagEditor && tagTarget && (
-          <div className="absolute inset-x-0 bottom-8 z-20 flex items-center gap-1.5 px-3 py-2 border-t border-border/60 bg-background/95">
+          <div className="absolute inset-x-0 bottom-8 z-20 flex items-center gap-1.5 px-3 py-2 border-t border-border/60 bg-background">
             <Tag size={12} className="text-muted-foreground shrink-0" />
             {(tagTarget.tags ?? []).map((tag) => (
               <button
@@ -1025,7 +1025,7 @@ export default function QuickPaste() {
 
         {/* 正文编辑弹层：图片不支持改内容 */}
         {editor && (
-          <div className="absolute inset-0 z-30 flex flex-col gap-2 p-3 bg-background/95 backdrop-blur">
+          <div className="absolute inset-0 z-30 flex flex-col gap-2 p-3 bg-background">
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <Pencil size={12} />
               <span>{t("edit")}</span>
