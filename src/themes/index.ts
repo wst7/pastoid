@@ -22,13 +22,12 @@ export interface ThemeStyle {
 }
 
 /**
- * 只保留差异最大的 8 套。之前的 12 套里 Material 3 / 柔雾 / 云母 / 学院
- * 与 default、glass、zen 观感太接近，选择成本大于价值。
+ * 只保留差异最大的 7 套。之前的 12 套里 Material 3 / 柔雾 / 云母 / 学院
+ * 与 default、zen 观感太接近；玻璃拟态在没有系统 vibrancy 时只是半透明面板，一并移除。
  * 被移出的 token 仍留在 index.css（见文件末尾注释），恢复只需在这里加回一行。
  */
 export const THEMES: ThemeStyle[] = [
   { id: "default", name: "默认", nameEn: "Default", modes: ["light", "dark"] },
-  { id: "glass", name: "玻璃拟态", nameEn: "Glassmorphism", modes: ["light", "dark"] },
   { id: "notion", name: "文档工作台", nameEn: "Document", modes: ["light", "dark"] },
   { id: "swiss", name: "瑞士国际主义", nameEn: "Swiss Style", modes: ["light", "dark"] },
   { id: "aurora", name: "极光界面", nameEn: "Aurora", modes: ["light", "dark"] },

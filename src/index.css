@@ -172,7 +172,7 @@ html{ font-family: var(--font-ui, ui-sans-serif, system-ui, -apple-system, "Sego
   border-radius: var(--card-radius, 12px);
 }
 /* 浮层（下拉菜单、标签建议）：必须用不透明的表面。
-   卡片色在玻璃/云母主题里是半透明的（rgba(255,255,255,.06)），
+   卡片色在极光等主题里是半透明的（rgba(255,255,255,.06)），
    浮层用 bg-card 会把下面的设置项透上来，看起来像"菜单没渲染好"。 */
 .pastoid-menu{
   background: var(--background);
@@ -266,64 +266,6 @@ html{ font-family: var(--font-ui, ui-sans-serif, system-ui, -apple-system, "Sego
   --panel-blur:24px;
   --card-border:1px solid #2c2c40;
   --card-radius:12px;
-}
-
-:root[data-style="glass"].light{
-  --background:#f4f2fb;
-  --foreground:#242143;
-  --card:rgba(255,255,255,.86);
-  --card-foreground:#242143;
-  --popover:rgba(255,255,255,.86);
-  --popover-foreground:#242143;
-  --primary:#6B79FF;
-  --primary-foreground:#ffffff;
-  --secondary:rgba(36,33,67,.08);
-  --secondary-foreground:#242143;
-  --muted:rgba(36,33,67,.08);
-  --muted-foreground:#6b6a86;
-  --accent:rgba(36,33,67,.08);
-  --accent-foreground:#242143;
-  --border:rgba(36,33,67,.12);
-  --input:rgba(36,33,67,.12);
-  --ring:#6B79FF;
-  --default:rgba(36,33,67,.06);
-  --warning:#B45309;
-  --panel-bg:rgba(255,255,255,.72);
-  --panel-border:1px solid rgba(255,255,255,.9);
-  --panel-radius:20px;
-  --panel-shadow:0 24px 70px rgba(71,54,120,.22);
-  --panel-blur:24px;
-  --card-border:1px solid rgba(36,33,67,.10);
-  --card-radius:14px;
-}
-
-:root[data-style="glass"].dark{
-  --background:#12121f;
-  --foreground:#F2F1FA;
-  --card:rgba(255,255,255,.07);
-  --card-foreground:#F2F1FA;
-  --popover:rgba(255,255,255,.07);
-  --popover-foreground:#F2F1FA;
-  --primary:#8D96FF;
-  --primary-foreground:#0b0b18;
-  --secondary:rgba(255,255,255,.12);
-  --secondary-foreground:#F2F1FA;
-  --muted:rgba(255,255,255,.12);
-  --muted-foreground:#A6A4C0;
-  --accent:rgba(255,255,255,.12);
-  --accent-foreground:#F2F1FA;
-  --border:rgba(255,255,255,.12);
-  --input:rgba(255,255,255,.12);
-  --ring:#8D96FF;
-  --default:rgba(255,255,255,.07);
-  --warning:#FBBF24;
-  --panel-bg:rgba(28,28,44,.72);
-  --panel-border:1px solid rgba(255,255,255,.14);
-  --panel-radius:20px;
-  --panel-shadow:0 24px 70px rgba(0,0,0,.55);
-  --panel-blur:24px;
-  --card-border:1px solid rgba(255,255,255,.10);
-  --card-radius:14px;
 }
 
 :root[data-style="swiss"].light{

@@ -28,7 +28,7 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 - **⚙️ Configurable Limits** — Set how many items to keep (1–100, or unlimited) to balance history depth and performance.
 - **🏷️ Custom Tags** — Tag any item and search tags alongside content; type `#` for suggestions or click a tag on a card to filter. Tagged items are protected from rolling deletion, and Settings can delete everything under a tag in one go.
 - **✏️ Edit Items** — Fix a copied snippet in place (`⌘E`) before pasting it.
-- **🎨 Theme Styles** — Eight looks: Default, Glassmorphism, Document, Swiss Style, Aurora, OLED Pure, Wabi-sabi and Neo Brutalism. Each comes in light and dark — pick a mode, or let it follow the system.
+- **🎨 Theme Styles** — Seven looks: Default, Document, Swiss Style, Aurora, OLED Pure, Wabi-sabi and Neo Brutalism. Each comes in light and dark — pick a mode, or let it follow the system.
 
 ## Screenshots
 

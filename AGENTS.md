@@ -78,9 +78,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
 - **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
   面板/卡片的形状走 `--panel-*` / `--card-*`（见 `src/index.css` 的 `.pastoid-panel` / `.pastoid-card`）
-- **外观 = 8 套风格 + 3 个明暗按钮**（自动/浅/深）：风格只保差异最大的 8 套，
-  Material 3 / 柔雾 / 云母 / 学院与 default/glass/zen 太像，已从 `THEMES` 移除
-  （CSS token 还在，恢复只需加回一行）。`paint(style, theme)` 两个参数缺一不可
+- **外观 = 7 套风格 + 3 个明暗按钮**（自动/浅/深）：风格只保差异最大的 7 套。
+  Material 3 / 柔雾 / 云母 / 学院与已有风格太像，玻璃拟态在无系统 vibrancy 时只是半透明，
+  五套已从 `THEMES` 移除（前四套 CSS token 还在，恢复加一行；glass 的 token 已删）
+- `backdrop-filter` 在透明窗口里**没有可模糊的内容**，别再用它假装毛玻璃；
+  真玻璃需要窗口级 vibrancy（macOS NSVisualEffectView / Windows Acrylic）
 - 内层控件圆角用 `--control-radius` / `--chip-radius`（由 `--card-radius` 派生），
   不要写死 `rounded-md`——否则粗野/侘寂会出现"外方内圆"
 - 对比度改动后跑 `npm run check:themes`：校验每套风格两版齐全、核心 token 齐全、
