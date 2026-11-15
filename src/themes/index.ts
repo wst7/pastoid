@@ -21,18 +21,19 @@ export interface ThemeStyle {
   modes: ThemeMode[];
 }
 
+/**
+ * 只保留差异最大的 8 套。之前的 12 套里 Material 3 / 柔雾 / 云母 / 学院
+ * 与 default、glass、zen 观感太接近，选择成本大于价值。
+ * 被移出的 token 仍留在 index.css（见文件末尾注释），恢复只需在这里加回一行。
+ */
 export const THEMES: ThemeStyle[] = [
   { id: "default", name: "默认", nameEn: "Default", modes: ["light", "dark"] },
   { id: "glass", name: "玻璃拟态", nameEn: "Glassmorphism", modes: ["light", "dark"] },
-  { id: "swiss", name: "瑞士国际主义", nameEn: "Swiss Style", modes: ["light", "dark"] },
-  { id: "material", name: "Material 3", nameEn: "Material 3", modes: ["light", "dark"] },
   { id: "notion", name: "文档工作台", nameEn: "Document", modes: ["light", "dark"] },
-  { id: "oled", name: "OLED 纯粹", nameEn: "OLED Pure", modes: ["light", "dark"] },
-  { id: "soft", name: "柔雾渐层", nameEn: "Soft Gradient", modes: ["light", "dark"] },
-  { id: "mica", name: "Fluent 云母", nameEn: "Fluent Mica", modes: ["light", "dark"] },
+  { id: "swiss", name: "瑞士国际主义", nameEn: "Swiss Style", modes: ["light", "dark"] },
   { id: "aurora", name: "极光界面", nameEn: "Aurora", modes: ["light", "dark"] },
+  { id: "oled", name: "OLED 纯粹", nameEn: "OLED Pure", modes: ["light", "dark"] },
   { id: "zen", name: "日式侘寂", nameEn: "Wabi-sabi", modes: ["light", "dark"] },
-  { id: "academia", name: "学院手稿", nameEn: "Academia", modes: ["light", "dark"] },
   { id: "brutal", name: "新粗野主义", nameEn: "Neo Brutalism", modes: ["light", "dark"] },
 ];
 

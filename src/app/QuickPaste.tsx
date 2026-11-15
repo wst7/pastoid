@@ -89,7 +89,7 @@ function ImageThumb({ filename }: { filename: string }) {
     <img
       src={src}
       alt=""
-      className="w-full h-full object-cover rounded-lg"
+      className="w-full h-full object-cover rounded-[var(--card-radius)]"
       draggable={false}
     />
   );
@@ -747,7 +747,7 @@ export default function QuickPaste() {
   const renderPreview = (item: ClipboardItem) => {
     if (item.type === "image") {
       return (
-        <div className="w-full h-full overflow-hidden rounded-lg bg-default">
+        <div className="w-full h-full overflow-hidden rounded-[var(--card-radius)] bg-default">
           <ImageThumb filename={item.content} />
         </div>
       );
@@ -784,7 +784,7 @@ export default function QuickPaste() {
       >
         {/* 顶部：搜索 + 分类 */}
         <div className="shrink-0 flex items-center gap-2 px-3 pt-3 pb-2">
-          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-default ring-1 ring-transparent focus-within:ring-ring/50 transition-shadow">
+          <div className="flex-1 flex items-center gap-2 h-9 px-3 rounded-[var(--card-radius)] bg-default border border-border focus-within:ring-2 focus-within:ring-ring/50 transition-shadow">
             <Search size={15} className="text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
@@ -814,7 +814,7 @@ export default function QuickPaste() {
                 <button
                   key={f.key}
                   onClick={() => setFilter(f.key)}
-                  className={`px-2.5 h-7 rounded-lg text-[11.5px] transition-colors ${
+                  className={`px-2.5 h-7 rounded-[var(--control-radius)] text-[11.5px] transition-colors ${
                     isActive
                       ? "bg-default text-foreground font-semibold"
                       : "text-muted-foreground hover:bg-default"
@@ -832,14 +832,14 @@ export default function QuickPaste() {
 
         {/* 标签建议：输入 # 时出现 */}
         {showSuggestions && (
-          <div className="pastoid-menu absolute left-3 top-[50px] z-30 w-[340px] overflow-hidden rounded-xl p-1">
+          <div className="pastoid-menu absolute left-3 top-[50px] z-30 w-[340px] overflow-hidden rounded-[var(--card-radius)] p-1">
             {suggestions.map((s, index) => (
               <button
                 key={s.tag}
                 type="button"
                 onMouseEnter={() => setTagIndex(index)}
                 onClick={() => applyTagQuery(s.tag)}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] ${
+                className={`flex w-full items-center justify-between gap-2 rounded-[var(--control-radius)] px-2 py-1.5 text-left text-[12px] ${
                   index === tagIndex ? "bg-default text-foreground" : "text-muted-foreground"
                 }`}
               >
@@ -882,7 +882,7 @@ export default function QuickPaste() {
                 </span>
                 <button
                   onClick={() => void refresh({ reset: true })}
-                  className="rounded-md border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-destructive/10"
+                  className="rounded-[var(--control-radius)] border border-current/30 px-2.5 py-1 text-[11.5px] hover:bg-destructive/10"
                 >
                   {t("retry")}
                 </button>
@@ -904,7 +904,7 @@ export default function QuickPaste() {
                 const showActions = isActive || hoveredId === item.id;
                 const canEdit = item.type !== "image";
                 const actionBtn = (visible: boolean, extra = "") =>
-                  `w-5 h-5 flex items-center justify-center rounded-md transition-opacity ${
+                  `w-5 h-5 flex items-center justify-center rounded-[var(--control-radius)] transition-opacity ${
                     visible ? "opacity-100" : "opacity-0 pointer-events-none"
                   } ${extra}`;
                 return (
@@ -924,7 +924,7 @@ export default function QuickPaste() {
                       setHoveredId((prev) => (prev === item.id ? null : prev))
                     }
                     className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.985] ${
-                      isActive ? "ring-2 ring-primary/40 shadow-sm" : ""
+                      isActive ? "ring-2 ring-primary shadow-sm" : ""
                     } ${item.isPinned ? "pinned" : ""}`}
                   >
                     <div
@@ -957,7 +957,7 @@ export default function QuickPaste() {
                               e.stopPropagation();
                               applyTagQuery(tag);
                             }}
-                            className="text-[9px] leading-[14px] px-1 rounded bg-primary/10 text-primary truncate max-w-[80px] hover:bg-primary/20"
+                            className="text-[9px] leading-[14px] px-1 rounded-[var(--chip-radius)] bg-primary/10 text-primary truncate max-w-[80px] hover:bg-primary/20"
                             title={`#${tag}`}
                           >
                             #{tag}
@@ -1062,7 +1062,7 @@ export default function QuickPaste() {
 
         {tip && (
           <div
-            className="pointer-events-none fixed z-50 whitespace-nowrap rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground shadow-lg"
+            className="pointer-events-none fixed z-50 whitespace-nowrap rounded-[var(--control-radius)] border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground shadow-lg"
             style={{ left: tip.x, top: tip.y, transform: "translate(-50%, -100%)" }}
             role="tooltip"
           >
@@ -1141,7 +1141,7 @@ export default function QuickPaste() {
                 }
               }}
               spellCheck={false}
-              className="flex-1 min-h-0 w-full resize-none rounded-lg border border-border bg-card p-3 text-[12.5px] leading-relaxed text-card-foreground outline-none focus:ring-2 focus:ring-ring/40"
+              className="flex-1 min-h-0 w-full resize-none rounded-[var(--card-radius)] border border-border bg-card p-3 text-[12.5px] leading-relaxed text-card-foreground outline-none focus:ring-2 focus:ring-ring/40"
             />
             {editor.error && (
               <div className="text-[11px] text-destructive">{editor.error}</div>
@@ -1151,13 +1151,13 @@ export default function QuickPaste() {
               <div className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() => setEditor(null)}
-                  className="rounded-md border border-border px-2.5 py-1 text-[11.5px] text-muted-foreground hover:bg-default"
+                  className="rounded-[var(--control-radius)] border border-border px-2.5 py-1 text-[11.5px] text-muted-foreground hover:bg-default"
                 >
                   {t("cancel")}
                 </button>
                 <button
                   onClick={() => void saveEditor()}
-                  className="rounded-md bg-primary px-2.5 py-1 text-[11.5px] text-primary-foreground hover:opacity-90"
+                  className="rounded-[var(--control-radius)] bg-primary px-2.5 py-1 text-[11.5px] text-primary-foreground hover:opacity-90"
                 >
                   {t("save")}
                 </button>

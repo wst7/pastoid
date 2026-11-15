@@ -33,6 +33,15 @@
 /* 让浏览器自绘部分（滚动条、输入控件、光标）跟随明暗 */
 html{ color-scheme: light; }
 
+/* 主题只定义了 panel/card 的圆角，内层控件按比例派生，避免粗野/侘寂"外方内圆" */
+:root{
+  --control-radius: calc(var(--card-radius, 12px) * 0.55);
+  --chip-radius: calc(var(--card-radius, 12px) * 0.35);
+}
+
+/* 衬线风格（侘寂/学院）要让设置窗口也一起用，而不只是面板 */
+html{ font-family: var(--font-ui, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif); }
+
 .dark {
   color-scheme: dark;
   --background: #1e1e2e;
@@ -181,16 +190,23 @@ html{ color-scheme: light; }
 .pastoid-menu::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
 /* 悬浮反馈：由 React 的 hoveredId 控制，而不是 CSS :hover——
-   键盘换卡后旧卡片的 :hover 还在，会看起来像"还选中着" */
-.pastoid-card[data-hovered="true"]{
-  filter: brightness(0.985);
+   键盘换卡后旧卡片的 :hover 还在，会看起来像"还选中着"。
+   用前景色叠一层而不是 brightness()：近黑主题（OLED/粗野深色）上滤镜差值只有 1/255，看不见 */
+.pastoid-card[data-hovered="true"]::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:var(--foreground);
+  opacity:.035;
+  pointer-events:none;
+  border-radius:inherit;
 }
 
 /* 置顶卡片的淡琥珀底：用叠层而不是背景色，主题换肤时不会被覆盖 */
 .pastoid-card.pinned::after{
   content:"";
   position:absolute;inset:0;pointer-events:none;
-  background:var(--warning);opacity:.07;
+  background:var(--warning);opacity:.12;
   border-radius:inherit;
 }
 

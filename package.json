@@ -12,7 +12,8 @@
     "release": "release-it",
     "release:patch": "release-it patch",
     "release:minor": "release-it minor",
-    "release:major": "release-it major"
+    "release:major": "release-it major",
+    "check:themes": "node scripts/check-themes.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.0.3",

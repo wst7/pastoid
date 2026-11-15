@@ -78,9 +78,13 @@ npm run release:major     # 0.1.0 -> 1.0.0
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
 - **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
   面板/卡片的形状走 `--panel-*` / `--card-*`（见 `src/index.css` 的 `.pastoid-panel` / `.pastoid-card`）
-- **外观是一个下拉、25 项**：`跟随系统` + 12 套风格 ×（浅色/深色）。选具体某项就把
-  `theme` 固定成 light/dark（不再跟系统），选「跟随系统」写回 `system`。
-  `paint(style, theme)` 两个参数缺一不可
+- **外观 = 8 套风格 + 3 个明暗按钮**（自动/浅/深）：风格只保差异最大的 8 套，
+  Material 3 / 柔雾 / 云母 / 学院与 default/glass/zen 太像，已从 `THEMES` 移除
+  （CSS token 还在，恢复只需加回一行）。`paint(style, theme)` 两个参数缺一不可
+- 内层控件圆角用 `--control-radius` / `--chip-radius`（由 `--card-radius` 派生），
+  不要写死 `rounded-md`——否则粗野/侘寂会出现"外方内圆"
+- 对比度改动后跑 `npm run check:themes`：校验每套风格两版齐全、核心 token 齐全、
+  正文/次要/主色/选中环/搜索底全部达到阈值
 - 加新风格时两版都要写：结构（圆角/边框/阴影/blur）保持一致，只换颜色，
   否则切换明暗时会像换了一套主题
 - `modes` 现在全是 `["light","dark"]`，留着是能力声明；`paint()` 的单档兜底仍然保留

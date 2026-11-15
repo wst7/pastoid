@@ -18,7 +18,7 @@ import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
 import type { TagCount } from "@/types/clipboard";
-import { FolderOpen, Trash2, X } from "lucide-react";
+import { FolderOpen, Monitor, Moon, Sun, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
 import { THEMES, DEFAULT_STYLE } from "@/themes";
 
@@ -57,16 +57,18 @@ const languages = [
  * 外观 = 风格 × 明暗，但只用一个下拉：每套风格直接展开成「浅色 / 深色」两项，
  * 外加一个「跟随系统」。这样既能显式选深浅，又不用第二个控件。
  */
-const appearanceOptions = (lang: string, t: (key: string) => string) => [
-  { id: "system", name: t("system") },
-  ...THEMES.flatMap((style) => {
-    const name = lang.startsWith("zh") ? style.name : style.nameEn;
-    return [
-      { id: `${style.id}:light`, name: `${name} · ${t("light")}` },
-      { id: `${style.id}:dark`, name: `${name} · ${t("dark")}` },
-    ];
-  }),
-];
+const styleOptions = (lang: string) =>
+  THEMES.map((style) => ({
+    id: style.id,
+    name: lang.startsWith("zh") ? style.name : style.nameEn,
+  }));
+
+/** 明暗三段：自动 / 浅色 / 深色 */
+const THEME_MODES = [
+  { id: "system", icon: Monitor },
+  { id: "light", icon: Sun },
+  { id: "dark", icon: Moon },
+] as const;
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
@@ -97,7 +99,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="mb-1.5 px-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+      <div className="overflow-hidden rounded-[var(--card-radius)] bg-card shadow-sm ring-1 ring-black/5 dark:ring-white/10">
         {children}
       </div>
     </section>
@@ -248,13 +250,12 @@ export default function SettingsApp() {
     if (ok) i18n.changeLanguage(language === "zh" ? "zh" : "en");
   };
 
-  const handleAppearanceChange = async (id: string) => {
-    if (id === "system") {
-      await persist({ ...settings, theme: "system" });
-      return;
-    }
-    const [theme_style, theme] = id.split(":") as [string, "light" | "dark"];
-    await persist({ ...settings, theme_style, theme });
+  const handleStyleChange = async (theme_style: string) => {
+    await persist({ ...settings, theme_style });
+  };
+
+  const handleThemeModeChange = async (theme: "system" | "light" | "dark") => {
+    await persist({ ...settings, theme });
   };
 
   const handleAutostartChange = async (isSelected: boolean) => {
@@ -645,16 +646,36 @@ export default function SettingsApp() {
           <Row label={t("appearance")}>
             <div className="relative flex items-center">
               <Select
-                value={
-                  settings.theme === "system"
-                    ? "system"
-                    : `${settings.theme_style}:${settings.theme}`
-                }
-                options={appearanceOptions(settings.language, t)}
-                onChange={handleAppearanceChange}
+                value={settings.theme_style}
+                options={styleOptions(settings.language)}
+                onChange={handleStyleChange}
                 disabled={loadingSettings}
-                minWidth={210}
+                minWidth={150}
               />
+              {/* 明暗只留三个小按钮，不再占一个下拉 */}
+              <div className="flex items-center gap-0.5 rounded-full bg-default p-0.5">
+                {THEME_MODES.map(({ id, icon: Icon }) => {
+                  const active = settings.theme === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => void handleThemeModeChange(id)}
+                      disabled={loadingSettings}
+                      title={t(id)}
+                      aria-label={t(id)}
+                      aria-pressed={active}
+                      className={`flex h-5 w-5 items-center justify-center rounded-full transition-colors ${
+                        active
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Icon size={11} strokeWidth={2} />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </Row>
 
