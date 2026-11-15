@@ -5,7 +5,8 @@
  * （`:root[data-style="<id>"].light/.dark`），这里只描述元数据：
  * 叫什么、支持哪些明暗模式。
  *
- * `modes` 很关键：艺术风格往往只成立一种明暗。比如 OLED 纯黑在浅色下没有意义，
+ * 每套风格都做了明暗两版（结构/圆角/边框不变，只换颜色）。
+ * `modes` 留作能力声明：目前全是 ["light","dark"]，paint() 会跟随系统明暗。
  * 侘寂的米纸色在深色下也不成立。切到只支持单一模式的主题时，明暗会自动跟过去。
  */
 export type ThemeMode = "light" | "dark";
@@ -26,13 +27,13 @@ export const THEMES: ThemeStyle[] = [
   { id: "swiss", name: "瑞士国际主义", nameEn: "Swiss Style", modes: ["light", "dark"] },
   { id: "material", name: "Material 3", nameEn: "Material 3", modes: ["light", "dark"] },
   { id: "notion", name: "文档工作台", nameEn: "Document", modes: ["light", "dark"] },
-  { id: "oled", name: "OLED 深夜", nameEn: "OLED Noir", modes: ["dark"] },
-  { id: "soft", name: "柔雾渐层", nameEn: "Soft Gradient", modes: ["light"] },
+  { id: "oled", name: "OLED 纯粹", nameEn: "OLED Pure", modes: ["light", "dark"] },
+  { id: "soft", name: "柔雾渐层", nameEn: "Soft Gradient", modes: ["light", "dark"] },
   { id: "mica", name: "Fluent 云母", nameEn: "Fluent Mica", modes: ["light", "dark"] },
-  { id: "aurora", name: "极光界面", nameEn: "Aurora", modes: ["dark"] },
-  { id: "zen", name: "日式侘寂", nameEn: "Wabi-sabi", modes: ["light"] },
-  { id: "academia", name: "暗黑学院", nameEn: "Dark Academia", modes: ["dark"] },
-  { id: "brutal", name: "新粗野主义", nameEn: "Neo Brutalism", modes: ["light"] },
+  { id: "aurora", name: "极光界面", nameEn: "Aurora", modes: ["light", "dark"] },
+  { id: "zen", name: "日式侘寂", nameEn: "Wabi-sabi", modes: ["light", "dark"] },
+  { id: "academia", name: "学院手稿", nameEn: "Academia", modes: ["light", "dark"] },
+  { id: "brutal", name: "新粗野主义", nameEn: "Neo Brutalism", modes: ["light", "dark"] },
 ];
 
 export const DEFAULT_STYLE = "default";

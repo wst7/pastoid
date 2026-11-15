@@ -29,7 +29,7 @@ Pastoid keeps your clipboard history at your fingertips — a configurable numbe
 - **⚙️ Configurable Limits** — Set how many items to keep (1–100, or unlimited) to balance history depth and performance.
 - **🏷️ Custom Tags** — Tag any item and search tags alongside content; type `#` for suggestions or click a tag on a card to filter. Tagged items are protected from rolling deletion.
 - **✏️ Edit Items** — Fix a copied snippet in place (`⌘E`) before pasting it.
-- **🎨 Theme Styles** — Eleven looks including Glassmorphism, Swiss Style, Material 3, Document, OLED Noir and Fluent Mica.
+- **🎨 Theme Styles** — Eleven looks including Glassmorphism, Swiss Style, Material 3, Document, OLED Pure and Fluent Mica, each with a light and dark variant that follows the system.
 
 ## Screenshots
 

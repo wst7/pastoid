@@ -434,7 +434,7 @@
   --secondary:#EFEFEC;
   --secondary-foreground:#292929;
   --muted:#EFEFEC;
-  --muted-foreground:#9B9B96;
+  --muted-foreground:#6B6B6B;
   --accent:#EFEFEC;
   --accent-foreground:#292929;
   --border:#E6E6E2;
@@ -480,6 +480,36 @@
   --card-radius:7px;
 }
 
+/* OLED 白天版：同样是"纯"，白底 + 近黑字 + 高对比薄荷 */
+:root[data-style="oled"].light{
+  --background:#FFFFFF;
+  --foreground:#0A0A0A;
+  --card:#FFFFFF;
+  --card-foreground:#0A0A0A;
+  --popover:#FFFFFF;
+  --popover-foreground:#0A0A0A;
+  --primary:#0B7A55;
+  --primary-foreground:#FFFFFF;
+  --secondary:#F1F1F1;
+  --secondary-foreground:#141414;
+  --muted:#F1F1F1;
+  --muted-foreground:#5E5E5E;
+  --accent:#F1F1F1;
+  --accent-foreground:#141414;
+  --border:#E2E2E2;
+  --input:#E2E2E2;
+  --ring:#0B7A55;
+  --default:#F5F5F5;
+  --warning:#8A5200;
+  --panel-bg:#FFFFFF;
+  --panel-border:1px solid #E2E2E2;
+  --panel-radius:14px;
+  --panel-shadow:0 26px 70px rgba(0,0,0,.16);
+  --panel-blur:0px;
+  --card-border:1px solid #E2E2E2;
+  --card-radius:10px;
+}
+
 :root[data-style="oled"].dark{
   --background:#050505;
   --foreground:#D8D8D8;
@@ -507,6 +537,36 @@
   --panel-blur:0px;
   --card-border:1px solid #262626;
   --card-radius:10px;
+}
+
+/* 柔雾深色版：同一套圆角与渐变，换成深紫夜色 */
+:root[data-style="soft"].dark{
+  --background:#171420;
+  --foreground:#EDE9F7;
+  --card:rgba(255,255,255,.06);
+  --card-foreground:#EDE9F7;
+  --popover:rgba(255,255,255,.06);
+  --popover-foreground:#EDE9F7;
+  --primary:#B7ACFF;
+  --primary-foreground:#16121F;
+  --secondary:rgba(183,172,255,.16);
+  --secondary-foreground:#EDE9F7;
+  --muted:rgba(183,172,255,.16);
+  --muted-foreground:#A39CBE;
+  --accent:rgba(183,172,255,.16);
+  --accent-foreground:#EDE9F7;
+  --border:rgba(183,172,255,.2);
+  --input:rgba(183,172,255,.2);
+  --ring:#B7ACFF;
+  --default:rgba(183,172,255,.1);
+  --warning:#F0A35E;
+  --panel-bg:linear-gradient(135deg,#221D30,#191524 55%,#141826);
+  --panel-border:1px solid rgba(183,172,255,.18);
+  --panel-radius:26px;
+  --panel-shadow:0 24px 64px rgba(0,0,0,.6);
+  --panel-blur:0px;
+  --card-border:1px solid rgba(255,255,255,.1);
+  --card-radius:18px;
 }
 
 :root[data-style="soft"].light{
@@ -596,6 +656,36 @@
   --card-radius:8px;
 }
 
+/* 极光白天版：浅底上仍保留柔光，只是光晕收敛 */
+:root[data-style="aurora"].light{
+  --background:#F5F6FF;
+  --foreground:#1B1B3A;
+  --card:rgba(255,255,255,.78);
+  --card-foreground:#1B1B3A;
+  --popover:rgba(255,255,255,.78);
+  --popover-foreground:#1B1B3A;
+  --primary:#5457D6;
+  --primary-foreground:#FFFFFF;
+  --secondary:rgba(84,87,214,.1);
+  --secondary-foreground:#1B1B3A;
+  --muted:rgba(84,87,214,.1);
+  --muted-foreground:#5C5C86;
+  --accent:rgba(84,87,214,.1);
+  --accent-foreground:#1B1B3A;
+  --border:rgba(84,87,214,.16);
+  --input:rgba(84,87,214,.16);
+  --ring:#5457D6;
+  --default:rgba(84,87,214,.08);
+  --warning:#A65E00;
+  --panel-bg:rgba(255,255,255,.72);
+  --panel-border:1px solid rgba(84,87,214,.16);
+  --panel-radius:22px;
+  --panel-shadow:0 26px 70px rgba(84,87,214,.22);
+  --panel-blur:22px;
+  --card-border:1px solid rgba(84,87,214,.12);
+  --card-radius:14px;
+}
+
 :root[data-style="aurora"].dark{
   --background:#0E1026;
   --foreground:#F6F4FF;
@@ -623,6 +713,36 @@
   --panel-blur:22px;
   --card-border:1px solid rgba(255,255,255,.12);
   --card-radius:14px;
+}
+
+/* 侘寂夜版：炭黑和纸，朱砂仍然只用在强调处 */
+:root[data-style="zen"].dark{
+  --background:#1B1A17;
+  --foreground:#E8E2D6;
+  --card:#232220;
+  --card-foreground:#E8E2D6;
+  --popover:#232220;
+  --popover-foreground:#E8E2D6;
+  --primary:#C98A72;
+  --primary-foreground:#1B1A17;
+  --secondary:#E8E2D6;
+  --secondary-foreground:#1B1A17;
+  --muted:#2A2926;
+  --muted-foreground:#A39D8F;
+  --accent:#E8E2D6;
+  --accent-foreground:#1B1A17;
+  --border:#3B3934;
+  --input:#3B3934;
+  --ring:#C98A72;
+  --default:#2A2926;
+  --warning:#C98A72;
+  --panel-bg:#1B1A17;
+  --panel-border:1px solid #3B3934;
+  --panel-radius:4px;
+  --panel-shadow:0 22px 60px rgba(0,0,0,.6);
+  --panel-blur:0px;
+  --card-border:1px solid #3B3934;
+  --card-radius:2px;
 }
 
 :root[data-style="zen"].light{
@@ -654,6 +774,36 @@
   --card-radius:2px;
 }
 
+/* 暗黑学院日版：象牙纸 + 深棕墨，衬线不变 */
+:root[data-style="academia"].light{
+  --background:#F4EBD9;
+  --foreground:#2A2017;
+  --card:#FBF4E5;
+  --card-foreground:#2A2017;
+  --popover:#FBF4E5;
+  --popover-foreground:#2A2017;
+  --primary:#8A5A3B;
+  --primary-foreground:#FBF4E5;
+  --secondary:rgba(42,32,23,.08);
+  --secondary-foreground:#2A2017;
+  --muted:rgba(42,32,23,.08);
+  --muted-foreground:#6B5B47;
+  --accent:rgba(42,32,23,.08);
+  --accent-foreground:#2A2017;
+  --border:rgba(42,32,23,.18);
+  --input:rgba(42,32,23,.18);
+  --ring:#8A5A3B;
+  --default:#EFE4CD;
+  --warning:#9A5A2C;
+  --panel-bg:#F4EBD9;
+  --panel-border:1px solid rgba(42,32,23,.24);
+  --panel-radius:6px;
+  --panel-shadow:0 26px 70px rgba(60,45,30,.28);
+  --panel-blur:0px;
+  --card-border:1px solid rgba(42,32,23,.14);
+  --card-radius:3px;
+}
+
 :root[data-style="academia"].dark{
   --background:#19140F;
   --foreground:#D9C8A9;
@@ -683,6 +833,36 @@
   --card-radius:3px;
 }
 
+/* 粗野主义夜版：黑底 + 亮黄块 + 白描边，硬阴影翻成白色 */
+:root[data-style="brutal"].dark{
+  --background:#0D0D0D;
+  --foreground:#F7F7F0;
+  --card:#161616;
+  --card-foreground:#F7F7F0;
+  --popover:#161616;
+  --popover-foreground:#F7F7F0;
+  --primary:#FFD400;
+  --primary-foreground:#0D0D0D;
+  --secondary:#FFD400;
+  --secondary-foreground:#0D0D0D;
+  --muted:#FFD400;
+  --muted-foreground:#C9C9C2;
+  --accent:#FFD400;
+  --accent-foreground:#0D0D0D;
+  --border:#F7F7F0;
+  --input:#F7F7F0;
+  --ring:#FFD400;
+  --default:#1F1F1F;
+  --warning:#FFB020;
+  --panel-bg:#0D0D0D;
+  --panel-border:3px solid #F7F7F0;
+  --panel-radius:0px;
+  --panel-shadow:6px 6px 0 #F7F7F0;
+  --panel-blur:0px;
+  --card-border:2px solid #F7F7F0;
+  --card-radius:0px;
+}
+
 :root[data-style="brutal"].light{
   --background:#FFFDF3;
   --foreground:#101010;
@@ -706,7 +886,7 @@
   --panel-bg:#FFFDF3;
   --panel-border:3px solid #101010;
   --panel-radius:0px;
-  --panel-shadow:10px 10px 0 #101010;
+  --panel-shadow:6px 6px 0 #101010;
   --panel-blur:0px;
   --card-border:2px solid #101010;
   --card-radius:0px;
@@ -719,7 +899,5 @@
   --font-ui: "Songti SC", "Noto Serif SC", Georgia, serif;
 }
 
-/* 粗野主义的硬阴影只有 6px：窗口外层 p-2 只留了 8px，10px 会被裁掉 */
-:root[data-style="brutal"]{
-  --panel-shadow: 6px 6px 0 #101010;
-}
+/* 粗野主义的硬阴影只有 6px：窗口外层 p-2 只留了 8px，10px 会被裁掉
+   （两种模式各自在主题块里写死，别用通用规则覆盖，否则深色模式的白色阴影会被吃掉） */

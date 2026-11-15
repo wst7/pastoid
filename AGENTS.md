@@ -68,9 +68,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
 - **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
   面板/卡片的形状走 `--panel-*` / `--card-*`（见 `src/index.css` 的 `.pastoid-panel` / `.pastoid-card`）
-- **外观只有风格一维**（没有明暗开关）：`paint(style)` 里双模式风格跟随系统明暗，
-  单模式风格（OLED 只有深色、侘寂只有浅色）固定用自己的那一档；
-  `Settings.theme` 保留但统一写 `system`，只为兼容旧配置文件
+- **外观只有风格一维**（没有明暗开关）：12 套风格都有明暗两版，`paint(style)` 跟随系统明暗。
+  加新风格时两版都要写：结构（圆角/边框/阴影/blur）保持一致，只换颜色，
+  否则切换系统外观时会像换了一套主题
+- `modes` 现在全是 `["light","dark"]`，留着是能力声明；`paint()` 的单档兜底仍然保留
+- `Settings.theme` 保留但统一写 `system`，只为兼容旧配置文件
 - **编辑正文会撞内容唯一索引**：`repository.update` 返回 `Result`，命令把错误透传给前端，
   前端显示"内容与已有条目重复"，不能假装保存成功
 
