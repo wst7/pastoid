@@ -102,5 +102,9 @@
   "duplicateContent": "内容与已有条目重复",
   "appearance": "外观",
   "trimConfirmTitle": "调整保存上限",
-  "trimConfirm": "将删除 {{count}} 条记录（带标签的会保留），继续？"
+  "trimConfirm": "将删除 {{count}} 条记录（带标签的会保留），继续？",
+  "sectionTags": "标签",
+  "tagItemCount": "{{count}} 条",
+  "deleteTagTitle": "按标签删除",
+  "deleteTagConfirm": "删除标签「#{{tag}}」下的 {{count}} 条记录？此操作不可恢复。"
 }

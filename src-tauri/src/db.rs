@@ -321,6 +321,49 @@ fn plan_trim(conn: &Connection, max_items: u32) -> Result<Vec<(String, String, S
     Ok(overflow)
 }
 
+/// 按标签批量删除：只删标签完全等于 `tag` 的条目，返回删除条数。
+/// 图片条目同时删磁盘文件——这是用户明确要求的删除，不做保护。
+pub fn delete_by_tag(conn: &Connection, tag: &str, data_dir: &Path) -> Result<usize, String> {
+    let rows: Vec<(String, String, String)> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, content, type FROM items
+                 WHERE EXISTS (
+                     SELECT 1 FROM json_each(
+                         CASE WHEN json_valid(tags) THEN tags ELSE '[]' END
+                     ) WHERE json_each.value = ?1
+                 )",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([tag], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    if rows.is_empty() {
+        return Ok(0);
+    }
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("begin: {e}"))?;
+    for (id, _, _) in &rows {
+        tx.execute("DELETE FROM items WHERE id = ?1", [id.as_str()])
+            .map_err(|e| format!("delete: {e}"))?;
+    }
+    tx.commit().map_err(|e| format!("commit: {e}"))?;
+
+    for (_, content, item_type) in &rows {
+        if item_type == "image" && !content.is_empty() {
+            storage::delete_image_file(data_dir, content);
+        }
+    }
+    Ok(rows.len())
+}
+
 /// 图片条目磁盘护栏：超过 `max_images` 张时按 `created_at DESC` 保留最新 N 张，
 /// 删掉更旧的行并同步删除磁盘文件。
 ///
@@ -682,6 +725,32 @@ mod tests {
             ],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_delete_by_tag_removes_only_matching() {
+        let dir = temp();
+        let conn = open(dir.path());
+
+        let mut a = item_with("work note", 1);
+        a.is_pinned = false;
+        insert_tagged(&conn, &a, &["work"]);
+
+        let mut b = item_with("client note", 2);
+        b.is_pinned = false;
+        insert_tagged(&conn, &b, &["客户A", "work"]);
+
+        let mut c = item_with("plain note", 3);
+        c.is_pinned = false;
+        insert(&conn, &c);
+
+        let removed = delete_by_tag(&conn, "work", dir.path()).unwrap();
+        assert_eq!(removed, 2);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items").unwrap(), 1);
+        let left: String = conn
+            .query_row("SELECT content FROM items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, "plain note");
     }
 
     #[test]

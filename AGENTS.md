@@ -135,6 +135,9 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - **`#` 前缀是标签专用查询**：`#work` 只匹配 tags、不碰正文（否则正文里的 "work" 会污染结果）；
   前端输入 `#` 时用 `get_clipboard_tags` 的建议列表补全，点卡片上的标签 chip 也会切到 `#tag`
 - 标签以 JSON 数组存在 `items.tags`（`["work","客户A"]`），空数组等价于没打标签
+- **按标签批量删除**（`db::delete_by_tag`）：`json_each.value = ?` 精确匹配，不是 LIKE；
+  图片条目同步删磁盘文件。这是用户明确要求的删除，所以不做"tagged 保护"，
+  但设置页必须先弹确认（不可恢复）
 - 数据目录可能在 exFAT / 网络盘上：开库时尝试 WAL，PRAGMA 退回原模式就改用回滚日志 + `synchronous=FULL`
 - `images/`、`settings.json`、`location.txt` 与历史库无关，数据目录搬家逻辑原样生效
 

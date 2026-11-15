@@ -506,6 +506,12 @@ impl ClipboardRepository {
         *self.max_items.lock().unwrap()
     }
 
+    /// 按标签批量删除，返回删除条数。
+    pub fn delete_by_tag(&self, tag: &str) -> usize {
+        self.with_conn(|conn| db::delete_by_tag(conn, tag, &self.data_dir))
+            .unwrap_or(0)
+    }
+
     /// 把上限调到 `max_items` 会删掉多少条（不执行删除），设置页确认用。
     pub fn preview_trim(&self, max_items: u32) -> usize {
         self.with_conn(|conn| db::preview_trim(conn, max_items))

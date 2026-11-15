@@ -102,5 +102,9 @@
   "duplicateContent": "This content already exists",
   "appearance": "Appearance",
   "trimConfirmTitle": "Adjust history limit",
-  "trimConfirm": "This will delete {{count}} item(s). Tagged items are kept. Continue?"
+  "trimConfirm": "This will delete {{count}} item(s). Tagged items are kept. Continue?",
+  "sectionTags": "Tags",
+  "tagItemCount": "{{count}} item(s)",
+  "deleteTagTitle": "Delete by tag",
+  "deleteTagConfirm": "Delete {{count}} item(s) tagged #{{tag}}? This cannot be undone."
 }

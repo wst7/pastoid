@@ -17,6 +17,7 @@ import { open as openDialog, message, confirm } from "@tauri-apps/plugin-dialog"
 import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
+import type { TagCount } from "@/types/clipboard";
 import { FolderOpen, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
 import { THEMES, DEFAULT_STYLE } from "@/themes";
@@ -142,10 +143,13 @@ export default function SettingsApp() {
   const lastMaxItemsRef = useRef(20);
   // 输入框用草稿值，失焦/回车才提交，避免每敲一位就弹一次裁剪确认
   const [maxDraft, setMaxDraft] = useState("20");
+  // 标签列表（设置页的「按标签删除」用）
+  const [tags, setTags] = useState<TagCount[]>([]);
 
   useEffect(() => {
     loadSettings();
     loadStorage();
+    loadTags();
   }, []);
 
   useEffect(() => {
@@ -221,6 +225,14 @@ export default function SettingsApp() {
     return ok;
   };
 
+  const loadTags = async () => {
+    try {
+      setTags(await invoke<TagCount[]>("get_clipboard_tags"));
+    } catch (error) {
+      console.error("Failed to load tags:", error);
+    }
+  };
+
   const loadStorage = async () => {
     try {
       setStorage(await invoke<StorageInfo>("get_storage_info"));
@@ -290,6 +302,21 @@ export default function SettingsApp() {
       if (!(await confirmTrim(cap))) return;
       await persist({ ...settings, max_items: cap });
       void loadStorage();
+    }
+  };
+
+  const handleDeleteTag = async (tag: string, count: number) => {
+    const ok = await confirm(t("deleteTagConfirm", { tag, count }), {
+      title: t("deleteTagTitle"),
+      kind: "warning",
+    });
+    if (!ok) return;
+    try {
+      await invoke<number>("delete_items_by_tag", { tag });
+      await loadTags();
+      await loadStorage();
+    } catch (error) {
+      console.error("Delete by tag failed:", error);
     }
   };
 
@@ -804,6 +831,27 @@ export default function SettingsApp() {
             )}
           </div>
         </Section>
+
+        {tags.length > 0 && (
+          <Section title={t("sectionTags")}>
+            {tags.map((tag) => (
+              <Row key={tag.tag} label={`#${tag.tag}`}>
+                <span className="text-[12px] text-muted-foreground">
+                  {t("tagItemCount", { count: tag.count })}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-none text-destructive"
+                  onPress={() => void handleDeleteTag(tag.tag, tag.count)}
+                  aria-label={t("deleteTagTitle")}
+                >
+                  <Trash2 size={13} />
+                </Button>
+              </Row>
+            ))}
+          </Section>
+        )}
 
         <Section title={t("sectionShortcut")}>
           <Row label={t("shortcutAction")}>
