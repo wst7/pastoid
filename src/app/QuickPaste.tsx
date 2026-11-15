@@ -902,7 +902,7 @@ export default function QuickPaste() {
                 const showActions = isActive || hoveredId === item.id;
                 const canEdit = item.type !== "image";
                 const actionBtn = (visible: boolean, extra = "") =>
-                  `w-6 h-6 flex items-center justify-center rounded-md transition-opacity ${
+                  `w-5 h-5 flex items-center justify-center rounded-md transition-opacity ${
                     visible ? "opacity-100" : "opacity-0 pointer-events-none"
                   } ${extra}`;
                 return (
@@ -925,7 +925,11 @@ export default function QuickPaste() {
                       isActive ? "ring-2 ring-primary/40 shadow-sm" : ""
                     } ${item.isPinned ? "pinned" : ""}`}
                   >
-                    <div className="shrink-0 flex items-center gap-1.5 px-2.5 pt-2 pb-1">
+                    <div
+                      className={`shrink-0 flex items-center gap-1.5 pl-2.5 pt-2 pb-1 ${
+                        showActions || item.isPinned ? "pr-[96px]" : "pr-2.5"
+                      }`}
+                    >
                       <KindIcon kind={kind} />
                       <span className="text-[10.5px] text-muted-foreground truncate">
                         {formatRelativeTime(item.createdAt, language)}
@@ -964,7 +968,7 @@ export default function QuickPaste() {
                     {/* 操作按钮：悬浮或键盘选中时出现。
                         四个槽位始终占位（隐藏用 opacity），图钉按钮的位置在
                         「仅显示固定状态」和「四个按钮全显示」时完全一致，不会点错。 */}
-                    <div className="absolute right-1 top-1 flex items-center gap-0.5">
+                    <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -982,7 +986,7 @@ export default function QuickPaste() {
                         )}
                         aria-label={t("tags")}
                       >
-                        <Tag size={11} />
+                        <Tag size={10} />
                       </button>
                       <button
                         onClick={(e) => {
@@ -998,7 +1002,24 @@ export default function QuickPaste() {
                         )}
                         aria-label={t("edit")}
                       >
-                        <Pencil size={11} />
+                        <Pencil size={10} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteItem(item);
+                        }}
+                        onMouseEnter={(e) =>
+                          showTip(e, `${t("delete")} (${modKey}${backspaceLabel})`)
+                        }
+                        onMouseLeave={hideTip}
+                        className={actionBtn(
+                          showActions,
+                          "bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive",
+                        )}
+                        aria-label={t("delete")}
+                      >
+                        <Trash2 size={10} />
                       </button>
                       <button
                         onClick={(e) => {
@@ -1019,24 +1040,7 @@ export default function QuickPaste() {
                         )}
                         aria-label={item.isPinned ? t("unpin") : t("pin")}
                       >
-                        <Pin size={11} fill={item.isPinned ? "currentColor" : "none"} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteItem(item);
-                        }}
-                        onMouseEnter={(e) =>
-                          showTip(e, `${t("delete")} (${modKey}${backspaceLabel})`)
-                        }
-                        onMouseLeave={hideTip}
-                        className={actionBtn(
-                          showActions,
-                          "bg-card/90 hover:bg-destructive/10 text-muted-foreground hover:text-destructive",
-                        )}
-                        aria-label={t("delete")}
-                      >
-                        <Trash2 size={11} />
+                        <Pin size={10} fill={item.isPinned ? "currentColor" : "none"} />
                       </button>
                     </div>
                   </div>
