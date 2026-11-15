@@ -137,9 +137,14 @@ export default function QuickPaste() {
   const scrollNext = useRef(true);
   // 横向滚动的补间句柄（同一时间只允许一个）
   const scrollAnimRef = useRef<number | null>(null);
-  // 滚动补间期间及其后一小段时间内忽略 hover 选中：
-  // 卡片从静止的鼠标指针下经过会触发 mouseover，否则会把键盘选中的卡抢走
-  const hoverLockUntil = useRef(0);
+  // 显式 hover 状态：键盘操作后要关掉 hover 反馈，
+  // 否则鼠标停留的那张卡会一直保留悬浮样式（按钮、变暗），看起来像"还选中着"。
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const hoverEnabledRef = useRef(true);
+  // 键盘操作时记下指针位置：之后鼠标要有 4px 以上位移才算"用户真的在动鼠标"，
+  // 避免手放在触控板上轻轻一碰就把选中抢回去
+  const pointerRef = useRef({ x: 0, y: 0 });
+  const pointerGuardRef = useRef<{ x: number; y: number } | null>(null);
 
   /**
    * 横向滚动的补间：键盘换卡时让卡片条滑过去，而不是瞬移。
@@ -163,8 +168,6 @@ export default function QuickPaste() {
     }
 
     const duration = Math.min(220, 110 + Math.abs(delta) * 0.35);
-    // 补间结束再宽限 80ms：滚动停下时可能还会补发一次 mouseover
-    hoverLockUntil.current = performance.now() + duration + 80;
     const started = performance.now();
     const step = (now: number) => {
       const p = Math.min(1, (now - started) / duration);
@@ -373,12 +376,14 @@ export default function QuickPaste() {
     if (!list.length) return;
     const clamped = Math.max(0, Math.min(index, list.length - 1));
     scrollNext.current = scroll;
+    // 键盘接管：先把 hover 反馈收掉，等鼠标真的动了再恢复
+    hoverEnabledRef.current = false;
+    pointerGuardRef.current = { ...pointerRef.current };
+    setHoveredId(null);
     setActiveId(list[clamped].id);
   }, []);
 
   const hoverItem = useCallback((id: string) => {
-    // 键盘滚动刚把卡片挪到指针下面，这次 mouseover 不是用户移动鼠标造成的，忽略
-    if (performance.now() < hoverLockUntil.current) return;
     // hover 只改选中，不滚动：否则鼠标下的卡片会自己跑，感觉"追不上"
     scrollNext.current = false;
     setActiveId(id);
@@ -489,7 +494,8 @@ export default function QuickPaste() {
       }
       if (listRef.current) listRef.current.scrollLeft = 0;
       // 列表瞬间回到最左，指针下的卡片会换人，别让 hover 抢选中
-      hoverLockUntil.current = performance.now() + 120;
+      hoverEnabledRef.current = false;
+      setHoveredId(null);
       playEnter();
       inputRef.current?.focus();
       blurEnabled.current = false;
@@ -825,6 +831,24 @@ export default function QuickPaste() {
         {/* 横向卡片条 */}
         <div
           ref={listRef}
+          onMouseMove={(e) => {
+            pointerRef.current = { x: e.clientX, y: e.clientY };
+            if (hoverEnabledRef.current) return;
+            const guard = pointerGuardRef.current;
+            if (guard) {
+              const moved =
+                Math.abs(e.clientX - guard.x) + Math.abs(e.clientY - guard.y);
+              if (moved < 4) return;
+              pointerGuardRef.current = null;
+            }
+            hoverEnabledRef.current = true;
+            const card = (e.target as HTMLElement).closest("[data-id]") as HTMLElement | null;
+            const id = card?.dataset.id;
+            if (id) {
+              setHoveredId(id);
+              hoverItem(id);
+            }
+          }}
           className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {filteredItems.length === 0 ? (
@@ -861,13 +885,17 @@ export default function QuickPaste() {
                     role="button"
                     tabIndex={-1}
                     onClick={() => paste(item)}
-                    onMouseEnter={() => hoverItem(item.id)}
+                    data-hovered={hoveredId === item.id ? "true" : undefined}
+                    onMouseEnter={() => {
+                      if (!hoverEnabledRef.current) return;
+                      setHoveredId(item.id);
+                      hoverItem(item.id);
+                    }}
+                    onMouseLeave={() =>
+                      setHoveredId((prev) => (prev === item.id ? null : prev))
+                    }
                     className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.985] ${
-                      isActive
-                        ? "ring-2 ring-primary/40 shadow-sm"
-                        : item.isPinned
-                          ? "hover:brightness-[0.98]"
-                          : "hover:brightness-[0.98]"
+                      isActive ? "ring-2 ring-primary/40 shadow-sm" : ""
                     } ${item.isPinned ? "pinned" : ""}`}
                   >
                     <div className="shrink-0 flex items-center gap-1.5 px-2.5 pt-2 pb-1">
@@ -880,7 +908,9 @@ export default function QuickPaste() {
                         // 所以悬浮时把这枚图钉淡出，交给按钮接管这块空间
                         <Pin
                           size={10}
-                          className="ml-auto text-warning shrink-0 transition-opacity group-hover:opacity-0"
+                          className={`ml-auto text-warning shrink-0 transition-opacity ${
+                          hoveredId === item.id ? "opacity-0" : ""
+                        }`}
                           fill="currentColor"
                         />
                       )}
@@ -915,7 +945,9 @@ export default function QuickPaste() {
                     ) : null}
 
                     {/* 悬浮操作 */}
-                    <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={`absolute right-1 top-1 flex items-center gap-0.5 transition-opacity ${
+                      hoveredId === item.id ? "opacity-100" : "opacity-0"
+                    }`}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

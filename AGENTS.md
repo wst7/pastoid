@@ -49,6 +49,8 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - **面板打开期间冻结排序**：置顶只换图钉不重排，下次打开 `loadItems()` 时才重新排序；
   面板开着时卡片不能从指针下面跑掉
 - **hover 只改选中、不滚动**；滚动只由键盘触发（`scrollNext` ref 区分），否则鼠标下的卡片会自己跑
+- **hover 反馈由 React 状态控制，不用 CSS `:hover`**（`hoveredId`）：键盘换卡后要立刻收掉悬浮样式，
+  否则鼠标停留的那张卡会一直显示按钮/变暗，看起来像"还选中着"；键盘操作后鼠标要移动 ≥4px 才恢复 hover
 - **键盘换卡用补间滚动**（`animateScrollLeft`，110–220ms easeOutCubic），不要直接赋值 `scrollLeft`，
   也不要用 `scrollIntoView({behavior:"smooth"})`：WKWebView/WebView2 的原生时长不可控，连续按键会拖沓
 - 滚动补间期间要**锁住 hover 选中**（`hoverLockUntil`）：卡片从静止的指针下经过会补发 `mouseover`，

@@ -176,6 +176,12 @@
 .pastoid-menu::-webkit-scrollbar-track{background:transparent}
 .pastoid-menu::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 
+/* 悬浮反馈：由 React 的 hoveredId 控制，而不是 CSS :hover——
+   键盘换卡后旧卡片的 :hover 还在，会看起来像"还选中着" */
+.pastoid-card[data-hovered="true"]{
+  filter: brightness(0.985);
+}
+
 /* 置顶卡片的淡琥珀底：用叠层而不是背景色，主题换肤时不会被覆盖 */
 .pastoid-card.pinned::after{
   content:"";
