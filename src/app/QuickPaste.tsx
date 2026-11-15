@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
+import { paint, watchSystemTheme } from "@/lib/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -124,8 +124,7 @@ export default function QuickPaste() {
     null
   );
   const [language, setLanguage] = useState("zh");
-  // 跟随系统时，系统夜间切暗也要跟着变
-  const themeRef = useRef<ThemePref>("system");
+  // 双模式风格跟随系统明暗，系统切暗时要重画
   const styleRef = useRef<string>("default");
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -448,16 +447,15 @@ export default function QuickPaste() {
 
   useEffect(() => {
     return watchSystemTheme(() => {
-      if (themeRef.current === "system") paint("system", styleRef.current);
+      paint(styleRef.current);
     });
   }, []);
 
   useEffect(() => {
     invoke<SettingsData>("get_settings")
       .then((data) => {
-        themeRef.current = (data.theme as ThemePref) || "system";
         styleRef.current = data.theme_style || "default";
-        paint(themeRef.current, styleRef.current);
+        paint(styleRef.current);
         if (data.language) {
           setLanguage(data.language);
           // quick-paste 是独立窗口，i18n 初始化时用的是系统语言。
@@ -465,7 +463,7 @@ export default function QuickPaste() {
           void i18n.changeLanguage(data.language);
         }
       })
-      .catch(() => paint("light", "default"));
+      .catch(() => paint("default"));
 
     // 首帧也拉一次标签，别等面板第一次打开才有建议
     void loadTags();
@@ -506,18 +504,14 @@ export default function QuickPaste() {
       }
     });
 
-    const unlistenTheme = listen<ThemePref | { theme: string; style: string }>(
+    const unlistenTheme = listen<{ theme: string; style: string }>(
       "theme-changed",
       (event) => {
-        const payload = event.payload;
-        if (typeof payload === "string") {
-          // 旧版只发明暗字符串
-          themeRef.current = payload || "system";
-        } else if (payload) {
-          themeRef.current = (payload.theme as ThemePref) || "system";
-          styleRef.current = payload.style || "default";
+        // 明暗不再由用户设置，只关心风格
+        if (event.payload?.style) {
+          styleRef.current = event.payload.style;
         }
-        paint(themeRef.current, styleRef.current);
+        paint(styleRef.current);
       }
     );
 

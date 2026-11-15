@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check, Update } from "@tauri-apps/plugin-updater";
-import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
+import { applyTheme, paint, watchSystemTheme } from "@/lib/theme";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { open as openDialog, message } from "@tauri-apps/plugin-dialog";
@@ -19,7 +19,7 @@ import ShortcutRecordInput from "@/components/ShortcutRecordInput";
 import { defaultShortcut } from "@/lib/platform";
 import { FolderOpen, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
-import { THEMES, DEFAULT_STYLE, modeForTheme, themeById } from "@/themes";
+import { THEMES, DEFAULT_STYLE } from "@/themes";
 
 interface UpdateStatus {
   update: Update | null;
@@ -53,23 +53,14 @@ const languages = [
 ];
 
 /**
- * 外观 = 风格 × 明暗，合成一个下拉：
- * 上半段是明暗（跟随系统 / 浅色 / 深色），下半段是风格。
- * 选明暗时保留当前风格，选风格时保留当前明暗（单模式风格会自动收敛）。
+ * 外观只有风格这一维：
+ * 双模式风格跟随系统明暗，单模式风格固定用自己的那一档。
  */
-const appearanceOptions = (lang: string, t: (key: string) => string) => [
-  { id: "mode:system", name: t("system"), group: t("appearanceLighting") },
-  { id: "mode:light", name: t("light"), group: t("appearanceLighting") },
-  { id: "mode:dark", name: t("dark"), group: t("appearanceLighting") },
-  ...THEMES.map((style) => ({
-    id: `style:${style.id}`,
+const styleOptions = (lang: string) =>
+  THEMES.map((style) => ({
+    id: style.id,
     name: lang.startsWith("zh") ? style.name : style.nameEn,
-    group: t("appearanceStyle"),
-  })),
-];
-
-const modeLabel = (theme: string, t: (key: string) => string) =>
-  theme === "system" ? t("system") : theme === "dark" ? t("dark") : t("light");
+  }));
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
@@ -119,8 +110,6 @@ export default function SettingsApp() {
     shortcut: defaultShortcut,
   });
   const [loadingSettings, setLoadingSettings] = useState(true);
-  // 系统明暗变化时要知道现在是不是「跟随系统」档
-  const themeRef = useRef<ThemePref>("system");
   // 风格要单独记一份：系统明暗变化时重画要带上它
   const styleRef = useRef<string>(DEFAULT_STYLE);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
@@ -167,11 +156,9 @@ export default function SettingsApp() {
     };
   }, []);
 
-  // 系统外观变化（夜间自动变暗等）：只在「跟随系统」档响应
+  // 系统外观变化（夜间自动变暗等）：双模式风格跟着重画
   useEffect(() => {
-    return watchSystemTheme(() => {
-      if (themeRef.current === "system") paint("system", styleRef.current);
-    });
+    return watchSystemTheme(() => paint(styleRef.current));
   }, []);
 
   const loadSettings = async () => {
@@ -182,15 +169,15 @@ export default function SettingsApp() {
       if (loadedMax > 0) lastMaxItemsRef.current = loadedMax;
       setSettings({
         language: data.language || "zh",
-        theme: data.theme || "light",
+        // 明暗不再是用户设置：统一 system，双模式风格跟随系统
+        theme: "system",
         theme_style: data.theme_style || DEFAULT_STYLE,
         autostart: data.autostart ?? false,
         max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
-      themeRef.current = (data.theme as ThemePref) || "system";
       styleRef.current = data.theme_style || DEFAULT_STYLE;
-      applyTheme(themeRef.current, styleRef.current);
+      applyTheme(styleRef.current);
       if (data.language) {
         i18n.changeLanguage(data.language === "zh" ? "zh" : "en");
       }
@@ -204,9 +191,8 @@ export default function SettingsApp() {
   const saveSettings = async (newSettings: SettingsData): Promise<boolean> => {
     try {
       await invoke("save_settings", { settings: newSettings });
-      themeRef.current = newSettings.theme as ThemePref;
       styleRef.current = newSettings.theme_style || DEFAULT_STYLE;
-      applyTheme(themeRef.current, styleRef.current);
+      applyTheme(styleRef.current);
       setSaveError(null);
       return true;
     } catch (error) {
@@ -240,37 +226,10 @@ export default function SettingsApp() {
     if (ok) i18n.changeLanguage(language === "zh" ? "zh" : "en");
   };
 
-  const handleThemeChange = async (theme: string) => {
-    // 切明暗时，如果当前风格不支持这一档（比如 OLED 只有深色），自动换成它支持的
-    const style = themeById(settings.theme_style);
-    const mode =
-      theme === "system"
-        ? style.modes.length === 1
-          ? style.modes[0]
-          : "system"
-        : modeForTheme(style, theme as "light" | "dark");
-    await persist({ ...settings, theme: mode });
-  };
-
-  const handleAppearanceChange = async (id: string) => {
-    if (id.startsWith("mode:")) {
-      await handleThemeChange(id.slice(5));
-    } else if (id.startsWith("style:")) {
-      await handleStyleChange(id.slice(6));
-    }
-  };
-
   const handleStyleChange = async (theme_style: string) => {
-    // 选了一个只支持单档的风格：明暗自动跟过去，避免出现「浅色 + OLED」这种不成立的组合
-    const style = themeById(theme_style);
-    const resolved = themeRef.current === "system" ? "system" : themeRef.current;
-    const theme =
-      resolved === "system"
-        ? style.modes.length === 1
-          ? style.modes[0]
-          : "system"
-        : modeForTheme(style, resolved as "light" | "dark");
-    await persist({ ...settings, theme_style, theme });
+    // 明暗不再单独设置：双模式风格跟随系统，单模式风格固定用自己的那一档。
+    // theme 字段保留但统一写 system，兼容旧配置文件。
+    await persist({ ...settings, theme_style, theme: "system" });
   };
 
   const handleAutostartChange = async (isSelected: boolean) => {
@@ -618,16 +577,11 @@ export default function SettingsApp() {
           <Row label={t("appearance")}>
             <div className="relative flex items-center">
               <Select
-                value={`style:${settings.theme_style}`}
-                options={appearanceOptions(settings.language, t)}
-                onChange={handleAppearanceChange}
+                value={settings.theme_style}
+                options={styleOptions(settings.language)}
+                onChange={handleStyleChange}
                 disabled={loadingSettings}
-                minWidth={190}
-                label={`${
-                  settings.language.startsWith("zh")
-                    ? themeById(settings.theme_style).name
-                    : themeById(settings.theme_style).nameEn
-                } · ${modeLabel(settings.theme, t)}`}
+                minWidth={170}
               />
             </div>
           </Row>

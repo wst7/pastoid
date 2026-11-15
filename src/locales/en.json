@@ -100,7 +100,5 @@
   "editHint": "⌘↩ save · Esc cancel",
   "save": "Save",
   "duplicateContent": "This content already exists",
-  "appearance": "Appearance",
-  "appearanceLighting": "Lighting",
-  "appearanceStyle": "Style"
+  "appearance": "Appearance"
 }
