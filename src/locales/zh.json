@@ -106,5 +106,7 @@
   "sectionTags": "标签",
   "tagItemCount": "{{count}} 条",
   "deleteTagTitle": "按标签删除",
-  "deleteTagConfirm": "删除标签「#{{tag}}」下的 {{count}} 条记录？此操作不可恢复。"
+  "deleteTagConfirm": "删除标签「#{{tag}}」下的 {{count}} 条记录？此操作不可恢复。",
+  "needAccessibility": "自动粘贴需要「辅助功能」权限，内容已复制，可直接粘贴",
+  "openSettings": "去授权"
 }

@@ -538,6 +538,41 @@ pub fn get_history_items(state: tauri::State<AppState>) -> Result<Vec<ClipboardI
 ///
 /// 图片条目不能再按文本粘贴——`content` 只是相对路径，按文本写会把
 /// `images/xxx.png` 这串字符粘到用户窗口里。这里按类型分别写入。
+/// macOS 的「辅助功能」授权状态。自动粘贴靠 CGEvent 合成按键，没有这个权限
+/// 每次都会弹系统请求框且粘贴无效；先检查再决定要不要调 enigo。
+#[cfg(target_os = "macos")]
+fn accessibility_trusted() -> bool {
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    unsafe { AXIsProcessTrusted() }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn accessibility_trusted() -> bool {
+    true
+}
+
+#[tauri::command]
+pub fn check_accessibility() -> bool {
+    accessibility_trusted()
+}
+
+/// 跳到「隐私与安全性 → 辅助功能」，用户自己把 Pastoid 勾上。
+#[tauri::command]
+pub fn open_accessibility_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        open::that("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .map_err(|e| format!("打开系统设置失败: {}", e))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     let state = app_handle.state::<AppState>();
@@ -573,6 +608,12 @@ pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String
             .clipboard()
             .write_text(item.content.clone())
             .map_err(|e| format!("clipboard write: {}", e))?;
+    }
+
+    // 没有辅助功能权限时别去调 enigo：那会触发系统授权弹窗，而且按键发不出去。
+    // 此时内容已经写进剪贴板，面板保持打开，前端会提示「已复制，去授权」。
+    if !accessibility_trusted() {
+        return Err("NEED_ACCESSIBILITY".to_string());
     }
 
     if let Some(window) = app_handle.get_webview_window("quick-paste") {

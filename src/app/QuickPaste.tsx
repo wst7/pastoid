@@ -13,6 +13,7 @@ import {
   Link2,
   Type,
   AlertCircle,
+  AlertTriangle,
   Tag,
   Pencil,
 } from "lucide-react";
@@ -119,6 +120,7 @@ export default function QuickPaste() {
   // 所有标签 + 使用次数，给 `#` 搜索做建议
   const [allTags, setAllTags] = useState<TagCount[]>([]);
   const [tagIndex, setTagIndex] = useState(0);
+  const [needAccessibility, setNeedAccessibility] = useState(false);
   const [editor, setEditor] = useState<{ id: string; draft: string; error?: string } | null>(
     null
   );
@@ -256,6 +258,11 @@ export default function QuickPaste() {
       // 粘贴路径不做退场动画——Rust 侧隐藏窗口后还有 Cmd+Tab 的等待。
       await invoke("paste_item", { id: item.id });
     } catch (e) {
+      // 没有辅助功能权限：内容已经写进剪贴板，别静默失败，提示用户去授权
+      if (String(e).includes("NEED_ACCESSIBILITY")) {
+        setNeedAccessibility(true);
+        return;
+      }
       console.error("Paste failed:", e);
     }
   }, []);
@@ -514,6 +521,9 @@ export default function QuickPaste() {
       hoverEnabledRef.current = false;
       setHoveredId(null);
       playEnter();
+      void invoke<boolean>("check_accessibility")
+        .then((ok) => setNeedAccessibility(!ok))
+        .catch(() => {});
       inputRef.current?.focus();
       blurEnabled.current = false;
       setTimeout(() => {
@@ -1163,6 +1173,19 @@ export default function QuickPaste() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {needAccessibility && (
+          <div className="shrink-0 mx-3 mb-1.5 flex items-center gap-2 rounded-[var(--control-radius)] border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-[11px] text-warning">
+            <AlertTriangle size={12} className="shrink-0" />
+            <span className="flex-1 leading-snug">{t("needAccessibility")}</span>
+            <button
+              onClick={() => void invoke("open_accessibility_settings")}
+              className="shrink-0 rounded-[var(--control-radius)] bg-warning/20 px-2 py-0.5 text-[10.5px] hover:bg-warning/30"
+            >
+              {t("openSettings")}
+            </button>
           </div>
         )}
 

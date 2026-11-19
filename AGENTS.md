@@ -233,3 +233,18 @@ Windows 上「复制文件」会以多行路径（有时带引号）出现在剪
 - Windows 用彩色版（`icon_as_template(false)`），模板图在 Windows 不会反色。
 - 不要把彩色图开 template：系统只取 alpha，紫色会被染成单色、图案整个消失只剩色块（试过，见 git 历史）。
 - 母版是矢量：`src-tauri/icons/source/char.svg`（角色）和 `wordmark.svg`（字标），由 `python3 scripts/build-icons.py` 生成全部尺寸。：板子 + 夹子 + 两条内容线 + 左侧两个点，只是粗细按 16px 调过（1.75/16）。
+
+## macOS 权限（辅助功能 / 自动化）
+
+- 自动粘贴靠 CGEvent 合成 ⌘V，需要「辅助功能」授权；没有权限时 `paste_item`
+  直接返回 `NEED_ACCESSIBILITY`，不再去调 enigo（否则每次粘贴都弹系统框），
+  面板里会显示「去授权」提示条
+- 开机自启用 `MacosLauncher::LaunchAgent`，不碰 AppleScript，不需要「自动化」权限
+- **TCC 按代码签名认应用**：ad-hoc 签名每次构建 cdhash 都变，更新后旧授权条目失效，
+  用户必须在「隐私与安全性」里删掉旧条目再加一次。要跨版本保留授权，必须用固定证书签名
+  （`APPLE_SIGNING_IDENTITY` + CI 里的 `APPLE_CERTIFICATE` secrets）
+
+## 发布
+
+- `npm run release:patch|minor` 走 release-it；需要 `GITHUB_TOKEN=$(gh auth token)`
+- 国内网络偶尔连不上 github.com，`git config http.version HTTP/1.1` 后重试

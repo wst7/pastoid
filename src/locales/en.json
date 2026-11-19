@@ -106,5 +106,7 @@
   "sectionTags": "Tags",
   "tagItemCount": "{{count}} item(s)",
   "deleteTagTitle": "Delete by tag",
-  "deleteTagConfirm": "Delete {{count}} item(s) tagged #{{tag}}? This cannot be undone."
+  "deleteTagConfirm": "Delete {{count}} item(s) tagged #{{tag}}? This cannot be undone.",
+  "needAccessibility": "Auto-paste needs Accessibility permission. Copied to clipboard already.",
+  "openSettings": "Grant"
 }

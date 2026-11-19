@@ -34,7 +34,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::AppleScript,
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_shell::init())
@@ -229,6 +229,8 @@ pub fn run() {
             commands::save_settings,
             commands::get_history_items,
             commands::paste_item,
+            commands::check_accessibility,
+            commands::open_accessibility_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
