@@ -7,20 +7,21 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  check:
     strategy:
       fail-fast: false
       matrix:
         include:
+          # 每个平台至少编译一次；只有本机架构才跑测试，跨架构测试要 Rosetta / 交叉运行，没必要
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-            targets: 'aarch64-apple-darwin'
+            target: 'aarch64-apple-darwin'
+            run_tests: true
           - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-            targets: 'x86_64-apple-darwin'
+            target: 'x86_64-apple-darwin'
+            run_tests: false
           - platform: 'windows-latest'
-            args: ''
-            targets: ''
+            target: ''
+            run_tests: true
 
     runs-on: ${{ matrix.platform }}
 
@@ -36,7 +37,7 @@ jobs:
       - name: Install bun
         uses: oven-sh/setup-bun@v2
         with:
-          cache: false
+          bun-version: latest
 
       - name: Install frontend dependencies
         run: bun install
@@ -44,17 +45,39 @@ jobs:
       - name: Check TypeScript
         run: bun run tsc --noEmit
 
+      # 前端真正打包一次，防止只有 vite 阶段才暴露的问题（别名、资源路径等）
+      - name: Build frontend
+        run: bun run vite build
+
+      - name: Check themes
+        run: bun run check:themes
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.targets }}
+          targets: ${{ matrix.target }}
 
-      - name: Build Tauri app
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        # 不要写成 `bun run tauri build -- $args`：bun 会把 `--` 一起传给 tauri，
-        # tauri 忽略 --target，产物落到 target/release，打包阶段再去 triple 目录找就报
-        # `No such file or directory (os error 2)`。
-        run: bun run tauri build ${{ matrix.args }}
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # 只做类型检查，不打安装包：打包/签名的问题留给 Release 或本地
+      - name: Cargo check
+        shell: bash
+        run: |
+          args=(--manifest-path src-tauri/Cargo.toml)
+          if [ -n "${{ matrix.target }}" ]; then
+            args+=(--target "${{ matrix.target }}")
+          fi
+          cargo check "${args[@]}"
+
+      - name: Cargo test
+        if: matrix.run_tests
+        shell: bash
+        run: |
+          args=(--manifest-path src-tauri/Cargo.toml)
+          if [ -n "${{ matrix.target }}" ]; then
+            args+=(--target "${{ matrix.target }}")
+          fi
+          cargo test "${args[@]}"
