@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+  # 手动干跑：验证 workflow / 签名配置是否正常，产物进草稿，不会公开
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -97,6 +99,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Pastoid ${{ github.ref_name }}'
           releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: false
+          releaseDraft: ${{ github.event_name == 'workflow_dispatch' }}
           prerelease: false
           args: ${{ matrix.args }}

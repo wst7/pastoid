@@ -146,6 +146,25 @@ pub fn run() {
                 });
             }
 
+            // selftest feature：连续开合面板，验证 NSPanel 生命周期。发布包不编译这段。
+            #[cfg(feature = "selftest")]
+            if std::env::var("PASTOID_PANEL_SELFTEST").is_ok() {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    for i in 0..40 {
+                        let h = handle.clone();
+                        let h2 = h.clone();
+                        let _ = h.run_on_main_thread(move || {
+                            crate::shortcut::toggle_quick_paste(&h2);
+                        });
+                        std::thread::sleep(std::time::Duration::from_millis(250));
+                        log::info!("selftest toggle {}", i);
+                    }
+                    log::info!("selftest done");
+                });
+            }
+
             // 设置窗口关闭事件
             if let Some(main_window) = app.get_webview_window("settings") {
                 tray::setup_window_close_handler(&main_window);

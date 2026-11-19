@@ -248,3 +248,23 @@ Windows 上「复制文件」会以多行路径（有时带引号）出现在剪
 
 - `npm run release:patch|minor` 走 release-it；需要 `GITHUB_TOKEN=$(gh auth token)`
 - 国内网络偶尔连不上 github.com，`git config http.version HTTP/1.1` 后重试
+
+## 改完代码必跑
+
+| 命令 | 什么时候 |
+| --- | --- |
+| `cargo test`（`src-tauri/`） | 改了 Rust（默认跑，逻辑层） |
+| `npm run smoke` | 改了窗口 / 面板 / NSPanel / 快捷键 / 托盘 —— 启动 app 连续开合面板 40 次，检查进程不崩、无 panic、无新 crash report |
+| `npm run build` | 改了前端（`tsc` + `vite build`） |
+
+单测抓不到平台生命周期问题（比如 NSPanel 的 dealloc 崩溃），所以 `smoke` 不能省。
+
+## 容易踩的坑
+
+- **NSPanel**：`window.to_panel()` 每次调用都会新建 `RawNSPanel` 并覆盖管理器里的引用，
+  旧 panel 被 dealloc 后 AppKit 还在用 → 主线程 SIGBUS。只在 setup 调一次，
+  之后一律用 `app.get_webview_panel("quick-paste")`
+- **CI 签名**：`APPLE_SIGNING_IDENTITY` 即使是空字符串也会被 tauri 当成「指定了身份」，
+  `codesign` 会失败。只有证书存在时才注入这些环境变量
+- **workflow 改动**：先 `gh workflow run release.yml --ref <branch>` 干跑（产物是草稿），
+  确认能出包再打正式 tag

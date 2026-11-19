@@ -13,7 +13,8 @@
     "release:patch": "release-it patch",
     "release:minor": "release-it minor",
     "release:major": "release-it major",
-    "check:themes": "node scripts/check-themes.mjs"
+    "check:themes": "node scripts/check-themes.mjs",
+    "smoke": "bash scripts/smoke-macos.sh"
   },
   "dependencies": {
     "@heroui/react": "^3.0.3",
