@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.2](https://github.com/wst7/pastoid/compare/v1.11.1...v1.11.2) (2026-11-19)
+
+### 🐛 Bug Fixes | Bug 修复
+
+* **macos:** stop re-prompting for Accessibility on every update ([162c68f](https://github.com/wst7/pastoid/commit/162c68f131d336c98da039bd9ca6824e15a58b1b))
+
 ## [1.11.1](https://github.com/wst7/pastoid/compare/v1.11.0...v1.11.1) (2026-11-19)
 
 ### 🐛 Bug Fixes | Bug 修复
