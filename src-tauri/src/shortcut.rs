@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // 健康监控配置常量
 const HEALTH_CHECK_INTERVAL_SECS: u64 = 60; // 每60秒检查一次
-const MAX_IDLE_TIME_SECS: u64 = 300; // 5分钟无触发视为可能失效
+const MAX_IDLE_TIME_SECS: u64 = 1800; // 30 分钟无触发才重注册：5 分钟太频繁，重注册瞬间按下的快捷键会丢
 
 // 记录快捷键最后一次成功触发的时间戳（秒）
 static LAST_SHORTCUT_TRIGGER: AtomicU64 = AtomicU64::new(0);
@@ -72,6 +72,37 @@ pub fn current_shortcut() -> String {
         .unwrap_or_default()
 }
 
+/// 面板是否可见。
+/// macOS 上窗口是 NSPanel，交给 NSPanel 自己判断；tauri 的 is_visible / show
+/// 对非激活面板并不可靠（隐藏后重新 show 经常不生效）。
+fn panel_is_visible(window: &tauri::WebviewWindow) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::WebviewWindowExt;
+        if let Ok(panel) = window.to_panel() {
+            return panel.is_visible();
+        }
+    }
+    window.is_visible().unwrap_or(false)
+}
+
+fn show_panel(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::WebviewWindowExt;
+        if let Ok(panel) = window.to_panel() {
+            panel.show(); // make_first_responder + order_front_regardless + make_key_window
+        } else {
+            let _ = window.show();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window.show();
+    }
+    let _ = window.set_focus();
+}
+
 pub fn toggle_quick_paste(app: &AppHandle) {
     // 更新最后触发时间
     LAST_SHORTCUT_TRIGGER.store(unix_now(), Ordering::Relaxed);
@@ -79,12 +110,11 @@ pub fn toggle_quick_paste(app: &AppHandle) {
     log::debug!("快捷键触发: toggle_quick_paste");
 
     if let Some(window) = app.get_webview_window("quick-paste") {
-        if window.is_visible().unwrap_or(false) {
+        if panel_is_visible(&window) {
             let _ = window.hide();
         } else {
             position_panel(app, &window);
-            let _ = window.show();
-            let _ = window.set_focus();
+            show_panel(&window);
             let _ = window.emit("panel-opened", ());
         }
     }
@@ -118,37 +148,49 @@ fn position_panel(app: &AppHandle, window: &tauri::WebviewWindow) {
     let scale = monitor.scale_factor();
     let work = monitor.work_area();
 
-    // work_area 是物理像素，先换算成逻辑坐标再和窗口尺寸对齐
-    let area_x = work.position.x as f64 / scale;
-    let area_y = work.position.y as f64 / scale;
-    let area_w = work.size.width as f64 / scale;
-    let area_h = work.size.height as f64 / scale;
-
-    let screen_bottom =
-        (monitor.position().y as f64 + monitor.size().height as f64) / scale;
-    let area_bottom = area_y + area_h;
+    // work_area / outer_size 都是物理像素：全程用物理坐标，不换算成逻辑坐标。
+    // 多屏不同缩放时，LogicalPosition 会按窗口当前所在屏的比例换算，跨屏就会偏。
+    let screen_bottom = monitor.position().y as f64 + monitor.size().height as f64;
+    let area_bottom = work.position.y as f64 + work.size.height as f64;
     // 工作区底部没有被扣掉 → 平台没给真实值，用回老的写死留白
     let has_real_work_area = (screen_bottom - area_bottom).abs() > 1.0;
     let bottom_margin = if has_real_work_area {
-        24.0
+        24.0 * scale
     } else if cfg!(target_os = "macos") {
-        110.0
+        110.0 * scale
     } else {
-        60.0
+        60.0 * scale
     };
 
-    let (win_width, win_height) = match window.outer_size() {
-        Ok(size) => {
-            let logical = size.to_logical::<f64>(scale);
-            (logical.width, logical.height)
-        }
+    let size = match window.outer_size() {
+        Ok(size) => size,
         Err(_) => return,
     };
 
-    let x = (area_x + (area_w - win_width) / 2.0).max(area_x);
-    let y = (area_bottom - win_height - bottom_margin).max(area_y);
+    let (x, y) = panel_origin(
+        (work.position.x as f64, work.position.y as f64),
+        (work.size.width as f64, work.size.height as f64),
+        (size.width as f64, size.height as f64),
+        bottom_margin,
+    );
 
-    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
+/// 面板左上角的物理像素坐标：水平居中，底部留 margin。
+/// 单独拆出来是为了能测多屏负坐标。
+fn panel_origin(
+    area: (f64, f64),
+    area_size: (f64, f64),
+    win: (f64, f64),
+    bottom_margin: f64,
+) -> (f64, f64) {
+    let (ax, ay) = area;
+    let (aw, ah) = area_size;
+    let (ww, wh) = win;
+    let x = (ax + (aw - ww) / 2.0).max(ax);
+    let y = (ay + ah - wh - bottom_margin).max(ay);
+    (x.round(), y.round())
 }
 
 /// 获取快捷键最后触发时间（秒级时间戳）
@@ -296,6 +338,28 @@ mod tests {
         assert_eq!(idle_secs(now - 42, 999_999, now), 42);
         // 系统时间回拨时不 panic
         assert_eq!(idle_secs(now + 100, 0, now), 0);
+    }
+
+    #[test]
+    fn test_panel_origin_centers_and_clears_bottom_margin() {
+        let (x, y) = panel_origin((0.0, 0.0), (2560.0, 1440.0), (1800.0, 680.0), 48.0);
+        assert_eq!(x, 380.0);
+        assert_eq!(y, 712.0);
+    }
+
+    #[test]
+    fn test_panel_origin_handles_negative_monitor_origin() {
+        // 左侧副屏常见负坐标：不能钳到 0
+        let (x, y) = panel_origin((-1920.0, -200.0), (1920.0, 1080.0), (1800.0, 680.0), 48.0);
+        assert_eq!(x, -1860.0);
+        assert_eq!(y, 152.0);
+    }
+
+    #[test]
+    fn test_panel_origin_clamps_when_window_larger_than_area() {
+        let (x, y) = panel_origin((100.0, 100.0), (900.0, 340.0), (1200.0, 700.0), 24.0);
+        assert_eq!(x, 100.0);
+        assert_eq!(y, 100.0);
     }
 
     #[test]
