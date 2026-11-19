@@ -72,34 +72,38 @@ pub fn current_shortcut() -> String {
         .unwrap_or_default()
 }
 
+/// 取已经转换好的 NSPanel。
+///
+/// 必须用 `get_webview_panel`，**不要**再调 `window.to_panel()`：那个方法每次都会
+/// 新建一个 RawNSPanel 包装并覆盖管理器里的旧引用，旧 panel 被 dealloc 后 AppKit
+/// 还在用，会让进程随机 SIGBUS（dealloc → NSKVODeallocate）。
+/// 转换只在启动时做一次，见 lib.rs。
 /// 面板是否可见。
 /// macOS 上窗口是 NSPanel，交给 NSPanel 自己判断；tauri 的 is_visible / show
 /// 对非激活面板并不可靠（隐藏后重新 show 经常不生效）。
-fn panel_is_visible(window: &tauri::WebviewWindow) -> bool {
+fn panel_is_visible(app: &AppHandle, window: &tauri::WebviewWindow) -> bool {
     #[cfg(target_os = "macos")]
     {
-        use tauri_nspanel::WebviewWindowExt;
-        if let Ok(panel) = window.to_panel() {
+        use tauri_nspanel::ManagerExt;
+        if let Ok(panel) = app.get_webview_panel("quick-paste") {
             return panel.is_visible();
         }
     }
     window.is_visible().unwrap_or(false)
 }
 
-fn show_panel(window: &tauri::WebviewWindow) {
+fn show_panel(app: &AppHandle, window: &tauri::WebviewWindow) {
     #[cfg(target_os = "macos")]
     {
-        use tauri_nspanel::WebviewWindowExt;
-        if let Ok(panel) = window.to_panel() {
-            panel.show(); // make_first_responder + order_front_regardless + make_key_window
-        } else {
-            let _ = window.show();
+        use tauri_nspanel::ManagerExt;
+        if let Ok(panel) = app.get_webview_panel("quick-paste") {
+            // make_first_responder + order_front_regardless + make_key_window
+            panel.show();
+            let _ = window.set_focus();
+            return;
         }
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = window.show();
-    }
+    let _ = window.show();
     let _ = window.set_focus();
 }
 
@@ -110,11 +114,11 @@ pub fn toggle_quick_paste(app: &AppHandle) {
     log::debug!("快捷键触发: toggle_quick_paste");
 
     if let Some(window) = app.get_webview_window("quick-paste") {
-        if panel_is_visible(&window) {
+        if panel_is_visible(app, &window) {
             let _ = window.hide();
         } else {
             position_panel(app, &window);
-            show_panel(&window);
+            show_panel(app, &window);
             let _ = window.emit("panel-opened", ());
         }
     }
