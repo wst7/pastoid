@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.3](https://github.com/wst7/pastoid/compare/v1.11.2...v1.11.3) (2026-11-19)
+
+### 🐛 Bug Fixes | Bug 修复
+
+* **macos:** stop recreating the NSPanel on every shortcut press ([b7a73fb](https://github.com/wst7/pastoid/commit/b7a73fb3d2e3c680d0657f5913dc100d3128462a))
+
 ## [1.11.2](https://github.com/wst7/pastoid/compare/v1.11.1...v1.11.2) (2026-11-19)
 
 ### 🐛 Bug Fixes | Bug 修复
