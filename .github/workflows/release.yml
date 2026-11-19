@@ -57,24 +57,35 @@ jobs:
 
       # macOS 的 TCC（辅助功能 / 自动化）是按代码签名认应用的：
       # 不签名（ad-hoc）时每次更新 cdhash 都变，授权条目就失效，用户得删掉旧条目重新授权。
-      # 配好下面这些 secret 就会用固定证书签名，授权可以跨版本保留。
-      - name: Import macOS signing certificate
+      # 只有证书真的配好时才注入 APPLE_SIGNING_IDENTITY 等变量——空字符串也会被
+      # tauri 当成「指定了签名身份」，codesign 用空身份签名会直接失败。
+      - name: Configure macOS signing
         if: matrix.platform == 'macos-latest'
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
-            echo "::warning::APPLE_CERTIFICATE 未配置，本次构建不签名：更新后系统权限会失效"
+          if [ -z "$CERT" ] || [ -z "$IDENTITY" ]; then
+            echo "::warning::未配置证书，本次为 ad-hoc 签名（更新后系统权限会失效）"
             exit 0
           fi
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          echo "$CERT" | base64 --decode > certificate.p12
           security create-keychain -p actions temp.keychain
           security default-keychain -s temp.keychain
           security unlock-keychain -p actions temp.keychain
-          security import certificate.p12 -k temp.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import certificate.p12 -k temp.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k actions temp.keychain
           rm certificate.p12
+          {
+            echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
+            [ -n "$NOTARY_APPLE_ID" ] && echo "APPLE_ID=$NOTARY_APPLE_ID"
+            [ -n "$NOTARY_PASSWORD" ] && echo "APPLE_PASSWORD=$NOTARY_PASSWORD"
+            [ -n "$TEAM_ID" ] && echo "APPLE_TEAM_ID=$TEAM_ID"
+          } >> "$GITHUB_ENV"
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
@@ -82,10 +93,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Pastoid ${{ github.ref_name }}'
