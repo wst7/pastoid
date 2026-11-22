@@ -89,11 +89,12 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k actions build.keychain || true
           security find-identity -p codesigning build.keychain || true
           rm -f cert.pem key.pem
+          # 注意：不能用 `[ -n "$X" ] && echo ...`，最后一个判断为假时整个 step 会 exit 1
           {
             echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
-            [ -n "$NOTARY_APPLE_ID" ] && echo "APPLE_ID=$NOTARY_APPLE_ID"
-            [ -n "$NOTARY_PASSWORD" ] && echo "APPLE_PASSWORD=$NOTARY_PASSWORD"
-            [ -n "$TEAM_ID" ] && echo "APPLE_TEAM_ID=$TEAM_ID"
+            if [ -n "$NOTARY_APPLE_ID" ]; then echo "APPLE_ID=$NOTARY_APPLE_ID"; fi
+            if [ -n "$NOTARY_PASSWORD" ]; then echo "APPLE_PASSWORD=$NOTARY_PASSWORD"; fi
+            if [ -n "$TEAM_ID" ]; then echo "APPLE_TEAM_ID=$TEAM_ID"; fi
           } >> "$GITHUB_ENV"
 
       - name: Build and release
