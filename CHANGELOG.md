@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.4](https://github.com/wst7/pastoid/compare/v1.11.3...v1.11.4) (2026-11-22)
+
+### 🐛 Bug Fixes | Bug 修复
+
+* **panel:** make the panel fill its window and drop the translucency ([fd30131](https://github.com/wst7/pastoid/commit/fd30131e4a68c38f41f4669f3cf8ba329e42aadc))
+
 ## [1.11.3](https://github.com/wst7/pastoid/compare/v1.11.2...v1.11.3) (2026-11-19)
 
 ### 🐛 Bug Fixes | Bug 修复
