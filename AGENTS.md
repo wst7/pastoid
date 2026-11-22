@@ -268,3 +268,23 @@ Windows 上「复制文件」会以多行路径（有时带引号）出现在剪
   `codesign` 会失败。只有证书存在时才注入这些环境变量
 - **workflow 改动**：先 `gh workflow run release.yml --ref <branch>` 干跑（产物是草稿），
   确认能出包再打正式 tag
+
+## 代码签名（让 TCC 授权跨版本保留）
+
+- 本机证书：`~/.tauri/pastoid-selfsigned/{cert.pem,key.pem}`（CN `Pastoid Self Signed`，
+  有效期 10 年，私钥 600 权限）；本机测试时用它签，见下
+- GitHub secrets：`APPLE_CERTIFICATE`（cert.pem 的 base64）、`APPLE_KEY`（key.pem 的 base64）、
+  `APPLE_SIGNING_IDENTITY=Pastoid Self Signed`；配好后 Release 会自动签名
+- 这台 macOS 的 `security import` 不认 PKCS12（PKCS#12 MAC 校验失败），
+  所以 CI 里证书和私钥分开用 PEM 导入，不要再改回 p12
+- 验证签名：`codesign -dv --verbose=2 Pastoid.app` 看 `Authority`；
+  `codesign -d -r- Pastoid.app` 应包含 `certificate root = H"af7e..."`（跨版本固定）
+
+本地签名构建：
+
+```bash
+export APPLE_SIGNING_IDENTITY="Pastoid Self Signed"
+export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/pastoid.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<更新密钥密码>"
+npm run tauri build -- --target aarch64-apple-darwin
+```

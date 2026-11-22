@@ -59,29 +59,32 @@ jobs:
 
       # macOS 的 TCC（辅助功能 / 自动化）是按代码签名认应用的：
       # 不签名（ad-hoc）时每次更新 cdhash 都变，授权条目就失效，用户得删掉旧条目重新授权。
-      # 只有证书真的配好时才注入 APPLE_SIGNING_IDENTITY 等变量——空字符串也会被
-      # tauri 当成「指定了签名身份」，codesign 用空身份签名会直接失败。
+      # 这里用固定证书签名（自签名或 Developer ID 都行），授权可以跨版本保留。
+      # 注意：这一版 macOS 的 security import 不认 PKCS12，所以证书和私钥分开用 PEM 导入。
       - name: Configure macOS signing
         if: matrix.platform == 'macos-latest'
         env:
-          CERT: ${{ secrets.APPLE_CERTIFICATE }}
-          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CERT_B64: ${{ secrets.APPLE_CERTIFICATE }}
+          KEY_B64: ${{ secrets.APPLE_KEY }}
           IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
           NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$CERT" ] || [ -z "$IDENTITY" ]; then
-            echo "::warning::未配置证书，本次为 ad-hoc 签名（更新后系统权限会失效）"
+          if [ -z "$CERT_B64" ] || [ -z "$KEY_B64" ] || [ -z "$IDENTITY" ]; then
+            echo "::warning::未配置签名证书，本次为 ad-hoc 签名（更新后系统权限会失效）"
             exit 0
           fi
-          echo "$CERT" | base64 --decode > certificate.p12
-          security create-keychain -p actions temp.keychain
-          security default-keychain -s temp.keychain
-          security unlock-keychain -p actions temp.keychain
-          security import certificate.p12 -k temp.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k actions temp.keychain
-          rm certificate.p12
+          echo "$CERT_B64" | base64 --decode > cert.pem
+          echo "$KEY_B64" | base64 --decode > key.pem
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import cert.pem -k build.keychain -T /usr/bin/codesign
+          security import key.pem -k build.keychain -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          security list-keychains -d user -s build.keychain
+          rm -f cert.pem key.pem
           {
             echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
             [ -n "$NOTARY_APPLE_ID" ] && echo "APPLE_ID=$NOTARY_APPLE_ID"
