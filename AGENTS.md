@@ -288,3 +288,11 @@ export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/pastoid.key)"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<更新密钥密码>"
 npm run tauri build -- --target aarch64-apple-darwin
 ```
+
+## 发版必须由用户明确下令
+
+- **没有用户明确的「发版 / 发布 / release」指令，不得**：跑 `npm run release:*`、
+  打 tag、`gh release create/edit/delete`、推送 tag、群发公众号
+- 日常改动只提交（可选推送 `main`），版本号不动
+- 即使用户说「改完发版」也要先确认这次改动是否已经验证通过；发版前必须跑
+  `cargo test` + `npm run smoke` + `npm run build`
