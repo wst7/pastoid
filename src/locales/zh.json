@@ -108,5 +108,16 @@
   "deleteTagTitle": "按标签删除",
   "deleteTagConfirm": "删除标签「#{{tag}}」下的 {{count}} 条记录？此操作不可恢复。",
   "needAccessibility": "自动粘贴需要「辅助功能」权限，内容已复制，可直接粘贴",
-  "openSettings": "去授权"
+  "openSettings": "去授权",
+  "sectionCleanup": "按类型清理",
+  "cleanupImage": "图片",
+  "cleanupLink": "链接",
+  "cleanupText": "文本",
+  "cleanupImageMeta": "{{count}} 张 · {{size}}",
+  "cleanupCount": "{{count}} 条",
+  "deleteTypeTitle": "删除所有{{name}}？",
+  "deleteTypeConfirm": "将删除 {{count}} 条，此操作不可恢复。",
+  "deleteTypeConfirmSize": "将删除 {{count}} 张（约 {{size}}），此操作不可恢复。",
+  "deleteTypePinned": "其中 {{pinned}} 条已固定，会保留；要一并删除请先取消固定。",
+  "cleanupDone": "已删除 {{count}} 条"
 }

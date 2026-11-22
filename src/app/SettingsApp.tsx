@@ -126,6 +126,14 @@ export default function SettingsApp() {
   const [pendingDataDir, setPendingDataDir] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  type CleanupKind = "image" | "link" | "text";
+  interface CleanupStat {
+    count: number;
+    pinned: number;
+    bytes: number;
+  }
+  const [cleanup, setCleanup] = useState<Record<CleanupKind, CleanupStat> | null>(null);
+  const [cleanupDone, setCleanupDone] = useState<{ kind: CleanupKind; count: number } | null>(null);
   const [clearing, setClearing] = useState(false);
   const [cleared, setCleared] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -303,6 +311,50 @@ export default function SettingsApp() {
       if (!(await confirmTrim(cap))) return;
       await persist({ ...settings, max_items: cap });
       void loadStorage();
+    }
+  };
+
+  const refreshCleanup = async () => {
+    const kinds: CleanupKind[] = ["image", "link", "text"];
+    try {
+      const stats = await Promise.all(
+        kinds.map((kind) =>
+          invoke<CleanupStat>("preview_delete_by_type", { kind }),
+        ),
+      );
+      setCleanup({ image: stats[0], link: stats[1], text: stats[2] });
+    } catch (e) {
+      console.error("Load cleanup stats failed:", e);
+    }
+  };
+
+  // 打开设置时拉一次各类型条数/占用，删完再刷新
+  useEffect(() => {
+    void refreshCleanup();
+  }, []);
+
+  const handleDeleteType = async (kind: CleanupKind) => {
+    const stat = cleanup?.[kind];
+    if (!stat || stat.count === 0) return;
+    const name = t(
+      kind === "image" ? "cleanupImage" : kind === "link" ? "cleanupLink" : "cleanupText",
+    );
+    let text =
+      kind === "image" && stat.bytes > 0
+        ? t("deleteTypeConfirmSize", { count: stat.count, size: formatBytes(stat.bytes) })
+        : t("deleteTypeConfirm", { count: stat.count });
+    if (stat.pinned > 0) text += "\n" + t("deleteTypePinned", { pinned: stat.pinned });
+
+    const ok = await confirm(text, { title: t("deleteTypeTitle", { name }), kind: "warning" });
+    if (!ok) return;
+
+    try {
+      const removed = await invoke<number>("delete_items_by_type", { kind });
+      await refreshCleanup();
+      setCleanupDone({ kind, count: removed });
+      window.setTimeout(() => setCleanupDone(null), 2500);
+    } catch (e) {
+      console.error("Delete by type failed:", e);
     }
   };
 
@@ -851,6 +903,40 @@ export default function SettingsApp() {
               </div>
             )}
           </div>
+        </Section>
+
+        <Section title={t("sectionCleanup")}>
+          {(["image", "link", "text"] as CleanupKind[]).map((kind) => {
+            const stat = cleanup?.[kind];
+            const label = t(
+              kind === "image" ? "cleanupImage" : kind === "link" ? "cleanupLink" : "cleanupText",
+            );
+            const done = cleanupDone?.kind === kind;
+            return (
+              <Row key={kind} label={label}>
+                <span className="text-[12px] text-muted-foreground">
+                  {done
+                    ? t("cleanupDone", { count: cleanupDone.count })
+                    : kind === "image" && stat && stat.bytes > 0
+                      ? t("cleanupImageMeta", {
+                          count: stat.count,
+                          size: formatBytes(stat.bytes),
+                        })
+                      : t("cleanupCount", { count: stat?.count ?? 0 })}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-none text-destructive"
+                  isDisabled={!stat || stat.count === 0}
+                  onPress={() => void handleDeleteType(kind)}
+                  aria-label={t("deleteTypeTitle", { name: label })}
+                >
+                  <Trash2 size={13} />
+                </Button>
+              </Row>
+            );
+          })}
         </Section>
 
         {tags.length > 0 && (

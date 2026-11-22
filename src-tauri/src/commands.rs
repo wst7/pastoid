@@ -98,6 +98,21 @@ pub fn delete_items_by_tag(tag: String, state: tauri::State<AppState>) -> Result
     Ok(state.repo.delete_by_tag(&tag))
 }
 
+/// 按类型清理前预览：条数 / 置顶数 / 图片占用空间。
+#[tauri::command]
+pub fn preview_delete_by_type(
+    kind: String,
+    state: tauri::State<AppState>,
+) -> Result<crate::models::TypeDeletePreview, String> {
+    Ok(state.repo.preview_delete_by_type(&kind))
+}
+
+/// 按类型批量删除（图片同时删文件）。置顶项保留。
+#[tauri::command]
+pub fn delete_items_by_type(kind: String, state: tauri::State<AppState>) -> Result<usize, String> {
+    Ok(state.repo.delete_by_type(&kind, true))
+}
+
 /// 所有标签及使用次数（搜索框的标签建议用）
 #[tauri::command]
 pub fn get_clipboard_tags(state: tauri::State<AppState>) -> Result<Vec<TagCount>, String> {

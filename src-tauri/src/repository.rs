@@ -512,6 +512,30 @@ impl ClipboardRepository {
             .unwrap_or(0)
     }
 
+    /// 按类型清理前的预览：条数、置顶数、图片占用空间。
+    pub fn preview_delete_by_type(&self, kind: &str) -> crate::models::TypeDeletePreview {
+        let (count, pinned) = self
+            .with_conn(|conn| db::preview_delete_by_type(conn, kind))
+            .unwrap_or((0, 0));
+        let bytes = if kind == "image" {
+            self.with_conn(|conn| db::image_bytes(conn, &self.data_dir))
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        crate::models::TypeDeletePreview {
+            count,
+            pinned,
+            bytes,
+        }
+    }
+
+    /// 按类型批量删除，默认保留置顶项。返回删除条数。
+    pub fn delete_by_type(&self, kind: &str, keep_pinned: bool) -> usize {
+        self.with_conn(|conn| db::delete_by_type(conn, kind, keep_pinned, &self.data_dir))
+            .unwrap_or(0)
+    }
+
     /// 把上限调到 `max_items` 会删掉多少条（不执行删除），设置页确认用。
     pub fn preview_trim(&self, max_items: u32) -> usize {
         self.with_conn(|conn| db::preview_trim(conn, max_items))

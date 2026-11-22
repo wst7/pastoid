@@ -108,5 +108,16 @@
   "deleteTagTitle": "Delete by tag",
   "deleteTagConfirm": "Delete {{count}} item(s) tagged #{{tag}}? This cannot be undone.",
   "needAccessibility": "Auto-paste needs Accessibility permission. Copied to clipboard already.",
-  "openSettings": "Grant"
+  "openSettings": "Grant",
+  "sectionCleanup": "Clean up by type",
+  "cleanupImage": "Images",
+  "cleanupLink": "Links",
+  "cleanupText": "Text",
+  "cleanupImageMeta": "{{count}} · {{size}}",
+  "cleanupCount": "{{count}} items",
+  "deleteTypeTitle": "Delete all {{name}}?",
+  "deleteTypeConfirm": "{{count}} items will be deleted. This cannot be undone.",
+  "deleteTypeConfirmSize": "{{count}} images (about {{size}}) will be deleted. This cannot be undone.",
+  "deleteTypePinned": "{{pinned}} pinned items will be kept. Unpin them first to delete as well.",
+  "cleanupDone": "Deleted {{count}}"
 }

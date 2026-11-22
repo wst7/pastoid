@@ -364,6 +364,89 @@ pub fn delete_by_tag(conn: &Connection, tag: &str, data_dir: &Path) -> Result<us
     Ok(rows.len())
 }
 
+/// 按类型清理时的 SQL 条件。三类互斥，避免「删文本」把链接一起删了：
+/// - `image`：type = 'image'
+/// - `link` ：text 且 content 以 http(s):// 开头
+/// - `text` ：text 且不是链接
+pub fn type_where(kind: &str) -> Result<String, String> {
+    Ok(match kind {
+        "image" => "type = 'image'".to_string(),
+        "link" => format!("type = 'text' AND {LINK_PREDICATE}"),
+        "text" => format!("type = 'text' AND NOT ({LINK_PREDICATE})"),
+        other => return Err(format!("未知的清理类型: {other}")),
+    })
+}
+
+/// 按类型统计：会删多少条、其中多少条已固定。不执行删除。
+pub fn preview_delete_by_type(conn: &Connection, kind: &str) -> Result<(usize, usize), String> {
+    let w = type_where(kind)?;
+    conn.query_row(
+        &format!("SELECT COUNT(*), COALESCE(SUM(is_pinned), 0) FROM items WHERE {w}"),
+        [],
+        |row| Ok((row.get::<_, i64>(0)? as usize, row.get::<_, i64>(1)? as usize)),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// 按类型批量删除；`keep_pinned` 为真时跳过置顶项。
+/// 图片会在事务提交后同步删除磁盘文件。
+pub fn delete_by_type(
+    conn: &Connection,
+    kind: &str,
+    keep_pinned: bool,
+    data_dir: &Path,
+) -> Result<usize, String> {
+    let w = type_where(kind)?;
+    let filter = if keep_pinned { " AND is_pinned = 0" } else { "" };
+
+    let rows: Vec<(String, String)> = {
+        let mut stmt = conn
+            .prepare(&format!("SELECT id, content FROM items WHERE {w}{filter}"))
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    if rows.is_empty() {
+        return Ok(0);
+    }
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("begin: {e}"))?;
+    for (id, _) in &rows {
+        tx.execute("DELETE FROM items WHERE id = ?1", [id.as_str()])
+            .map_err(|e| format!("delete: {e}"))?;
+    }
+    tx.commit().map_err(|e| format!("commit: {e}"))?;
+
+    if kind == "image" {
+        for (_, content) in &rows {
+            if !content.is_empty() {
+                storage::delete_image_file(data_dir, content);
+            }
+        }
+    }
+    Ok(rows.len())
+}
+
+/// 图片条目占用的磁盘空间（字节）。文件缺失按 0 计。
+pub fn image_bytes(conn: &Connection, data_dir: &Path) -> Result<u64, String> {
+    let mut stmt = conn
+        .prepare("SELECT content FROM items WHERE type = 'image'")
+        .map_err(|e| e.to_string())?;
+    let paths = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    Ok(paths
+        .filter_map(Result::ok)
+        .filter_map(|p| std::fs::metadata(data_dir.join(p)).ok())
+        .map(|m| m.len())
+        .sum())
+}
+
 /// 图片条目磁盘护栏：超过 `max_images` 张时按 `created_at DESC` 保留最新 N 张，
 /// 删掉更旧的行并同步删除磁盘文件。
 ///
@@ -751,6 +834,64 @@ mod tests {
             .query_row("SELECT content FROM items", [], |r| r.get(0))
             .unwrap();
         assert_eq!(left, "plain note");
+    }
+
+    #[test]
+    fn test_type_where_is_mutually_exclusive() {
+        // 链接算 text 里的一个子集，删「文本」不能把链接带走
+        let dir = temp();
+        let conn = open(dir.path());
+
+        insert(&conn, &item_with("https://example.com/a", 1));
+        insert(&conn, &item_with("  http://example.com/b  ", 2));
+        insert(&conn, &item_with("普通文本", 3));
+        insert(&conn, &item_with("httpsx://not-a-link", 4));
+
+        assert_eq!(preview_delete_by_type(&conn, "link").unwrap().0, 2);
+        assert_eq!(preview_delete_by_type(&conn, "text").unwrap().0, 2);
+        assert_eq!(preview_delete_by_type(&conn, "image").unwrap().0, 0);
+        assert!(type_where("file").is_err());
+    }
+
+    #[test]
+    fn test_delete_by_type_keeps_pinned() {
+        let dir = temp();
+        let conn = open(dir.path());
+
+        let mut pinned = item_with("https://pinned.example.com", 1);
+        pinned.is_pinned = true;
+        insert(&conn, &pinned);
+        insert(&conn, &item_with("https://free.example.com", 2));
+
+        let (total, pinned_count) = preview_delete_by_type(&conn, "link").unwrap();
+        assert_eq!((total, pinned_count), (2, 1));
+
+        // 默认保留置顶
+        assert_eq!(delete_by_type(&conn, "link", true, dir.path()).unwrap(), 1);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items").unwrap(), 1);
+
+        // 明确要求时连置顶一起删
+        assert_eq!(delete_by_type(&conn, "link", false, dir.path()).unwrap(), 1);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM items").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_delete_by_type_removes_image_file() {
+        let dir = temp();
+        let conn = open(dir.path());
+
+        let mut img = ClipboardItem::new("images/aaa.png".to_string(), "image");
+        img.created_at = 1;
+        img.updated_at = 1;
+        insert(&conn, &img);
+
+        let path = dir.path().join("images/aaa.png");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"png").unwrap();
+
+        assert_eq!(image_bytes(&conn, dir.path()).unwrap(), 3);
+        assert_eq!(delete_by_type(&conn, "image", true, dir.path()).unwrap(), 1);
+        assert!(!path.exists(), "图片文件应该一起删掉");
     }
 
     #[test]

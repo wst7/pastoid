@@ -37,6 +37,14 @@ pub struct ClipboardCounts {
     pub link: usize,
 }
 
+/// 按类型清理前的预览：条数、其中置顶数、占用空间（仅图片有意义）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeDeletePreview {
+    pub count: usize,
+    pub pinned: usize,
+    pub bytes: u64,
+}
+
 /// 标签及其使用次数，给搜索框的标签建议用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagCount {
