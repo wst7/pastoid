@@ -39,13 +39,7 @@
         "visible": false,
         "skipTaskbar": true,
         "visibleOnAllWorkspaces": true,
-        "shadow": false,
-        "windowEffects": {
-          "effects": [
-            "popover"
-          ],
-          "radius": 16
-        }
+        "shadow": false
       }
     ],
     "security": {

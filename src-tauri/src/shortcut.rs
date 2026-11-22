@@ -92,7 +92,7 @@ fn panel_is_visible(app: &AppHandle, window: &tauri::WebviewWindow) -> bool {
     window.is_visible().unwrap_or(false)
 }
 
-fn show_panel(app: &AppHandle, window: &tauri::WebviewWindow) {
+pub(crate) fn show_panel(app: &AppHandle, window: &tauri::WebviewWindow) {
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::ManagerExt;

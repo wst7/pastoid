@@ -787,7 +787,7 @@ export default function QuickPaste() {
   const tagTarget = tagEditor ? items.find((i) => i.id === tagEditor.id) ?? null : null;
 
   return (
-    <div className="h-screen w-screen p-2">
+    <div className="h-screen w-screen">
       <div
         ref={panelRef}
         className="pastoid-panel relative h-full flex flex-col overflow-hidden"

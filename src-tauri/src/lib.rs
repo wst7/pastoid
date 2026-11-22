@@ -1,3 +1,6 @@
+// objc 的 sel!/msg_send! 会展开 cfg(cargo-clippy)，rustc 不认这个 cfg
+#![allow(unexpected_cfgs)]
+
 pub mod clipboard;
 pub mod commands;
 pub mod db;
@@ -148,11 +151,16 @@ pub fn run() {
 
             // selftest feature：连续开合面板，验证 NSPanel 生命周期。发布包不编译这段。
             #[cfg(feature = "selftest")]
-            if std::env::var("PASTOID_PANEL_SELFTEST").is_ok() {
+            if std::env::var("PASTOID_PANEL_SELFTEST").is_ok()
+                || std::env::var("PASTOID_PANEL_OPEN").is_ok()
+            {
+                // PASTOID_PANEL_OPEN：只弹一次并保持打开，方便肉眼检查样式
+                let keep_open = std::env::var("PASTOID_PANEL_OPEN").is_ok();
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(4));
-                    for i in 0..40 {
+                    let rounds = if keep_open { 1 } else { 40 };
+                    for i in 0..rounds {
                         let h = handle.clone();
                         let h2 = h.clone();
                         let _ = h.run_on_main_thread(move || {
@@ -162,6 +170,19 @@ pub fn run() {
                         log::info!("selftest toggle {}", i);
                     }
                     log::info!("selftest done");
+                    if std::env::var("PASTOID_PANEL_HOLD").is_ok() {
+                        // 调试用：持续把面板顶到最前，方便截图检查
+                        loop {
+                            let h = handle.clone();
+                            let h2 = h.clone();
+                            let _ = h.run_on_main_thread(move || {
+                                if let Some(w) = h2.get_webview_window("quick-paste") {
+                                    crate::shortcut::show_panel(&h2, &w);
+                                }
+                            });
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                        }
+                    }
                 });
             }
 
@@ -189,6 +210,31 @@ pub fn run() {
                                 | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
                                 | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
                         );
+                    }
+
+                    // 关键顺序：改 style mask 会把 NSPanel 的阴影/不透明属性恢复成默认值，
+                    // 所以下面这些必须放在 set_style_mask 之后，否则「直角虚影」还会回来。
+                    panel.set_opaque(false);
+                    panel.set_has_shadow(false);
+                    {
+                        use tauri_nspanel::objc::{class, msg_send, sel, sel_impl};
+                        if let Ok(ptr) = window.ns_window() {
+                            let ns = ptr as *mut tauri_nspanel::objc::runtime::Object;
+                            unsafe {
+                                let clear: *mut tauri_nspanel::objc::runtime::Object =
+                                    msg_send![class!(NSColor), clearColor];
+                                let _: () = msg_send![ns, setBackgroundColor: clear];
+                                let opaque: bool = msg_send![ns, isOpaque];
+                                let shadow: bool = msg_send![ns, hasShadow];
+                                let bg: *mut tauri_nspanel::objc::runtime::Object =
+                                    msg_send![ns, backgroundColor];
+                                let alpha: f64 = msg_send![bg, alphaComponent];
+                                log::debug!(
+                                    "panel diag: opaque={} shadow={} bg_alpha={:.3}",
+                                    opaque, shadow, alpha
+                                );
+                            }
+                        }
                     }
                 }
             }
