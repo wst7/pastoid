@@ -87,7 +87,7 @@ jobs:
           # 自签名证书在部分 runner 上 set-key-partition-list 会静默失败；
           # -T /usr/bin/codesign 已经给了 codesign 权限，这里失败不算致命
           security set-key-partition-list -S apple-tool:,apple: -s -k actions build.keychain || true
-          security find-identity -p codesigning build.keychain | tail -3
+          security find-identity -p codesigning build.keychain || true
           rm -f cert.pem key.pem
           {
             echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
