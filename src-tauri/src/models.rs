@@ -84,6 +84,9 @@ pub struct Settings {
     #[serde(default = "default_theme_style")]
     pub theme_style: String,
     pub autostart: bool,
+    /// 关闭主窗口后隐藏 macOS Dock 图标（老配置没有该字段时默认 false）
+    #[serde(default)]
+    pub hide_dock_when_closed: bool,
     #[serde(rename = "max_items")]
     pub max_items: u32,
     pub shortcut: String,
@@ -96,6 +99,7 @@ impl Default for Settings {
             theme: "system".to_string(),
             theme_style: default_theme_style(),
             autostart: false,
+            hide_dock_when_closed: false,
             max_items: 20,
             shortcut: default_shortcut().to_string(),
         }
@@ -198,6 +202,7 @@ mod tests {
         assert_eq!(settings.language, "zh");
         assert_eq!(settings.theme, "system");
         assert!(!settings.autostart);
+        assert!(!settings.hide_dock_when_closed);
         assert_eq!(settings.max_items, 20);
         assert_eq!(settings.shortcut, crate::models::default_shortcut());
     }
@@ -209,6 +214,7 @@ mod tests {
             theme: "dark".to_string(),
             theme_style: "oled".to_string(),
             autostart: true,
+            hide_dock_when_closed: true,
             max_items: 50,
             shortcut: "Ctrl+Alt+K".to_string(),
         };
@@ -218,6 +224,7 @@ mod tests {
         assert_eq!(settings1.theme, settings2.theme);
         assert_eq!(settings1.theme_style, settings2.theme_style);
         assert_eq!(settings1.autostart, settings2.autostart);
+        assert_eq!(settings1.hide_dock_when_closed, settings2.hide_dock_when_closed);
         assert_eq!(settings1.max_items, settings2.max_items);
         assert_eq!(settings1.shortcut, settings2.shortcut);
     }
@@ -229,6 +236,7 @@ mod tests {
             theme: "dark".to_string(),
             theme_style: "default".to_string(),
             autostart: true,
+            hide_dock_when_closed: true,
             max_items: 100,
             shortcut: "Cmd+Shift+V".to_string(),
         };
@@ -237,6 +245,7 @@ mod tests {
         assert!(json.contains("\"language\":\"en\""));
         assert!(json.contains("\"theme\":\"dark\""));
         assert!(json.contains("\"autostart\":true"));
+        assert!(json.contains("\"hide_dock_when_closed\":true"));
         assert!(json.contains("\"max_items\":100"));
         assert!(json.contains("\"shortcut\":\"Cmd+Shift+V\""));
 
@@ -244,8 +253,25 @@ mod tests {
         assert_eq!(decoded.language, "en");
         assert_eq!(decoded.theme, "dark");
         assert!(decoded.autostart);
+        assert!(decoded.hide_dock_when_closed);
         assert_eq!(decoded.max_items, 100);
         assert_eq!(decoded.shortcut, "Cmd+Shift+V");
+    }
+
+    #[test]
+    fn test_legacy_settings_without_hide_dock_deserializes() {
+        let legacy = r#"{
+            "language": "zh",
+            "theme": "system",
+            "autostart": true,
+            "max_items": 50,
+            "shortcut": "Cmd+Shift+V"
+        }"#;
+
+        let decoded: Settings = serde_json::from_str(legacy).unwrap();
+        assert!(decoded.autostart);
+        assert!(!decoded.hide_dock_when_closed);
+        assert_eq!(decoded.theme_style, "default");
     }
 
     #[test]

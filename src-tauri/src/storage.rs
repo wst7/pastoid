@@ -721,6 +721,7 @@ mod tests {
             theme: "dark".to_string(),
             theme_style: "default".to_string(),
             autostart: true,
+            hide_dock_when_closed: true,
             max_items: 50,
             shortcut: "Ctrl+Alt+K".to_string(),
         };
@@ -731,6 +732,7 @@ mod tests {
         assert_eq!(loaded.language, "en");
         assert_eq!(loaded.theme, "dark");
         assert!(loaded.autostart);
+        assert!(loaded.hide_dock_when_closed);
         assert_eq!(loaded.max_items, 50);
         assert_eq!(loaded.shortcut, "Ctrl+Alt+K");
     }

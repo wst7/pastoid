@@ -16,7 +16,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { open as openDialog, message, confirm } from "@tauri-apps/plugin-dialog";
 import { Switch, Button } from "@heroui/react";
 import ShortcutRecordInput from "@/components/ShortcutRecordInput";
-import { defaultShortcut } from "@/lib/platform";
+import { defaultShortcut, isMac } from "@/lib/platform";
 import type { TagCount } from "@/types/clipboard";
 import { FolderOpen, Monitor, Moon, Sun, Trash2, X } from "lucide-react";
 import { Select } from "@/components/Select";
@@ -32,6 +32,7 @@ interface SettingsData {
   theme: string;
   theme_style: string;
   autostart: boolean;
+  hide_dock_when_closed: boolean;
   max_items: number;
   shortcut: string;
 }
@@ -114,6 +115,7 @@ export default function SettingsApp() {
     theme: "system",
     theme_style: DEFAULT_STYLE,
     autostart: false,
+    hide_dock_when_closed: false,
     max_items: 20,
     shortcut: defaultShortcut,
   });
@@ -194,6 +196,7 @@ export default function SettingsApp() {
         theme: data.theme || "system",
         theme_style: data.theme_style || DEFAULT_STYLE,
         autostart: data.autostart ?? false,
+        hide_dock_when_closed: data.hide_dock_when_closed ?? false,
         max_items: loadedMax,
         shortcut: data.shortcut || defaultShortcut,
       });
@@ -268,6 +271,10 @@ export default function SettingsApp() {
 
   const handleAutostartChange = async (isSelected: boolean) => {
     await persist({ ...settings, autostart: isSelected });
+  };
+
+  const handleHideDockChange = async (isSelected: boolean) => {
+    await persist({ ...settings, hide_dock_when_closed: isSelected });
   };
 
   /** 调低上限前先问一句：会删多少条、能不能接受 */
@@ -748,6 +755,26 @@ export default function SettingsApp() {
               </Switch.Control>
             </Switch>
           </Row>
+
+          {isMac && (
+            <Row label={t("hideDockWhenClosed")}>
+              <Switch
+                isSelected={settings.hide_dock_when_closed}
+                onChange={handleHideDockChange}
+                isDisabled={loadingSettings}
+                style={
+                  {
+                    "--color-accent": "var(--primary)",
+                    "--accent-foreground": "#ffffff",
+                  } as React.CSSProperties
+                }
+              >
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch>
+            </Row>
+          )}
         </Section>
 
         <Section title={t("sectionClipboard")}>
