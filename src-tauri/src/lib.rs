@@ -22,8 +22,52 @@ use tauri::Manager;
 use tauri_nspanel::WebviewWindowExt;
 
 
+const AUTOSTART_ARG: &str = "--autostart";
+/// 自启拉起后的静默窗口期：macOS 勾选「重新登录时重新打开窗口」时，
+/// LaunchAgent 与 loginwindow 会在登录后几秒内先后拉起两个进程；
+/// 若 LaunchAgent 先启动、loginwindow 后补拉（不带 `--autostart`），
+/// 在这段窗口期内直接静默吞掉，避免开机自动弹出设置窗口。
+const AUTOSTART_GRACE_PERIOD: std::time::Duration = std::time::Duration::from_secs(15);
+
+fn has_autostart_arg<S: AsRef<str>>(args: &[S]) -> bool {
+    args.iter().any(|arg| arg.as_ref() == AUTOSTART_ARG)
+}
+
+fn should_show_settings_on_second_instance(
+    primary_autostart: bool,
+    elapsed_since_start: std::time::Duration,
+    incoming_args: &[String],
+) -> bool {
+    if has_autostart_arg(incoming_args) {
+        return false;
+    }
+    if primary_autostart && elapsed_since_start < AUTOSTART_GRACE_PERIOD {
+        return false;
+    }
+    true
+}
+
 pub fn run() {
+    let launched_at = std::time::Instant::now();
+    let primary_args: Vec<String> = std::env::args().collect();
+    let primary_autostart = has_autostart_arg(&primary_args);
+
     let builder = tauri::Builder::default()
+        // 单实例插件必须最先注册，防止第二个进程继续初始化托盘、快捷键和剪贴板监听
+        .plugin(tauri_plugin_single_instance::init(move |app, args, _cwd| {
+            log::info!("Second instance detected (args={:?}), ignoring", args);
+            if should_show_settings_on_second_instance(
+                primary_autostart,
+                launched_at.elapsed(),
+                &args,
+            ) {
+                if let Some(window) = app.get_webview_window("settings") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -38,7 +82,7 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--autostart"]),
+            Some(vec![AUTOSTART_ARG]),
         ))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -306,4 +350,50 @@ pub fn run() {
                 shortcut::request_shutdown();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn args(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn autostart_second_instance_stays_silent() {
+        assert!(!should_show_settings_on_second_instance(
+            false,
+            Duration::from_secs(600),
+            &args(&["pastoid", "--autostart"]),
+        ));
+    }
+
+    #[test]
+    fn login_restore_shortly_after_autostart_stays_silent() {
+        assert!(!should_show_settings_on_second_instance(
+            true,
+            Duration::from_secs(3),
+            &args(&["pastoid"]),
+        ));
+    }
+
+    #[test]
+    fn manual_relaunch_after_autostart_grace_shows_settings() {
+        assert!(should_show_settings_on_second_instance(
+            true,
+            AUTOSTART_GRACE_PERIOD,
+            &args(&["pastoid"]),
+        ));
+    }
+
+    #[test]
+    fn manual_relaunch_when_primary_not_autostart_shows_settings() {
+        assert!(should_show_settings_on_second_instance(
+            false,
+            Duration::from_secs(1),
+            &args(&["pastoid"]),
+        ));
+    }
 }
