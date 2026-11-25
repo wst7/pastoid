@@ -372,7 +372,7 @@ impl ClipboardRepository {
     }
 
     /// 把已有条目提到最前面并刷新时间戳，返回更新后的条目。
-    /// 用于「重复复制同一内容」——用户期望它重新回到列表顶部。
+    /// 用于「重复复制同一内容」以及「从快速粘贴面板使用后按最近使用排序」。
     pub fn bump(&self, id: &str) -> Option<ClipboardItem> {
         self.with_conn(|conn| {
             let now = chrono::Utc::now().timestamp_millis();
@@ -618,6 +618,24 @@ mod tests {
         assert_eq!(bumped.id, a.id);
         assert_eq!(repo.get_items()[0].id, a.id);
         assert!(bumped.created_at >= b.created_at);
+    }
+
+    #[test]
+    fn test_bump_moves_used_item_to_top_of_its_section() {
+        let (_dir, repo) = text_repo(100);
+
+        let mut pinned = ClipboardItem::new("pinned".to_string(), "text");
+        pinned.is_pinned = true;
+        let old = ClipboardItem::new("old".to_string(), "text");
+        let newer = ClipboardItem::new("newer".to_string(), "text");
+        repo.add(pinned.clone());
+        repo.add(old.clone());
+        repo.add(newer.clone());
+
+        // 使用靠后的普通条目：应移至普通区首位（仍保持置顶项在其之前）
+        repo.bump(&old.id).expect("bump 应成功");
+        let ids: Vec<String> = repo.list(10, "all", "").into_iter().map(|i| i.id).collect();
+        assert_eq!(ids, vec![pinned.id, old.id, newer.id]);
     }
 
     #[test]
