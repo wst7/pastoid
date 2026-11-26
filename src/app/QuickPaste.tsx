@@ -156,9 +156,8 @@ export default function QuickPaste() {
     top: number;
     height: number;
   } | null>(null);
-  const dragPointerRef = useRef<{
+  const dragStateRef = useRef<{
     id: string;
-    pointerId: number;
     startX: number;
     startY: number;
     x: number;
@@ -469,7 +468,7 @@ export default function QuickPaste() {
 
   /** 按指针 x 算落点，并给出插入线的面板内坐标。 */
   const updateDropTarget = useCallback(() => {
-    const drag = dragPointerRef.current;
+    const drag = dragStateRef.current;
     const strip = listRef.current;
     const panel = panelRef.current;
     if (!drag?.active || !strip || !panel) return;
@@ -523,7 +522,7 @@ export default function QuickPaste() {
   const startDragAutoScroll = useCallback(() => {
     stopDragAutoScroll();
     const step = () => {
-      const drag = dragPointerRef.current;
+      const drag = dragStateRef.current;
       const strip = listRef.current;
       if (!drag?.active || !strip || !panelVisibleRef.current) {
         dragAutoScrollRef.current = null;
@@ -612,14 +611,32 @@ export default function QuickPaste() {
     [refresh]
   );
 
-  const onCardPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, id: string) => {
+  /** 拖拽中的卡片浮起来跟着指针走；用 inline style，避免每帧重渲染 40 张卡。 */
+  const liftCard = useCallback((card: HTMLElement, dx: number, dy: number) => {
+    card.style.transition = "none";
+    card.style.zIndex = "30";
+    card.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.03)`;
+  }, []);
+
+  const releaseCard = useCallback((card: HTMLElement | null) => {
+    if (!card) return;
+    card.style.transition = "none";
+    card.style.transform = "";
+    card.style.zIndex = "";
+    // 先把卡片放回原位，再恢复 hover / 选中用的过渡
+    requestAnimationFrame(() => {
+      card.style.transition = "";
+    });
+  }, []);
+
+  const onCardMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>, id: string) => {
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;
+      // 操作按钮 / 标签 chip / 输入框不参与拖拽
       if (target.closest("button, input, textarea, [data-no-drag]")) return;
-      dragPointerRef.current = {
+      dragStateRef.current = {
         id,
-        pointerId: e.pointerId,
         startX: e.clientX,
         startY: e.clientY,
         x: e.clientX,
@@ -630,19 +647,58 @@ export default function QuickPaste() {
     []
   );
 
-  const onCardPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const drag = dragPointerRef.current;
-      if (!drag || drag.pointerId !== e.pointerId) return;
-      drag.x = e.clientX;
+  const finishDrag = useCallback(() => {
+    const drag = dragStateRef.current;
+    if (!drag) return;
+    dragStateRef.current = null;
+    stopDragAutoScroll();
+    setDraggingId(null);
+    setDropHint(null);
+    releaseCard(drag.card);
+    if (drag.active) {
+      dragSuppressClickRef.current = performance.now() + 300;
+      // 拖完鼠标停在原地也会触发 hover，锁到真的移动 4px 之后再恢复
+      pointerGuardRef.current = { ...pointerRef.current };
+      applyDragOrder(drag.id);
+    }
+    dragDropIndexRef.current = null;
+  }, [applyDragOrder, releaseCard, stopDragAutoScroll]);
 
+  const cancelDrag = useCallback(() => {
+    const drag = dragStateRef.current;
+    if (!drag) return;
+    dragStateRef.current = null;
+    stopDragAutoScroll();
+    setDraggingId(null);
+    setDropHint(null);
+    releaseCard(drag.card);
+    dragDropIndexRef.current = null;
+  }, [releaseCard, stopDragAutoScroll]);
+
+  /** 面板隐藏 / 关闭时清掉拖动状态：没收到 mouseup 也不会留下半截拖拽样式。 */
+  const resetDragState = useCallback(() => {
+    releaseCard(dragStateRef.current?.card ?? null);
+    dragStateRef.current = null;
+    dragDropIndexRef.current = null;
+    dragSuppressClickRef.current = 0;
+    setDraggingId(null);
+    setDropHint(null);
+    stopDragAutoScroll();
+  }, [releaseCard, stopDragAutoScroll]);
+
+  // 用鼠标事件而不是 pointer 事件：面板里的 hover / wheel 都走鼠标事件，行为一致；
+  // 监听挂在 window 上，指针离开卡片、扫过其它卡片时拖拽也不会断。
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      drag.x = e.clientX;
       if (!drag.active) {
         // 6px 阈值：手抖不算拖拽，单击仍然是粘贴
         if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) {
           return;
         }
         drag.active = true;
-        drag.card.setPointerCapture(e.pointerId);
         if (scrollAnimRef.current !== null) {
           cancelAnimationFrame(scrollAnimRef.current);
           scrollAnimRef.current = null;
@@ -654,52 +710,20 @@ export default function QuickPaste() {
         startDragAutoScroll();
       }
       e.preventDefault();
+      liftCard(drag.card, e.clientX - drag.startX, e.clientY - drag.startY);
       updateDropTarget();
-    },
-    [startDragAutoScroll, updateDropTarget]
-  );
-
-  const finishCardDrag = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const drag = dragPointerRef.current;
-      if (!drag || drag.pointerId !== e.pointerId) return;
-      dragPointerRef.current = null;
-      stopDragAutoScroll();
-      setDraggingId(null);
-      setDropHint(null);
-      if (drag.active) {
-        dragSuppressClickRef.current = performance.now() + 300;
-        // 拖完鼠标停在原地也会触发 hover，锁到真的移动 4px 之后再恢复
-        pointerGuardRef.current = { ...pointerRef.current };
-        applyDragOrder(drag.id);
-      }
-      dragDropIndexRef.current = null;
-    },
-    [applyDragOrder, stopDragAutoScroll]
-  );
-
-  const cancelCardDrag = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const drag = dragPointerRef.current;
-      if (!drag || drag.pointerId !== e.pointerId) return;
-      dragPointerRef.current = null;
-      stopDragAutoScroll();
-      setDraggingId(null);
-      setDropHint(null);
-      dragDropIndexRef.current = null;
-    },
-    [stopDragAutoScroll]
-  );
-
-  /** 面板隐藏 / 关闭时清掉拖动状态：没收到 pointerup 也不会留下半截拖拽样式。 */
-  const resetDragState = useCallback(() => {
-    dragPointerRef.current = null;
-    dragDropIndexRef.current = null;
-    dragSuppressClickRef.current = 0;
-    setDraggingId(null);
-    setDropHint(null);
-    stopDragAutoScroll();
-  }, [stopDragAutoScroll]);
+    };
+    const onUp = () => finishDrag();
+    const onBlur = () => cancelDrag();
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [cancelDrag, finishDrag, liftCard, startDragAutoScroll, updateDropTarget]);
 
   /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
   const playEnter = useCallback(() => {
@@ -1151,7 +1175,7 @@ export default function QuickPaste() {
           ref={listRef}
           onMouseMove={(e) => {
             pointerRef.current = { x: e.clientX, y: e.clientY };
-            if (dragPointerRef.current?.active) return;
+            if (dragStateRef.current?.active) return;
             if (hoverEnabledRef.current) return;
             const guard = pointerGuardRef.current;
             if (guard) {
@@ -1215,11 +1239,7 @@ export default function QuickPaste() {
                       if (performance.now() < dragSuppressClickRef.current) return;
                       paste(item);
                     }}
-                    onPointerDown={(e) => onCardPointerDown(e, item.id)}
-                    onPointerMove={onCardPointerMove}
-                    onPointerUp={finishCardDrag}
-                    onPointerCancel={cancelCardDrag}
-                    onLostPointerCapture={cancelCardDrag}
+                    onMouseDown={(e) => onCardMouseDown(e, item.id)}
                     data-hovered={hoveredId === item.id ? "true" : undefined}
                     onMouseEnter={() => {
                       if (!hoverEnabledRef.current) return;
@@ -1229,9 +1249,9 @@ export default function QuickPaste() {
                     onMouseLeave={() =>
                       setHoveredId((prev) => (prev === item.id ? null : prev))
                     }
-                    className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none [touch-action:none] transition-[background-color,border-color,box-shadow,transform,opacity] duration-150 ${
+                    className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform,opacity] duration-150 ${
                       draggingId === item.id
-                        ? "opacity-60 shadow-lg cursor-grabbing"
+                        ? "shadow-2xl cursor-grabbing"
                         : "active:scale-[0.985]"
                     } ${isActive ? "ring-2 ring-primary shadow-sm" : ""} ${
                       item.isPinned ? "pinned" : ""
