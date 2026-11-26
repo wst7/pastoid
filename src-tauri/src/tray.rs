@@ -56,6 +56,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 "quit" => {
                     log::info!("Pastoid exiting");
+                    // std::process::exit 会跳过 cleanup_before_exit，先主动释放单实例锁/socket
+                    tauri_plugin_single_instance::destroy(app_handle);
                     std::process::exit(0);
                 }
                 _ => {}
