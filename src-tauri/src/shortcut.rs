@@ -18,6 +18,65 @@ static CURRENT_SHORTCUT: RwLock<String> = RwLock::new(String::new());
 // 应用退出时置位，让健康监控线程停止干预快捷键
 static SHUTDOWN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
+// macOS：在呼出 quick-paste 面板前记住当前前台应用的 PID。
+// 当主窗口关闭且 Dock 图标隐藏（Accessory 模式）时，应用不在 Cmd+Tab 列表里，
+// 粘贴前通过 NSRunningApplication 直接激活该 PID，避免 Cmd+Tab 切错到再上一个应用。
+#[cfg(target_os = "macos")]
+static PREVIOUS_APP_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[cfg(target_os = "macos")]
+fn remember_frontmost_app() {
+    use tauri_nspanel::objc::{class, msg_send, runtime::Object, sel, sel_impl};
+    unsafe {
+        let ws: *mut Object = msg_send![class!(NSWorkspace), sharedWorkspace];
+        if ws.is_null() {
+            return;
+        }
+        let app: *mut Object = msg_send![ws, frontmostApplication];
+        if app.is_null() {
+            return;
+        }
+        let pid: i32 = msg_send![app, processIdentifier];
+        if pid > 0 && pid as u32 != std::process::id() {
+            PREVIOUS_APP_PID.store(pid, Ordering::Relaxed);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn remember_frontmost_app() {}
+
+#[cfg(target_os = "macos")]
+pub fn activate_previous_app() -> bool {
+    use tauri_nspanel::objc::{
+        class, msg_send,
+        runtime::{Object, BOOL, NO},
+        sel, sel_impl,
+    };
+    let pid = PREVIOUS_APP_PID.load(Ordering::Relaxed);
+    if pid <= 0 {
+        return false;
+    }
+    unsafe {
+        let app: *mut Object = msg_send![
+            class!(NSRunningApplication),
+            runningApplicationWithProcessIdentifier: pid
+        ];
+        if app.is_null() {
+            return false;
+        }
+        // NSApplicationActivateIgnoringOtherApps = 1 << 1
+        let options: usize = 1 << 1;
+        let ok: BOOL = msg_send![app, activateWithOptions: options];
+        ok != NO
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn activate_previous_app() -> bool {
+    false
+}
+
 /// 请求健康监控线程退出（应用退出时调用）
 pub fn request_shutdown() {
     SHUTDOWN_REQUESTED.store(true, Ordering::Relaxed);
@@ -117,6 +176,7 @@ pub fn toggle_quick_paste(app: &AppHandle) {
         if panel_is_visible(app, &window) {
             let _ = window.hide();
         } else {
+            remember_frontmost_app();
             position_panel(app, &window);
             show_panel(app, &window);
             let _ = window.emit("panel-opened", ());

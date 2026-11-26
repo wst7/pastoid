@@ -1,9 +1,68 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
 use rust_i18n::t;
+
+/// 记录当前 macOS 是否处于 Accessory（隐藏 Dock 图标）模式。
+/// `paste_item` 据此判断能否用 Cmd+Tab 切回上一个应用：Accessory 应用不在 Cmd+Tab 列表里。
+static DOCK_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+pub fn is_dock_hidden() -> bool {
+    DOCK_HIDDEN.load(Ordering::Relaxed)
+}
+
+#[cfg(target_os = "macos")]
+pub fn mark_dock_hidden(hidden: bool) {
+    DOCK_HIDDEN.store(hidden, Ordering::Relaxed);
+}
+
+fn should_show_dock(hide_dock_when_closed: bool, settings_visible: bool) -> bool {
+    !hide_dock_when_closed || settings_visible
+}
+
+/// 在 macOS 上切换 Dock 图标显示（Regular 显示 / Accessory 隐藏）；其它平台空操作。
+pub fn set_dock_visible(app_handle: &AppHandle, visible: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if visible {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        if let Err(e) = app_handle.set_activation_policy(policy) {
+            log::warn!("切换 Dock 图标可见性({})失败: {}", visible, e);
+            return;
+        }
+        DOCK_HIDDEN.store(!visible, Ordering::Relaxed);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app_handle, visible);
+    }
+}
+
+/// 显示并聚焦设置主窗口；若之前隐藏了 Dock 图标，先恢复为 Regular 模式。
+pub fn show_settings_window(app_handle: &AppHandle) {
+    set_dock_visible(app_handle, true);
+    if let Some(window) = app_handle.get_webview_window("settings") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// 根据「关闭窗口后隐藏 Dock 图标」设置与当前主窗口可见状态同步 Dock 图标。
+pub fn sync_dock_visibility(app_handle: &AppHandle, hide_dock_when_closed: bool) {
+    let settings_visible = app_handle
+        .get_webview_window("settings")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    set_dock_visible(app_handle, should_show_dock(hide_dock_when_closed, settings_visible));
+}
 
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle();
@@ -28,10 +87,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::DoubleClick { .. } = event {
                 // 双击：显示主窗口
-                if let Some(window) = tray.app_handle().get_webview_window("settings") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                show_settings_window(tray.app_handle());
             }
         })
         .on_menu_event(|app_handle, event| {
@@ -41,18 +97,12 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     crate::shortcut::toggle_quick_paste(app_handle);
                 }
                 "update_available" => {
-                    if let Some(window) = app_handle.get_webview_window("settings") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                    show_settings_window(app_handle);
                     use tauri::Emitter;
                     let _ = app_handle.emit("update-available", ());
                 }
                 "preferences" => {
-                    if let Some(window) = app_handle.get_webview_window("settings") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
+                    show_settings_window(app_handle);
                 }
                 "quit" => {
                     log::info!("Pastoid exiting");
@@ -143,12 +193,36 @@ pub fn update_tray_menu(app_handle: &AppHandle) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-pub fn setup_window_close_handler(window: &tauri::WebviewWindow) {
+pub fn setup_window_close_handler(app_handle: AppHandle, window: &tauri::WebviewWindow) {
     let window_clone = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             let _ = window_clone.hide();
+            let hide_dock = app_handle
+                .try_state::<crate::models::AppState>()
+                .and_then(|s| s.settings.lock().ok().map(|g| g.hide_dock_when_closed))
+                .unwrap_or(false);
+            if hide_dock {
+                set_dock_visible(&app_handle, false);
+            }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_show_dock;
+
+    #[test]
+    fn dock_stays_visible_when_feature_disabled() {
+        assert!(should_show_dock(false, false));
+        assert!(should_show_dock(false, true));
+    }
+
+    #[test]
+    fn dock_follows_settings_window_when_feature_enabled() {
+        assert!(!should_show_dock(true, false));
+        assert!(should_show_dock(true, true));
+    }
 }

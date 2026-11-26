@@ -109,6 +109,8 @@ pub fn run() {
             rust_i18n::set_locale(&settings.language);
 
             let shortcut_str = settings.shortcut.clone();
+            #[cfg(target_os = "macos")]
+            let hide_dock_when_closed = settings.hide_dock_when_closed;
 
             let repo = Arc::new(repository::ClipboardRepository::new(
                 data_dir.clone(),
@@ -138,11 +140,15 @@ pub fn run() {
                 pending_update: std::sync::Mutex::new(None),
             });
 
-            // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪
+            // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪；
+            // 否则若开启了「关闭窗口后隐藏 Dock 图标」，启动时即设为 Accessory 避免在 Dock 闪现。
             if first_run {
-                if let Some(window) = app.get_webview_window("settings") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                tray::show_settings_window(app.handle());
+            } else {
+                #[cfg(target_os = "macos")]
+                if hide_dock_when_closed {
+                    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                    tray::mark_dock_hidden(true);
                 }
             }
 
@@ -232,7 +238,7 @@ pub fn run() {
 
             // 设置窗口关闭事件
             if let Some(main_window) = app.get_webview_window("settings") {
-                tray::setup_window_close_handler(&main_window);
+                tray::setup_window_close_handler(app.handle().clone(), &main_window);
             }
 
             // quick-paste 窗口转为 NSPanel 以在全屏应用上方显示
@@ -345,9 +351,20 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
-            if let tauri::RunEvent::Exit = event {
-                shortcut::request_shutdown();
+        .run(|app_handle, event| {
+            let _ = app_handle;
+            match event {
+                tauri::RunEvent::Exit => {
+                    shortcut::request_shutdown();
+                }
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen {
+                    has_visible_windows: false,
+                    ..
+                } => {
+                    tray::show_settings_window(app_handle);
+                }
+                _ => {}
             }
         });
 }

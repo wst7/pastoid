@@ -13,6 +13,7 @@
   "language": "Language",
   "theme": "Theme",
   "autoStart": "Auto start",
+  "hideDockWhenClosed": "Hide Dock icon when closed",
   "maxItems": "Max items",
   "unlimited": "Unlimited",
   "checkUpdate": "Check for updates",

@@ -14,6 +14,7 @@
   "language": "语言",
   "theme": "主题",
   "autoStart": "开机自启",
+  "hideDockWhenClosed": "关闭窗口后隐藏 Dock 图标",
   "maxItems": "最大保存数量",
   "unlimited": "不限",
   "checkUpdate": "检查更新",

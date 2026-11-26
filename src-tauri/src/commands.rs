@@ -453,6 +453,9 @@ pub fn save_settings(
 
     // 记录快捷键变更（随后在后台线程异步执行重注册，避免阻塞 UI）
     let language_changed = current_settings.language != settings.language;
+    let hide_dock_changed =
+        current_settings.hide_dock_when_closed != settings.hide_dock_when_closed;
+    let hide_dock_when_closed = settings.hide_dock_when_closed;
     let shortcut_changed = current_settings.shortcut != settings.shortcut;
     let old_shortcut = current_settings.shortcut.clone();
     let new_shortcut = settings.shortcut.clone();
@@ -492,6 +495,10 @@ pub fn save_settings(
         if let Err(e) = crate::tray::update_tray_menu(&app_handle) {
             log::error!("Failed to rebuild tray menu after language change: {}", e);
         }
+    }
+
+    if hide_dock_changed {
+        crate::tray::sync_dock_visibility(&app_handle, hide_dock_when_closed);
     }
 
     if shortcut_changed {
@@ -639,21 +646,27 @@ pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String
     let mut enigo = Enigo::new(&Settings::default())
         .map_err(|e| format!("Failed to init enigo: {}", e))?;
 
-    // macOS：先 Cmd+Tab 回到上一个应用，再 Cmd+V，保证粘贴落在用户原本的窗口里。
+    // macOS：先切回上一个应用，再 Cmd+V，保证粘贴落在用户原本的窗口里。
+    // 当 Dock 图标隐藏（Accessory 模式）时，应用不在 Cmd+Tab 列表里，直接激活呼出面板前记录的应用。
     // Windows：面板隐藏后焦点本身就会回到原窗口，直接 Ctrl+V 即可（不要用 Ctrl+Tab，
     // 那会把浏览器/编辑器的标签页切花）。
     if cfg!(target_os = "macos") {
-        enigo
-            .key(Key::Meta, Direction::Press)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo
-            .key(Key::Tab, Direction::Click)
-            .map_err(|e| format!("enigo: {}", e))?;
-        enigo
-            .key(Key::Meta, Direction::Release)
-            .map_err(|e| format!("enigo: {}", e))?;
+        if crate::tray::is_dock_hidden() {
+            crate::shortcut::activate_previous_app();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        } else {
+            enigo
+                .key(Key::Meta, Direction::Press)
+                .map_err(|e| format!("enigo: {}", e))?;
+            enigo
+                .key(Key::Tab, Direction::Click)
+                .map_err(|e| format!("enigo: {}", e))?;
+            enigo
+                .key(Key::Meta, Direction::Release)
+                .map_err(|e| format!("enigo: {}", e))?;
 
-        std::thread::sleep(std::time::Duration::from_millis(300));
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
 
         // Cmd+V 粘贴
         enigo
