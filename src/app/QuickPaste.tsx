@@ -691,6 +691,16 @@ export default function QuickPaste() {
     [stopDragAutoScroll]
   );
 
+  /** 面板隐藏 / 关闭时清掉拖动状态：没收到 pointerup 也不会留下半截拖拽样式。 */
+  const resetDragState = useCallback(() => {
+    dragPointerRef.current = null;
+    dragDropIndexRef.current = null;
+    dragSuppressClickRef.current = 0;
+    setDraggingId(null);
+    setDropHint(null);
+    stopDragAutoScroll();
+  }, [stopDragAutoScroll]);
+
   /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
   const playEnter = useCallback(() => {
     const el = panelRef.current;
@@ -705,6 +715,7 @@ export default function QuickPaste() {
     if (closingRef.current) return;
     closingRef.current = true;
     panelVisibleRef.current = false;
+    resetDragState();
     const win = getCurrentWindow();
     const el = panelRef.current;
 
@@ -722,7 +733,7 @@ export default function QuickPaste() {
       closingRef.current = false;
       closeTimerRef.current = null;
     }, PANEL_EXIT_MS);
-  }, []);
+  }, [resetDragState]);
 
   useEffect(() => {
     return watchSystemTheme(() => {
@@ -757,6 +768,7 @@ export default function QuickPaste() {
       }
       closingRef.current = false;
       panelVisibleRef.current = true;
+      resetDragState();
       setSearch("");
       setFilter("all");
       // 状态是异步的，这里显式带上空查询/全筛选，别依赖 ref 已经更新
@@ -940,7 +952,7 @@ export default function QuickPaste() {
     };
     // search 只用于 Esc 判断，不希望在打字时重建监听
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refresh, playEnter, requestClose, selectIndex]);
+  }, [refresh, playEnter, requestClose, selectIndex, resetDragState]);
 
   // 选中项跟着滚动，别跑出可视区。hover 触发的选中不滚（scrollNext=false）。
   useEffect(() => {
