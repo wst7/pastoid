@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.12.0](https://github.com/wst7/pastoid/compare/v1.11.5...v1.12.0) (2026-11-26)
+
+### ✨ Features | 新功能
+
+* **macos:** add option to hide Dock icon when window is closed ([d7d2f7a](https://github.com/wst7/pastoid/commit/d7d2f7aac13c2f9b7bfc2a0f378d8a82e4c84e20))
+* **quick-paste:** drag cards to reorder history ([9ba796b](https://github.com/wst7/pastoid/commit/9ba796b21d278597a9af30eda3a3e553c1721fea))
+* **quick-paste:** horizontal drag swap with floating card ([8f2cde0](https://github.com/wst7/pastoid/commit/8f2cde027867e61d875d57641f62d824b6aa670d))
+* **quick-paste:** live swap while dragging cards ([b4ae830](https://github.com/wst7/pastoid/commit/b4ae830eb2ac65e10d26a5cf30e95fe855848598))
+* **quick-paste:** move pasted item to top of recent history ([f293a8a](https://github.com/wst7/pastoid/commit/f293a8a41265a25b78f6062ec00a0b632b2f8778))
+* **settings:** delete clipboard history by type ([1888996](https://github.com/wst7/pastoid/commit/1888996829878a8d4deb1cc20337c9528defa156))
+
+### 🐛 Bug Fixes | Bug 修复
+
+* align dock, second-instance and paste-refresh paths ([c5ee6b2](https://github.com/wst7/pastoid/commit/c5ee6b21175b12faf5159290f11556880c6c8cf1))
+* enforce single instance to prevent duplicate launches ([ff1603e](https://github.com/wst7/pastoid/commit/ff1603e79f2c54690e43102dfb29f659c29f0266))
+* **macos:** keep the quick-paste panel on the active fullscreen Space ([b1650e0](https://github.com/wst7/pastoid/commit/b1650e0a2f413f8e499f26ca8f156f05269ce6ff))
+* **quick-paste:** animate live swaps with Web Animations ([4e77542](https://github.com/wst7/pastoid/commit/4e7754276fcb3d58be75778fe50bed7aed36601d))
+* **quick-paste:** clear drag state when the panel hides ([28b0331](https://github.com/wst7/pastoid/commit/28b03319c62b4b306f0d02270b9edacc5497840e))
+* **quick-paste:** drag with mouse events and follow the pointer ([0b13ef8](https://github.com/wst7/pastoid/commit/0b13ef8bf1d27ad3451ddfaa57acb39ae0867ab1))
+
 ## [1.11.5](https://github.com/wst7/pastoid/compare/v1.11.4...v1.11.5) (2026-11-22)
 
 ## [1.11.4](https://github.com/wst7/pastoid/compare/v1.11.3...v1.11.4) (2026-11-22)
