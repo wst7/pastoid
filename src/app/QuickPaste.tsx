@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { applyTheme, paint, watchSystemTheme, type ThemePref } from "@/lib/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -151,20 +151,19 @@ export default function QuickPaste() {
   const hoverEnabledRef = useRef(true);
   // 拖动排序：指针移动超过阈值才算拖拽，否则仍按点击（粘贴）处理
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dropHint, setDropHint] = useState<{
-    x: number;
-    top: number;
-    height: number;
-  } | null>(null);
   const dragStateRef = useRef<{
     id: string;
     startX: number;
     startY: number;
     x: number;
     active: boolean;
-    card: HTMLElement;
   } | null>(null);
-  const dragDropIndexRef = useRef<number | null>(null);
+  // 拖动期间的可见顺序（同步更新，不等 React commit）
+  const dragOrderRef = useRef<ClipboardItem[] | null>(null);
+  const dragMovedRef = useRef(false);
+  // FLIP：换位前记录位置，commit 后补间
+  const flipRectsRef = useRef<Map<string, DOMRect> | null>(null);
+  const reorderPendingRef = useRef(false);
   // 拖完松手可能补一个 click（目标未必还是被拖的卡片），用一个短时间窗吞掉它
   const dragSuppressClickRef = useRef(0);
   const dragAutoScrollRef = useRef<number | null>(null);
@@ -466,56 +465,107 @@ export default function QuickPaste() {
 
   // ==================== 拖动排序 ====================
 
-  /** 按指针 x 算落点，并给出插入线的面板内坐标。 */
-  const updateDropTarget = useCallback(() => {
-    const drag = dragStateRef.current;
-    const strip = listRef.current;
-    const panel = panelRef.current;
-    if (!drag?.active || !strip || !panel) return;
-
-    const cards = Array.from(
-      strip.querySelectorAll<HTMLElement>("[data-id]")
-    ).filter((card) => card.dataset.id !== drag.id);
-
-    let index = 0;
-    for (const card of cards) {
-      const rect = card.getBoundingClientRect();
-      if (drag.x > rect.left + rect.width / 2) index++;
-      else break;
-    }
-    dragDropIndexRef.current = index;
-    if (!cards.length) {
-      setDropHint(null);
-      return;
-    }
-
-    const panelRect = panel.getBoundingClientRect();
-    const stripRect = strip.getBoundingClientRect();
-    const anchor = cards[index];
-    const rect = (anchor ?? cards[cards.length - 1]).getBoundingClientRect();
-    const rawX = anchor ? rect.left - 6 : rect.right + 6;
-    const next = {
-      x:
-        Math.max(stripRect.left + 2, Math.min(rawX, stripRect.right - 4)) -
-        panelRect.left,
-      top: rect.top - panelRect.top,
-      height: rect.height,
-    };
-    setDropHint((prev) =>
-      prev &&
-      Math.abs(prev.x - next.x) < 0.5 &&
-      Math.abs(prev.top - next.top) < 0.5 &&
-      Math.abs(prev.height - next.height) < 0.5
-        ? prev
-        : next
-    );
-  }, []);
-
   const stopDragAutoScroll = useCallback(() => {
     if (dragAutoScrollRef.current !== null) {
       cancelAnimationFrame(dragAutoScrollRef.current);
       dragAutoScrollRef.current = null;
     }
+  }, []);
+
+
+  /** 松手后落盘：只传同组的上下邻居，后端只改这一条的 sort_order。 */
+  const persistDragOrder = useCallback(
+    (id: string) => {
+      const order = dragOrderRef.current ?? filteredItemsRef.current;
+      const index = order.findIndex((item) => item.id === id);
+      if (index < 0) return;
+      const moved = order[index];
+      const prevCandidate = order[index - 1] ?? null;
+      const nextCandidate = order[index + 1] ?? null;
+      // 分组边界那一侧没有排序意义（置顶永远在前），传过去会被后端拒绝
+      const prevItem =
+        prevCandidate && prevCandidate.isPinned === moved.isPinned
+          ? prevCandidate
+          : null;
+      const nextItem =
+        nextCandidate && nextCandidate.isPinned === moved.isPinned
+          ? nextCandidate
+          : null;
+      void invoke("move_clipboard_item", {
+        id,
+        prevId: prevItem?.id ?? null,
+        nextId: nextItem?.id ?? null,
+      }).catch((e) => {
+        console.error("Reorder failed:", e);
+        // 后端拒绝（数据过期 / 分组不一致）就拉一次真实顺序回来
+        void refresh();
+      });
+    },
+    [refresh]
+  );
+
+  /**
+   * 指针跨过卡片中线就实时换位：其余卡片由 useLayoutEffect 的 FLIP 滑到新位置。
+   * 松手时把最终顺序落盘，所以拖动过程中就能看到「交换」。
+   */
+  const updateDropTarget = useCallback(() => {
+    const drag = dragStateRef.current;
+    const strip = listRef.current;
+    if (!drag?.active || !strip) return;
+    // 等这一帧 React commit，别拿旧 DOM 再排一次
+    if (reorderPendingRef.current) return;
+
+    const all = Array.from(
+      strip.querySelectorAll<HTMLElement>("[data-id]")
+    );
+    if (!all.length) return;
+    const dragEl = all.find((el) => el.dataset.id === drag.id);
+
+    // 清掉上一轮 FLIP 的临时 transform，按新的布局位置重新测量
+    for (const card of all) {
+      card.style.transition = "none";
+      card.style.transform = "";
+    }
+    void strip.offsetWidth;
+
+    const others = all.filter((el) => el !== dragEl);
+    let index = 0;
+    for (const card of others) {
+      const rect = card.getBoundingClientRect();
+      if (drag.x > rect.left + rect.width / 2) index++;
+      else break;
+    }
+
+    const order = dragOrderRef.current ?? filteredItemsRef.current;
+    const moved = order.find((item) => item.id === drag.id);
+    if (!moved) return;
+    const rest = order.filter((item) => item.id !== drag.id);
+    // 置顶永远在前：落点夹在当前分组内，拖过分界线也不顺带改图钉状态
+    const pinnedCount = rest.filter((item) => item.isPinned).length;
+    const target = moved.isPinned
+      ? Math.min(Math.max(0, index), pinnedCount)
+      : Math.max(Math.min(rest.length, index), pinnedCount);
+
+    const current = dragEl ? all.indexOf(dragEl) : -1;
+    if (target === current) return;
+
+    // FLIP：记录换位前的位置，commit 后补间到新位置
+    const rects = new Map<string, DOMRect>();
+    for (const card of all) {
+      const id = card.dataset.id;
+      if (id) rects.set(id, card.getBoundingClientRect());
+    }
+    flipRectsRef.current = rects;
+    reorderPendingRef.current = true;
+
+    const nextOrder = [...rest.slice(0, target), moved, ...rest.slice(target)];
+    dragOrderRef.current = nextOrder;
+    dragMovedRef.current = true;
+    const visibleIds = new Set(order.map((item) => item.id));
+    setItems((prev) => [
+      ...nextOrder,
+      ...prev.filter((item) => !visibleIds.has(item.id)),
+    ]);
   }, []);
 
   /** 拖动到卡片条边缘时自动横向滚动；指针停在边缘也能继续走。 */
@@ -556,79 +606,6 @@ export default function QuickPaste() {
     dragAutoScrollRef.current = requestAnimationFrame(step);
   }, [stopDragAutoScroll, updateDropTarget]);
 
-  /** 松手后按落点重排本地列表，并把「被拖条目 + 上下邻居」交给后端落盘。 */
-  const applyDragOrder = useCallback(
-    (id: string) => {
-      const index = dragDropIndexRef.current;
-      if (index === null) return;
-      const visible = filteredItemsRef.current;
-      const moved = visible.find((item) => item.id === id);
-      if (!moved) return;
-
-      const rest = visible.filter((item) => item.id !== id);
-      // 置顶永远在前：落点夹在当前分组内，拖过分界线也不顺带改图钉状态
-      const pinnedCount = rest.filter((item) => item.isPinned).length;
-      const target = moved.isPinned
-        ? Math.min(Math.max(0, index), pinnedCount)
-        : Math.max(Math.min(rest.length, index), pinnedCount);
-
-      const nextVisible = [
-        ...rest.slice(0, target),
-        moved,
-        ...rest.slice(target),
-      ];
-      if (nextVisible.every((item, i) => item.id === visible[i].id)) return;
-
-      // 只换前 40 张的顺序；后面没渲染的保持原样
-      const visibleIds = new Set(visible.map((item) => item.id));
-      setItems((prev) => [
-        ...nextVisible,
-        ...prev.filter((item) => !visibleIds.has(item.id)),
-      ]);
-
-      // 只把同组邻居交给后端：分组边界上的另一边没有排序意义（置顶永远在前），
-      // 传过去会让后端拒绝「跨置顶分组排序」
-      const prevCandidate = nextVisible[target - 1] ?? null;
-      const nextCandidate = nextVisible[target + 1] ?? null;
-      const prevItem =
-        prevCandidate && prevCandidate.isPinned === moved.isPinned
-          ? prevCandidate
-          : null;
-      const nextItem =
-        nextCandidate && nextCandidate.isPinned === moved.isPinned
-          ? nextCandidate
-          : null;
-      void invoke("move_clipboard_item", {
-        id,
-        prevId: prevItem?.id ?? null,
-        nextId: nextItem?.id ?? null,
-      }).catch((e) => {
-        console.error("Reorder failed:", e);
-        // 后端拒绝（数据过期 / 分组不一致）就拉一次真实顺序回来
-        void refresh();
-      });
-    },
-    [refresh]
-  );
-
-  /** 拖拽中的卡片浮起来跟着指针走；用 inline style，避免每帧重渲染 40 张卡。 */
-  const liftCard = useCallback((card: HTMLElement, dx: number, dy: number) => {
-    card.style.transition = "none";
-    card.style.zIndex = "30";
-    card.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.03)`;
-  }, []);
-
-  const releaseCard = useCallback((card: HTMLElement | null) => {
-    if (!card) return;
-    card.style.transition = "none";
-    card.style.transform = "";
-    card.style.zIndex = "";
-    // 先把卡片放回原位，再恢复 hover / 选中用的过渡
-    requestAnimationFrame(() => {
-      card.style.transition = "";
-    });
-  }, []);
-
   const onCardMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, id: string) => {
       if (e.button !== 0) return;
@@ -641,8 +618,9 @@ export default function QuickPaste() {
         startY: e.clientY,
         x: e.clientX,
         active: false,
-        card: e.currentTarget,
       };
+      dragMovedRef.current = false;
+      dragOrderRef.current = null;
     },
     []
   );
@@ -653,38 +631,41 @@ export default function QuickPaste() {
     dragStateRef.current = null;
     stopDragAutoScroll();
     setDraggingId(null);
-    setDropHint(null);
-    releaseCard(drag.card);
+    reorderPendingRef.current = false;
+    flipRectsRef.current = null;
     if (drag.active) {
       dragSuppressClickRef.current = performance.now() + 300;
       // 拖完鼠标停在原地也会触发 hover，锁到真的移动 4px 之后再恢复
       pointerGuardRef.current = { ...pointerRef.current };
-      applyDragOrder(drag.id);
+      if (dragMovedRef.current) persistDragOrder(drag.id);
     }
-    dragDropIndexRef.current = null;
-  }, [applyDragOrder, releaseCard, stopDragAutoScroll]);
+    dragMovedRef.current = false;
+    dragOrderRef.current = null;
+  }, [persistDragOrder, stopDragAutoScroll]);
 
   const cancelDrag = useCallback(() => {
     const drag = dragStateRef.current;
     if (!drag) return;
     dragStateRef.current = null;
+    dragOrderRef.current = null;
+    dragMovedRef.current = false;
+    flipRectsRef.current = null;
+    reorderPendingRef.current = false;
     stopDragAutoScroll();
     setDraggingId(null);
-    setDropHint(null);
-    releaseCard(drag.card);
-    dragDropIndexRef.current = null;
-  }, [releaseCard, stopDragAutoScroll]);
+  }, [stopDragAutoScroll]);
 
   /** 面板隐藏 / 关闭时清掉拖动状态：没收到 mouseup 也不会留下半截拖拽样式。 */
   const resetDragState = useCallback(() => {
-    releaseCard(dragStateRef.current?.card ?? null);
     dragStateRef.current = null;
-    dragDropIndexRef.current = null;
+    dragOrderRef.current = null;
+    dragMovedRef.current = false;
+    flipRectsRef.current = null;
+    reorderPendingRef.current = false;
     dragSuppressClickRef.current = 0;
     setDraggingId(null);
-    setDropHint(null);
     stopDragAutoScroll();
-  }, [releaseCard, stopDragAutoScroll]);
+  }, [stopDragAutoScroll]);
 
   // 用鼠标事件而不是 pointer 事件：面板里的 hover / wheel 都走鼠标事件，行为一致；
   // 监听挂在 window 上，指针离开卡片、扫过其它卡片时拖拽也不会断。
@@ -699,6 +680,7 @@ export default function QuickPaste() {
           return;
         }
         drag.active = true;
+        dragOrderRef.current = filteredItemsRef.current.slice();
         if (scrollAnimRef.current !== null) {
           cancelAnimationFrame(scrollAnimRef.current);
           scrollAnimRef.current = null;
@@ -710,7 +692,6 @@ export default function QuickPaste() {
         startDragAutoScroll();
       }
       e.preventDefault();
-      liftCard(drag.card, e.clientX - drag.startX, e.clientY - drag.startY);
       updateDropTarget();
     };
     const onUp = () => finishDrag();
@@ -723,7 +704,38 @@ export default function QuickPaste() {
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [cancelDrag, finishDrag, liftCard, startDragAutoScroll, updateDropTarget]);
+  }, [cancelDrag, finishDrag, startDragAutoScroll, updateDropTarget]);
+
+  // FLIP：实时换位后让卡片从旧位置滑到新位置，而不是瞬移
+  useLayoutEffect(() => {
+    const prev = flipRectsRef.current;
+    flipRectsRef.current = null;
+    reorderPendingRef.current = false;
+    if (!prev) return;
+    const strip = listRef.current;
+    if (!strip) return;
+    for (const el of strip.querySelectorAll<HTMLElement>("[data-id]")) {
+      const id = el.dataset.id;
+      const old = id ? prev.get(id) : undefined;
+      if (!old) continue;
+      const now = el.getBoundingClientRect();
+      const dx = old.left - now.left;
+      const dy = old.top - now.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      el.style.transition = "none";
+      el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      void el.offsetWidth;
+      el.style.transition = "transform 160ms cubic-bezier(0.2, 0, 0, 1)";
+      el.style.transform = "";
+      const clear = () => {
+        el.style.transition = "";
+        el.style.transform = "";
+        el.removeEventListener("transitionend", clear);
+      };
+      el.addEventListener("transitionend", clear);
+      window.setTimeout(clear, 220);
+    }
+  }, [items]);
 
   /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
   const playEnter = useCallback(() => {
@@ -857,6 +869,8 @@ export default function QuickPaste() {
       // 面板隐藏期间不刷新 DOM：既省一次无意义查询，也避免隐藏态重排图片卡片触发 WKWebView 空白；
       // 下次打开面板时 panel-opened 会统一拉最新数据。
       if (!panelVisibleRef.current) return;
+      // 拖动中不要被后台复制打乱顺序：松手后下次打开会对齐真实排序
+      if (dragStateRef.current?.active) return;
       // 不 reset：面板开着时新复制进来，选中不该被拽走
       void refresh();
     });
@@ -1251,7 +1265,7 @@ export default function QuickPaste() {
                     }
                     className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform,opacity] duration-150 ${
                       draggingId === item.id
-                        ? "shadow-2xl cursor-grabbing"
+                        ? "z-10 shadow-2xl ring-2 ring-primary cursor-grabbing"
                         : "active:scale-[0.985]"
                     } ${isActive ? "ring-2 ring-primary shadow-sm" : ""} ${
                       item.isPinned ? "pinned" : ""
@@ -1389,19 +1403,6 @@ export default function QuickPaste() {
             </div>
           )}
         </div>
-
-        {/* 拖动排序的插入线：落在两张卡之间的缝隙上 */}
-        {dropHint && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute z-10 w-[2px] rounded-full bg-primary"
-            style={{
-              left: dropHint.x,
-              top: dropHint.top,
-              height: dropHint.height,
-            }}
-          />
-        )}
 
         {tip && (
           <div

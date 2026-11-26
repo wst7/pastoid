@@ -80,8 +80,10 @@ npm run release:major     # 0.1.0 -> 1.0.0
   否则监控会把还原动作当成新复制，把旧条目顶回队首
 - 无辅助功能权限时 Rust 已写入剪贴板并 bump，前端 catch 必须自己补一次 `refresh()`：
   广播可能在 `panelVisibleRef` 恢复前被丢弃
-- **拖动排序**：指针移动超过 6px 才算拖拽（否则仍是点击粘贴），拖动时只画插入线、松手才重排；
-  落点夹在当前置顶分组内，跨过分界线不顺带改图钉。松手后的 click 用 300ms 窗口吞掉。
+- **拖动排序**：用 mouse 事件 + window 监听（面板里的 hover/滚动也是 mouse 事件，别再用 pointer + capture）；
+  指针移动超过 6px 才算拖拽，跨过卡片中线就**实时换位**（`useLayoutEffect` + FLIP 160ms 补间），松手才落盘。
+  被拖卡片只加 ring/阴影、不做跟随位移；落点夹在当前置顶分组内，跨过分界线不顺带改图钉。
+  松手后的 click 用 300ms 窗口吞掉；拖动中忽略 `clipboard_changed` 刷新。
   只把**同组**的 `prev/next` 交给 `move_clipboard_item`（分组边界那侧传 null），
   后端用相邻 `sort_order` 中点落盘，浮点不够时整组重排；拖到边缘会自动横向滚动
 - 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
