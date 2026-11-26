@@ -15,11 +15,6 @@ pub fn is_dock_hidden() -> bool {
     DOCK_HIDDEN.load(Ordering::Relaxed)
 }
 
-#[cfg(target_os = "macos")]
-pub fn mark_dock_hidden(hidden: bool) {
-    DOCK_HIDDEN.store(hidden, Ordering::Relaxed);
-}
-
 fn should_show_dock(hide_dock_when_closed: bool, settings_visible: bool) -> bool {
     !hide_dock_when_closed || settings_visible
 }

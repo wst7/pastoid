@@ -61,11 +61,9 @@ pub fn run() {
                 launched_at.elapsed(),
                 &args,
             ) {
-                if let Some(window) = app.get_webview_window("settings") {
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                // 统一走这里：重新打开主窗口时必须同时恢复 Regular（Dock 图标）——
+                // 隐藏 Dock 的实例被再次拉起时，只 show 窗口会让「Dock 图标随窗口出现」的约定失效
+                crate::tray::show_settings_window(app);
             }
         }))
         .plugin(tauri_plugin_opener::init())
@@ -86,7 +84,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .setup(|app| {
+        .setup(move |app| {
             // 数据目录要在 logger 之前确定，所以它把告警带回来，logger 就绪后再打
             let (data_dir, startup_notes) = storage::get_data_dir(&app.handle());
 
@@ -140,15 +138,15 @@ pub fn run() {
                 pending_update: std::sync::Mutex::new(None),
             });
 
-            // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪；
-            // 否则若开启了「关闭窗口后隐藏 Dock 图标」，启动时即设为 Accessory 避免在 Dock 闪现。
+            // 首次运行：把设置窗口叫出来，让用户先决定数据放在哪。
+            // 非首次运行：只有「登录项自启」才在启动时设为 Accessory，避免开机时 Dock 图标闪现；
+            // 手动双击启动不隐藏——否则窗口没叫出来、Dock 也没有，用户会以为应用没启动。
             if first_run {
                 tray::show_settings_window(app.handle());
             } else {
                 #[cfg(target_os = "macos")]
-                if hide_dock_when_closed {
-                    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                    tray::mark_dock_hidden(true);
+                if hide_dock_when_closed && primary_autostart {
+                    tray::set_dock_visible(app.handle(), false);
                 }
             }
 

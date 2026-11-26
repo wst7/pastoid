@@ -74,6 +74,12 @@ npm run release:major     # 0.1.0 -> 1.0.0
 - **出入场动画**在 `src/index.css`：入场 90ms（panel-opened 事件重放 class）、退场 70ms；
   粘贴路径不走退场动画（Rust 侧 hide 后还有 Cmd+Tab 的等待），`prefers-reduced-motion` 下归零
 - 横向卡片条的**滚轮映射**用原生 `wheel` 监听（`passive: false`），React 的 onWheel 拦不住页面滚动
+- **粘贴成功后条目 bump 到最近使用队首**：`paste_item` 成功后 `repo.bump`；面板已隐藏时不再广播 `clipboard_changed`
+  （隐藏态重排图片卡片会让 WKWebView 留白），下次 `panel-opened` 统一刷新
+- **粘贴期间暂停监控**：`clipboard::pause_monitor()` 覆盖「写临时内容 → 切回原应用 → 还原旧剪贴板」全程，
+  否则监控会把还原动作当成新复制，把旧条目顶回队首
+- 无辅助功能权限时 Rust 已写入剪贴板并 bump，前端 catch 必须自己补一次 `refresh()`：
+  广播可能在 `panelVisibleRef` 恢复前被丢弃
 - 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
 - **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
@@ -163,6 +169,16 @@ npm run release:major     # 0.1.0 -> 1.0.0
   复制的文本凭空消失；只有当文本是 URL / data URI / HTML 片段这类「复制图片的副产物」时才让位给图片
 - 超长文本（>512KB）、超大图片（>40MP 或 >64MB）会被跳过，但**必须写一条 WARN 日志**，
   否则用户只会看到「复制了却没进历史」而完全无从排查
+
+**单实例与 macOS Dock 约定（重要）：**
+- `tauri-plugin-single-instance` 必须是 `Builder` 注册的第一个插件：第二进程要在初始化托盘、快捷键和剪贴板监听之前退出
+- 第二实例默认唤起已有 `settings` 窗口；带 `--autostart` 的实例、以及主进程自启后 15 秒内的窗口恢复都静默忽略
+  （macOS 登录时 launchd 与 loginwindow 可能各拉一次）
+- 托盘「退出」用 `std::process::exit` 绕过 Tauri 清理，退出前必须先 `tauri_plugin_single_instance::destroy` 释放锁/socket
+- Dock 显隐只在 macOS：关闭设置窗口时按设置切 `Accessory`，**只有自启启动**才在启动阶段隐藏（手动双击保持 Regular）
+- 任何重新打开主窗口的入口（托盘、`RunEvent::Reopen`、第二实例）都必须走 `tray::show_settings_window`，它负责恢复 `Regular`；
+  只 `show()` 会出现「窗口回来了、Dock 图标没回来」
+- `Accessory` 模式应用不在 Cmd+Tab 列表里，粘贴改用呼出面板前记录的 PID（`shortcut::activate_previous_app`）激活原应用
 
 **关键插件：**
 - `tauri-plugin-global-shortcut` — 全局快捷键（呼出 quick-paste）

@@ -260,16 +260,19 @@ export default function QuickPaste() {
       panelVisibleRef.current = false;
       await invoke("paste_item", { id: item.id });
     } catch (e) {
-      // 没有辅助功能权限：内容已经写进剪贴板，别静默失败，提示用户去授权
+      // 按键合成失败时 Rust 侧已经 hide 过窗口，别把 ref 一拍脑袋置回 true，
+      // 否则隐藏中的 webview 又会响应 clipboard_changed 重排（WKWebView 空白）
+      panelVisibleRef.current = await getCurrentWindow().isVisible().catch(() => false);
+      // 没有辅助功能权限：内容已经写进剪贴板，Rust 也 bump 了条目，
+      // 但广播可能在 ref 恢复前到达而被丢弃，这里直接刷新一次保证排序立即生效
       if (String(e).includes("NEED_ACCESSIBILITY")) {
-        panelVisibleRef.current = true;
         setNeedAccessibility(true);
+        void refresh();
         return;
       }
-      panelVisibleRef.current = true;
       console.error("Paste failed:", e);
     }
-  }, []);
+  }, [refresh]);
 
   const togglePin = useCallback(async (item: ClipboardItem) => {
     try {
