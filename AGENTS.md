@@ -20,14 +20,15 @@ npm run tsc
 # Rust 测试
 cd src-tauri && cargo test
 
-# 发布版本（需要 GITHUB_TOKEN 环境变量）
-npm run release           # 交互式
-npm run release:patch     # 0.1.0 -> 0.1.1
-npm run release:minor     # 0.1.0 -> 0.2.0
-npm run release:major     # 0.1.0 -> 1.0.0
+# 发布版本（需要 GITHUB_TOKEN 环境变量）——统一用 bun，不要用 npm
+bun run release           # 交互式
+bun run release:patch     # 0.1.0 -> 0.1.1
+bun run release:minor     # 0.1.0 -> 0.2.0
+bun run release:major     # 0.1.0 -> 1.0.0
 ```
 
-**重要：** 项目使用 `bun` 作为包管理器（tauri 内部调用 bun run dev/build）
+**重要：** 项目使用 `bun` 作为包管理器（tauri 内部调用 bun run dev/build）。
+**发版统一用 `bun run release`**：npm 会走系统 PATH 里的旧 node，解析不了 `@tauri-apps/cli` 的新语法。
 
 ## 架构
 
@@ -279,7 +280,7 @@ Windows 上「复制文件」会以多行路径（有时带引号）出现在剪
 
 ## 发布
 
-- `npm run release:patch|minor` 走 release-it；需要 `GITHUB_TOKEN=$(gh auth token)`
+- `bun run release` / `bun run release:patch|minor` 走 release-it；需要 `GITHUB_TOKEN=$(gh auth token)`
 - 国内网络偶尔连不上 github.com，`git config http.version HTTP/1.1` 后重试
 
 ## 改完代码必跑
@@ -324,7 +325,7 @@ npm run tauri build -- --target aarch64-apple-darwin
 
 ## 发版必须由用户明确下令
 
-- **没有用户明确的「发版 / 发布 / release」指令，不得**：跑 `npm run release:*`、
+- **没有用户明确的「发版 / 发布 / release」指令，不得**：跑 `bun run release:*`、
   打 tag、`gh release create/edit/delete`、推送 tag、群发公众号
 - 日常改动只提交（可选推送 `main`），版本号不动
 - 即使用户说「改完发版」也要先确认这次改动是否已经验证通过；发版前必须跑
