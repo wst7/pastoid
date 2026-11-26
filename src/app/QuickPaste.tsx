@@ -133,6 +133,7 @@ export default function QuickPaste() {
   const listRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const blurEnabled = useRef(false);
+  const panelVisibleRef = useRef(false);
   const closingRef = useRef(false);
   const closeTimerRef = useRef<number | null>(null);
   // 下一次 activeId 变化要不要滚动到可视区：键盘要，hover 不要
@@ -256,13 +257,16 @@ export default function QuickPaste() {
     try {
       // 按 id 粘贴：图片条目要走图片通道，不能把文件路径当文本写进剪贴板。
       // 粘贴路径不做退场动画——Rust 侧隐藏窗口后还有 Cmd+Tab 的等待。
+      panelVisibleRef.current = false;
       await invoke("paste_item", { id: item.id });
     } catch (e) {
       // 没有辅助功能权限：内容已经写进剪贴板，别静默失败，提示用户去授权
       if (String(e).includes("NEED_ACCESSIBILITY")) {
+        panelVisibleRef.current = true;
         setNeedAccessibility(true);
         return;
       }
+      panelVisibleRef.current = true;
       console.error("Paste failed:", e);
     }
   }, []);
@@ -451,6 +455,7 @@ export default function QuickPaste() {
   const requestClose = useCallback(() => {
     if (closingRef.current) return;
     closingRef.current = true;
+    panelVisibleRef.current = false;
     const win = getCurrentWindow();
     const el = panelRef.current;
 
@@ -502,6 +507,7 @@ export default function QuickPaste() {
         closeTimerRef.current = null;
       }
       closingRef.current = false;
+      panelVisibleRef.current = true;
       setSearch("");
       setFilter("all");
       // 状态是异步的，这里显式带上空查询/全筛选，别依赖 ref 已经更新
@@ -516,7 +522,14 @@ export default function QuickPaste() {
         scrollAnimRef.current = null;
       }
       scrollTargetRef.current = 0;
-      if (listRef.current) listRef.current.scrollLeft = 0;
+      if (listRef.current) {
+        listRef.current.scrollLeft = 0;
+        // WKWebView 的横向滚动层在隐藏后重排图片卡片时可能丢合成瓦片导致空白，
+        // 打开面板时同步强制重建一次绘制层（单帧内完成，无闪烁）。
+        listRef.current.style.visibility = "hidden";
+        void listRef.current.offsetHeight;
+        listRef.current.style.visibility = "";
+      }
       // 列表瞬间回到最左，指针下的卡片会换人，别让 hover 抢选中
       hoverEnabledRef.current = false;
       setHoveredId(null);
@@ -529,6 +542,10 @@ export default function QuickPaste() {
       setTimeout(() => {
         blurEnabled.current = true;
       }, 200);
+    });
+
+    const unlistenPanelClosed = listen("panel-closed", () => {
+      panelVisibleRef.current = false;
     });
 
     const unlistenBlur = getCurrentWindow().listen("tauri://blur", () => {
@@ -552,6 +569,9 @@ export default function QuickPaste() {
     );
 
     const unlistenChanged = listen("clipboard_changed", () => {
+      // 面板隐藏期间不刷新 DOM：既省一次无意义查询，也避免隐藏态重排图片卡片触发 WKWebView 空白；
+      // 下次打开面板时 panel-opened 会统一拉最新数据。
+      if (!panelVisibleRef.current) return;
       // 不 reset：面板开着时新复制进来，选中不该被拽走
       void refresh();
     });
@@ -663,6 +683,7 @@ export default function QuickPaste() {
     return () => {
       window.removeEventListener("keydown", handleKey);
       unlistenPanel.then((fn) => fn());
+      unlistenPanelClosed.then((fn) => fn());
       unlistenBlur.then((fn) => fn());
       unlistenTheme.then((fn) => fn());
       unlistenChanged.then((fn) => fn());

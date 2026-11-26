@@ -175,6 +175,7 @@ pub fn toggle_quick_paste(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("quick-paste") {
         if panel_is_visible(app, &window) {
             let _ = window.hide();
+            let _ = window.emit("panel-closed", ());
         } else {
             remember_frontmost_app();
             position_panel(app, &window);

@@ -595,53 +595,7 @@ pub fn open_accessibility_settings() -> Result<(), String> {
     }
 }
 
-#[tauri::command]
-pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String> {
-    let state = app_handle.state::<AppState>();
-    let item = state
-        .repo
-        .find_by_id(&id)
-        .ok_or_else(|| "条目不存在".to_string())?;
-    let data_dir = state.data_dir.clone();
-
-    let snap = capture_clipboard();
-
-    if item.is_image() {
-        let path = data_dir.join(&item.content);
-        let rgba = image::ImageReader::open(&path)
-            .map_err(|e| format!("无法打开图片: {}", e))?
-            .decode()
-            .map_err(|e| format!("无法解码图片: {}", e))?
-            .to_rgba8();
-        let (width, height) = rgba.dimensions();
-
-        let mut clipboard =
-            arboard::Clipboard::new().map_err(|e| format!("打开剪贴板失败: {}", e))?;
-        clipboard
-            .set_image(arboard::ImageData {
-                width: width as usize,
-                height: height as usize,
-                bytes: std::borrow::Cow::Owned(rgba.into_raw()),
-            })
-            .map_err(|e| format!("写入图片到剪贴板失败: {}", e))?;
-    } else {
-        use tauri_plugin_clipboard_manager::ClipboardExt;
-        app_handle
-            .clipboard()
-            .write_text(item.content.clone())
-            .map_err(|e| format!("clipboard write: {}", e))?;
-    }
-
-    // 没有辅助功能权限时别去调 enigo：那会触发系统授权弹窗，而且按键发不出去。
-    // 此时内容已经写进剪贴板，面板保持打开，前端会提示「已复制，去授权」。
-    if !accessibility_trusted() {
-        return Err("NEED_ACCESSIBILITY".to_string());
-    }
-
-    if let Some(window) = app_handle.get_webview_window("quick-paste") {
-        let _ = window.hide();
-    }
-
+fn send_paste_keys() -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
     let mut enigo = Enigo::new(&Settings::default())
         .map_err(|e| format!("Failed to init enigo: {}", e))?;
@@ -702,9 +656,75 @@ pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String
             .map_err(|e| format!("enigo: {}", e))?;
     }
 
-    // Restore original clipboard content
+    Ok(())
+}
+
+#[tauri::command]
+pub fn paste_item(id: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    let state = app_handle.state::<AppState>();
+    let item = state
+        .repo
+        .find_by_id(&id)
+        .ok_or_else(|| "条目不存在".to_string())?;
+    let data_dir = state.data_dir.clone();
+
+    // 粘贴期间会临时改写并还原系统剪贴板，先暂停后台监控，
+    // 避免监控线程抓到临时写入与还原动作后把旧条目重新顶回队首。
+    let _monitor_guard = crate::clipboard::pause_monitor();
+
+    let snap = capture_clipboard();
+
+    if item.is_image() {
+        let path = data_dir.join(&item.content);
+        let rgba = image::ImageReader::open(&path)
+            .map_err(|e| format!("无法打开图片: {}", e))?
+            .decode()
+            .map_err(|e| format!("无法解码图片: {}", e))?
+            .to_rgba8();
+        let (width, height) = rgba.dimensions();
+
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|e| format!("打开剪贴板失败: {}", e))?;
+        clipboard
+            .set_image(arboard::ImageData {
+                width: width as usize,
+                height: height as usize,
+                bytes: std::borrow::Cow::Owned(rgba.into_raw()),
+            })
+            .map_err(|e| format!("写入图片到剪贴板失败: {}", e))?;
+    } else {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+        app_handle
+            .clipboard()
+            .write_text(item.content.clone())
+            .map_err(|e| format!("clipboard write: {}", e))?;
+    }
+
+    // 没有辅助功能权限时别去调 enigo：那会触发系统授权弹窗，而且按键发不出去。
+    // 此时内容已经写进剪贴板（用户可直接 Cmd+V），同样把条目移至最近使用首位。
+    if !accessibility_trusted() {
+        if let Some(updated) = state.repo.bump(&id) {
+            let _ = app_handle.emit("clipboard_changed", updated);
+        }
+        return Err("NEED_ACCESSIBILITY".to_string());
+    }
+
+    if let Some(window) = app_handle.get_webview_window("quick-paste") {
+        let _ = window.hide();
+    }
+
+    let paste_result = send_paste_keys();
+
+    // 无论按键合成是否成功，都尽量恢复原剪贴板内容，再释放监控暂停锁
     std::thread::sleep(std::time::Duration::from_millis(150));
     restore_clipboard(snap);
+
+    paste_result?;
+
+    // 使用成功后将条目移至最近使用队首（置顶项在置顶区首位，普通项在普通区首位）。
+    // 此时 quick-paste 面板已隐藏，不再向隐藏中的 webview 广播 clipboard_changed，
+    // 避免隐藏态重排图片卡片触发 WKWebView 滚动层空白；下次打开面板时 panel-opened 会统一刷新。
+    let _ = state.repo.bump(&id);
 
     Ok(())
 }

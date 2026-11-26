@@ -4,11 +4,32 @@ use crate::storage;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 use std::fs;
+
+/// 剪贴板监控与 `paste_item` 的互斥锁。
+///
+/// `paste_item` 粘贴时会临时把选中内容写入系统剪贴板并在粘贴后还原旧剪贴板；
+/// 监控线程每 250ms 轮询一次，若不互斥，监控会抓到「临时写入 → 还原旧内容」的
+/// 抖动，把旧剪贴板条目重新 `bump` 到队首，覆盖掉刚刚使用的条目。
+static MONITOR_LOCK: Mutex<()> = Mutex::new(());
+
+/// RAII 暂停守卫：持有期间监控线程跳过轮询，drop 后自动恢复。
+pub struct MonitorPauseGuard {
+    _guard: MutexGuard<'static, ()>,
+}
+
+/// 暂停剪贴板监控（等待正在进行的单轮 `poll` 结束以消除竞态），
+/// 直到返回的守卫被 drop。
+pub fn pause_monitor() -> MonitorPauseGuard {
+    let guard = MONITOR_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    MonitorPauseGuard { _guard: guard }
+}
 
 /// 文本轮询间隔。
 ///
@@ -66,11 +87,19 @@ pub fn start_clipboard_monitor(app_handle: AppHandle) {
             while running_clone.load(Ordering::Relaxed) {
                 std::thread::sleep(backoff(failures));
 
+                // `paste_item` 正在临时改写并还原系统剪贴板时跳过本轮探测
+                let _poll_guard = match MONITOR_LOCK.try_lock() {
+                    Ok(guard) => guard,
+                    Err(TryLockError::Poisoned(e)) => e.into_inner(),
+                    Err(TryLockError::WouldBlock) => continue,
+                };
+
                 // 监控线程一旦 panic 就永久停摆，外部完全看不出来。
                 // 这里兜住 panic，让线程至少活下去并留下日志。
                 let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
                     poll(&app_handle, &mut state)
                 }));
+                drop(_poll_guard);
 
                 match outcome {
                     Ok(Ok(Some(item))) => {
@@ -568,5 +597,13 @@ mod tests {
         assert!(has_prefix_ci("https://x", "HTTPS://"));
         assert!(!has_prefix_ci("http", "https://"));
         assert!(!has_prefix_ci("", "a"));
+    }
+
+    #[test]
+    fn test_pause_monitor_blocks_poll_until_dropped() {
+        let guard = pause_monitor();
+        assert!(matches!(MONITOR_LOCK.try_lock(), Err(TryLockError::WouldBlock)));
+        drop(guard);
+        assert!(MONITOR_LOCK.try_lock().is_ok());
     }
 }
