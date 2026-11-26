@@ -80,6 +80,10 @@ npm run release:major     # 0.1.0 -> 1.0.0
   否则监控会把还原动作当成新复制，把旧条目顶回队首
 - 无辅助功能权限时 Rust 已写入剪贴板并 bump，前端 catch 必须自己补一次 `refresh()`：
   广播可能在 `panelVisibleRef` 恢复前被丢弃
+- **拖动排序**：指针移动超过 6px 才算拖拽（否则仍是点击粘贴），拖动时只画插入线、松手才重排；
+  落点夹在当前置顶分组内，跨过分界线不顺带改图钉。松手后的 click 用 300ms 窗口吞掉。
+  只把**同组**的 `prev/next` 交给 `move_clipboard_item`（分组边界那侧传 null），
+  后端用相邻 `sort_order` 中点落盘，浮点不够时整组重排；拖到边缘会自动横向滚动
 - 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
 - **macOS 面板的 Space 行为**（`lib.rs` 的 `to_panel()` 之后）：collection behavior 用
@@ -135,6 +139,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
   日志里给出路径供手动恢复——别把「解析失败」和「读失败」混成一个分支
 - 去重靠唯一索引 `ux_items_dedup (type, content_hash)`，`content_hash = blake3(内容)`：
   最长 512KB 的原文不能当索引键；图片另有 `image_hash` 唯一索引
+- **展示顺序 = `sort_order`（REAL），不是 `created_at`**：`ORDER BY is_pinned DESC, sort_order DESC, created_at DESC`;
+  拖动排序只改一条的 `sort_order`（取相邻中点），新条目 / bump 取 `MAX(sort_order) + 1` 排到最前。
+  `created_at` 只负责卡片上显示的时间，绝不能再拿它当排序键（拖一下会改「刚刚 / 3 分钟前」）。
+  老库在 `db::migrate_sort_order` 里补列并按 created_at 回填；这一步单独做、不动 `user_version`
+  （那个版本号是 JSON 迁移用的，混用会让已迁移的库重新导入 `clipboard_data.json`）
 - `max_items = 0` 表示不限（无限保存）：条数裁剪跳过，`get_history` 也不拼 LIMIT
   （`LIMIT 0` 会永远返回空）；非 0 时裁剪置顶优先保留，被砍掉的图片条目同步删文件
 - 图片有独立磁盘护栏 `db::MAX_IMAGES = 1000`：图片条目超过 1000 张按 `created_at DESC` 保留最新，

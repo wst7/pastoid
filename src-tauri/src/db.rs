@@ -24,9 +24,12 @@ pub const SCHEMA_VERSION: i32 = 1;
 pub const MAX_IMAGES: u32 = 1000;
 
 /// 写入一条条目；命中去重唯一索引时静默跳过（调用方用 changes 判断）。
+///
+/// `sort_order` 是用户拖动排序后的展示顺序：越大越靠前（置顶内、普通内各自比较）。
+/// 新条目和「重新使用」的条目取当前最大值 +1，初始值与 `created_at` 对齐。
 pub(crate) const INSERT_ITEM: &str = "INSERT OR IGNORE INTO items \
-     (id, content, type, content_hash, created_at, updated_at, is_pinned, tags, source, image_hash) \
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
+     (id, content, type, content_hash, created_at, updated_at, is_pinned, tags, source, image_hash, sort_order) \
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
 
 /// JSON 快照迁移的结果
 #[derive(Debug, PartialEq, Eq)]
@@ -86,6 +89,9 @@ pub fn open(data_dir: &Path) -> Connection {
     if let Err(e) = ensure_schema(&conn) {
         log::error!("建表失败：{}", e);
     }
+    if let Err(e) = migrate_sort_order(&conn) {
+        log::error!("补齐排序字段失败：{}", e);
+    }
     conn
 }
 
@@ -122,7 +128,8 @@ fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
             is_pinned    INTEGER NOT NULL DEFAULT 0,
             tags         TEXT,
             source       TEXT,
-            image_hash   TEXT
+            image_hash   TEXT,
+            sort_order   REAL NOT NULL DEFAULT 0
         );
         CREATE UNIQUE INDEX IF NOT EXISTS ux_items_dedup
             ON items(type, content_hash);
@@ -133,6 +140,29 @@ fn ensure_schema(conn: &Connection) -> rusqlite::Result<()> {
         -- 图片护栏每次 add 都要 COUNT(type='image')，没有这个索引就是全表扫
         CREATE INDEX IF NOT EXISTS idx_items_type
             ON items(type);",
+    )
+}
+
+/// 给老库补 `sort_order`（拖动排序用），并把旧条目按 `created_at` 初始化。
+///
+/// 单独一步而不是改 `user_version`：那个版本号是给 JSON 迁移用的，
+/// 混在一起会让已经迁移过 JSON 的库重新导入 `clipboard_data.json`。
+fn migrate_sort_order(conn: &Connection) -> rusqlite::Result<()> {
+    let has_column: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('items') WHERE name = 'sort_order'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_column == 0 {
+        conn.execute_batch(
+            "ALTER TABLE items ADD COLUMN sort_order REAL NOT NULL DEFAULT 0;
+             UPDATE items SET sort_order = CAST(created_at AS REAL);",
+        )?;
+        log::info!("history.db 已补 sort_order 列：旧条目按 created_at 初始化顺序");
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_items_sort
+            ON items(is_pinned DESC, sort_order DESC);",
     )
 }
 
@@ -222,6 +252,7 @@ fn import_items(conn: &Connection, items: &[ClipboardItem]) -> Result<usize, Str
                     tags,
                     item.source,
                     item.image_hash,
+                    item.created_at as f64,
                 ])
                 .map_err(|e| format!("insert: {e}"))?;
         }
@@ -713,6 +744,48 @@ mod tests {
         assert_eq!(version, 0);
     }
 
+    #[test]
+    fn test_sort_order_backfilled_for_legacy_db() {
+        let dir = temp();
+        {
+            // 旧版 schema：没有 sort_order 列
+            let conn = Connection::open(dir.path().join("history.db")).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE items (
+                    id           TEXT PRIMARY KEY,
+                    content      TEXT NOT NULL,
+                    type         TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    created_at   INTEGER NOT NULL,
+                    updated_at   INTEGER NOT NULL,
+                    is_pinned    INTEGER NOT NULL DEFAULT 0,
+                    tags         TEXT,
+                    source       TEXT,
+                    image_hash   TEXT
+                );
+                INSERT INTO items (id, content, type, content_hash, created_at, updated_at)
+                VALUES ('legacy', 'hello', 'text', 'h', 1234, 1234);",
+            )
+            .unwrap();
+        }
+
+        let conn = open(dir.path());
+        let sort: f64 = conn
+            .query_row("SELECT sort_order FROM items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sort, 1234.0);
+
+        // 幂等：再次打开不能把用户拖过的顺序重置回 created_at
+        conn.execute("UPDATE items SET sort_order = 99.0", [])
+            .unwrap();
+        drop(conn);
+        let reopened = open(dir.path());
+        let sort: f64 = reopened
+            .query_row("SELECT sort_order FROM items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sort, 99.0);
+    }
+
     fn insert(conn: &Connection, item: &ClipboardItem) {
         let hash = content_hash(&item.content);
         conn.execute(
@@ -728,6 +801,7 @@ mod tests {
                 Option::<String>::None,
                 item.source,
                 item.image_hash,
+                item.created_at as f64,
             ],
         )
         .unwrap();
@@ -805,6 +879,7 @@ mod tests {
                 tags_json,
                 item.source,
                 item.image_hash,
+                item.created_at as f64,
             ],
         )
         .unwrap();

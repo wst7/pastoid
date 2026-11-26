@@ -77,6 +77,20 @@ pub fn list_clipboard_items(
     Ok(state.repo.list(limit, &filter, &query))
 }
 
+/// 拖动排序：把条目放到 `prev` 与 `next` 之间（同一置顶分组内）。
+/// 只改这一条的 `sort_order`，不动其它行的相对顺序。
+#[tauri::command]
+pub fn move_clipboard_item(
+    id: String,
+    prev_id: Option<String>,
+    next_id: Option<String>,
+    state: tauri::State<AppState>,
+) -> Result<(), String> {
+    state
+        .repo
+        .move_to(&id, prev_id.as_deref(), next_id.as_deref())
+}
+
 /// 各筛选维度的全量计数（筛选 chip 用），不把历史拉到前端去数
 #[tauri::command]
 pub fn get_clipboard_counts(state: tauri::State<AppState>) -> Result<ClipboardCounts, String> {

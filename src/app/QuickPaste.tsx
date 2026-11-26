@@ -149,6 +149,26 @@ export default function QuickPaste() {
   // 操作按钮的说明气泡：卡片有 overflow-hidden，不能靠 CSS 挂在按钮上
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
   const hoverEnabledRef = useRef(true);
+  // 拖动排序：指针移动超过阈值才算拖拽，否则仍按点击（粘贴）处理
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{
+    x: number;
+    top: number;
+    height: number;
+  } | null>(null);
+  const dragPointerRef = useRef<{
+    id: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    x: number;
+    active: boolean;
+    card: HTMLElement;
+  } | null>(null);
+  const dragDropIndexRef = useRef<number | null>(null);
+  // 拖完松手可能补一个 click（目标未必还是被拖的卡片），用一个短时间窗吞掉它
+  const dragSuppressClickRef = useRef(0);
+  const dragAutoScrollRef = useRef<number | null>(null);
   // 键盘操作时记下指针位置：之后鼠标要有 4px 以上位移才算"用户真的在动鼠标"，
   // 避免手放在触控板上轻轻一碰就把选中抢回去
   const pointerRef = useRef({ x: 0, y: 0 });
@@ -445,6 +465,232 @@ export default function QuickPaste() {
   const applyTagQueryRef = useRef(applyTagQuery);
   applyTagQueryRef.current = applyTagQuery;
 
+  // ==================== 拖动排序 ====================
+
+  /** 按指针 x 算落点，并给出插入线的面板内坐标。 */
+  const updateDropTarget = useCallback(() => {
+    const drag = dragPointerRef.current;
+    const strip = listRef.current;
+    const panel = panelRef.current;
+    if (!drag?.active || !strip || !panel) return;
+
+    const cards = Array.from(
+      strip.querySelectorAll<HTMLElement>("[data-id]")
+    ).filter((card) => card.dataset.id !== drag.id);
+
+    let index = 0;
+    for (const card of cards) {
+      const rect = card.getBoundingClientRect();
+      if (drag.x > rect.left + rect.width / 2) index++;
+      else break;
+    }
+    dragDropIndexRef.current = index;
+    if (!cards.length) {
+      setDropHint(null);
+      return;
+    }
+
+    const panelRect = panel.getBoundingClientRect();
+    const stripRect = strip.getBoundingClientRect();
+    const anchor = cards[index];
+    const rect = (anchor ?? cards[cards.length - 1]).getBoundingClientRect();
+    const rawX = anchor ? rect.left - 6 : rect.right + 6;
+    const next = {
+      x:
+        Math.max(stripRect.left + 2, Math.min(rawX, stripRect.right - 4)) -
+        panelRect.left,
+      top: rect.top - panelRect.top,
+      height: rect.height,
+    };
+    setDropHint((prev) =>
+      prev &&
+      Math.abs(prev.x - next.x) < 0.5 &&
+      Math.abs(prev.top - next.top) < 0.5 &&
+      Math.abs(prev.height - next.height) < 0.5
+        ? prev
+        : next
+    );
+  }, []);
+
+  const stopDragAutoScroll = useCallback(() => {
+    if (dragAutoScrollRef.current !== null) {
+      cancelAnimationFrame(dragAutoScrollRef.current);
+      dragAutoScrollRef.current = null;
+    }
+  }, []);
+
+  /** 拖动到卡片条边缘时自动横向滚动；指针停在边缘也能继续走。 */
+  const startDragAutoScroll = useCallback(() => {
+    stopDragAutoScroll();
+    const step = () => {
+      const drag = dragPointerRef.current;
+      const strip = listRef.current;
+      if (!drag?.active || !strip || !panelVisibleRef.current) {
+        dragAutoScrollRef.current = null;
+        return;
+      }
+      const rect = strip.getBoundingClientRect();
+      const EDGE = 48;
+      let delta = 0;
+      if (drag.x < rect.left + EDGE) {
+        delta = -Math.ceil((rect.left + EDGE - drag.x) / 4);
+      } else if (drag.x > rect.right - EDGE) {
+        delta = Math.ceil((drag.x - (rect.right - EDGE)) / 4);
+      }
+      if (delta !== 0) {
+        if (scrollAnimRef.current !== null) {
+          cancelAnimationFrame(scrollAnimRef.current);
+          scrollAnimRef.current = null;
+        }
+        const max = Math.max(0, strip.scrollWidth - strip.clientWidth);
+        const next = Math.max(
+          0,
+          Math.min(strip.scrollLeft + Math.max(-22, Math.min(22, delta)), max)
+        );
+        if (next !== strip.scrollLeft) {
+          strip.scrollLeft = next;
+          updateDropTarget();
+        }
+      }
+      dragAutoScrollRef.current = requestAnimationFrame(step);
+    };
+    dragAutoScrollRef.current = requestAnimationFrame(step);
+  }, [stopDragAutoScroll, updateDropTarget]);
+
+  /** 松手后按落点重排本地列表，并把「被拖条目 + 上下邻居」交给后端落盘。 */
+  const applyDragOrder = useCallback(
+    (id: string) => {
+      const index = dragDropIndexRef.current;
+      if (index === null) return;
+      const visible = filteredItemsRef.current;
+      const moved = visible.find((item) => item.id === id);
+      if (!moved) return;
+
+      const rest = visible.filter((item) => item.id !== id);
+      // 置顶永远在前：落点夹在当前分组内，拖过分界线也不顺带改图钉状态
+      const pinnedCount = rest.filter((item) => item.isPinned).length;
+      const target = moved.isPinned
+        ? Math.min(Math.max(0, index), pinnedCount)
+        : Math.max(Math.min(rest.length, index), pinnedCount);
+
+      const nextVisible = [
+        ...rest.slice(0, target),
+        moved,
+        ...rest.slice(target),
+      ];
+      if (nextVisible.every((item, i) => item.id === visible[i].id)) return;
+
+      // 只换前 40 张的顺序；后面没渲染的保持原样
+      const visibleIds = new Set(visible.map((item) => item.id));
+      setItems((prev) => [
+        ...nextVisible,
+        ...prev.filter((item) => !visibleIds.has(item.id)),
+      ]);
+
+      // 只把同组邻居交给后端：分组边界上的另一边没有排序意义（置顶永远在前），
+      // 传过去会让后端拒绝「跨置顶分组排序」
+      const prevCandidate = nextVisible[target - 1] ?? null;
+      const nextCandidate = nextVisible[target + 1] ?? null;
+      const prevItem =
+        prevCandidate && prevCandidate.isPinned === moved.isPinned
+          ? prevCandidate
+          : null;
+      const nextItem =
+        nextCandidate && nextCandidate.isPinned === moved.isPinned
+          ? nextCandidate
+          : null;
+      void invoke("move_clipboard_item", {
+        id,
+        prevId: prevItem?.id ?? null,
+        nextId: nextItem?.id ?? null,
+      }).catch((e) => {
+        console.error("Reorder failed:", e);
+        // 后端拒绝（数据过期 / 分组不一致）就拉一次真实顺序回来
+        void refresh();
+      });
+    },
+    [refresh]
+  );
+
+  const onCardPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, id: string) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("button, input, textarea, [data-no-drag]")) return;
+      dragPointerRef.current = {
+        id,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        x: e.clientX,
+        active: false,
+        card: e.currentTarget,
+      };
+    },
+    []
+  );
+
+  const onCardPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const drag = dragPointerRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      drag.x = e.clientX;
+
+      if (!drag.active) {
+        // 6px 阈值：手抖不算拖拽，单击仍然是粘贴
+        if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) {
+          return;
+        }
+        drag.active = true;
+        drag.card.setPointerCapture(e.pointerId);
+        if (scrollAnimRef.current !== null) {
+          cancelAnimationFrame(scrollAnimRef.current);
+          scrollAnimRef.current = null;
+        }
+        hoverEnabledRef.current = false;
+        setHoveredId(null);
+        setTip(null);
+        setDraggingId(drag.id);
+        startDragAutoScroll();
+      }
+      e.preventDefault();
+      updateDropTarget();
+    },
+    [startDragAutoScroll, updateDropTarget]
+  );
+
+  const finishCardDrag = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const drag = dragPointerRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      dragPointerRef.current = null;
+      stopDragAutoScroll();
+      setDraggingId(null);
+      setDropHint(null);
+      if (drag.active) {
+        dragSuppressClickRef.current = performance.now() + 300;
+        // 拖完鼠标停在原地也会触发 hover，锁到真的移动 4px 之后再恢复
+        pointerGuardRef.current = { ...pointerRef.current };
+        applyDragOrder(drag.id);
+      }
+      dragDropIndexRef.current = null;
+    },
+    [applyDragOrder, stopDragAutoScroll]
+  );
+
+  const cancelCardDrag = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const drag = dragPointerRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      dragPointerRef.current = null;
+      stopDragAutoScroll();
+      setDraggingId(null);
+      setDropHint(null);
+      dragDropIndexRef.current = null;
+    },
+    [stopDragAutoScroll]
+  );
+
   /** 重放入场动画（窗口本身是 show() 出来的，CSS 动画得手动触发） */
   const playEnter = useCallback(() => {
     const el = panelRef.current;
@@ -734,6 +980,10 @@ export default function QuickPaste() {
         cancelAnimationFrame(scrollAnimRef.current);
         scrollAnimRef.current = null;
       }
+      if (dragAutoScrollRef.current !== null) {
+        cancelAnimationFrame(dragAutoScrollRef.current);
+        dragAutoScrollRef.current = null;
+      }
     };
   }, []);
 
@@ -889,6 +1139,7 @@ export default function QuickPaste() {
           ref={listRef}
           onMouseMove={(e) => {
             pointerRef.current = { x: e.clientX, y: e.clientY };
+            if (dragPointerRef.current?.active) return;
             if (hoverEnabledRef.current) return;
             const guard = pointerGuardRef.current;
             if (guard) {
@@ -947,7 +1198,16 @@ export default function QuickPaste() {
                     data-id={item.id}
                     role="button"
                     tabIndex={-1}
-                    onClick={() => paste(item)}
+                    onClick={() => {
+                      // 拖完松手会补一个 click，不能当成「点一下粘贴」
+                      if (performance.now() < dragSuppressClickRef.current) return;
+                      paste(item);
+                    }}
+                    onPointerDown={(e) => onCardPointerDown(e, item.id)}
+                    onPointerMove={onCardPointerMove}
+                    onPointerUp={finishCardDrag}
+                    onPointerCancel={cancelCardDrag}
+                    onLostPointerCapture={cancelCardDrag}
                     data-hovered={hoveredId === item.id ? "true" : undefined}
                     onMouseEnter={() => {
                       if (!hoverEnabledRef.current) return;
@@ -957,9 +1217,13 @@ export default function QuickPaste() {
                     onMouseLeave={() =>
                       setHoveredId((prev) => (prev === item.id ? null : prev))
                     }
-                    className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none transition-[background-color,border-color,box-shadow,transform] duration-150 active:scale-[0.985] ${
-                      isActive ? "ring-2 ring-primary shadow-sm" : ""
-                    } ${item.isPinned ? "pinned" : ""}`}
+                    className={`pastoid-card group relative shrink-0 w-[190px] h-full flex flex-col text-left overflow-hidden cursor-pointer select-none [touch-action:none] transition-[background-color,border-color,box-shadow,transform,opacity] duration-150 ${
+                      draggingId === item.id
+                        ? "opacity-60 shadow-lg cursor-grabbing"
+                        : "active:scale-[0.985]"
+                    } ${isActive ? "ring-2 ring-primary shadow-sm" : ""} ${
+                      item.isPinned ? "pinned" : ""
+                    }`}
                   >
                     <div
                       className={`shrink-0 flex items-center gap-1.5 pl-2.5 pt-2 pb-1 ${
@@ -1093,6 +1357,19 @@ export default function QuickPaste() {
             </div>
           )}
         </div>
+
+        {/* 拖动排序的插入线：落在两张卡之间的缝隙上 */}
+        {dropHint && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-10 w-[2px] rounded-full bg-primary"
+            style={{
+              left: dropHint.x,
+              top: dropHint.top,
+              height: dropHint.height,
+            }}
+          />
+        )}
 
         {tip && (
           <div

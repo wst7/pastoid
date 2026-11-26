@@ -75,7 +75,7 @@ impl ClipboardRepository {
         self.with_conn(|conn| {
             query_items(
                 conn,
-                "SELECT * FROM items ORDER BY created_at DESC, rowid DESC",
+                "SELECT * FROM items ORDER BY sort_order DESC, created_at DESC, rowid DESC",
                 [],
             )
         })
@@ -89,14 +89,14 @@ impl ClipboardRepository {
                 return query_items(
                     conn,
                     "SELECT * FROM items
-                     ORDER BY is_pinned DESC, created_at DESC, rowid DESC",
+                     ORDER BY is_pinned DESC, sort_order DESC, created_at DESC, rowid DESC",
                     [],
                 );
             }
             query_items(
                 conn,
                 "SELECT * FROM items
-                 ORDER BY is_pinned DESC, created_at DESC, rowid DESC
+                 ORDER BY is_pinned DESC, sort_order DESC, created_at DESC, rowid DESC
                  LIMIT ?1",
                 params![max_items as i64],
             )
@@ -249,7 +249,7 @@ impl ClipboardRepository {
             let sql = format!(
                 "SELECT * FROM items
                  WHERE {filter_cond} AND ({match_clause})
-                 ORDER BY is_pinned DESC, created_at DESC, rowid DESC
+                 ORDER BY is_pinned DESC, sort_order DESC, created_at DESC, rowid DESC
                  LIMIT ?1"
             );
             let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -325,6 +325,14 @@ impl ClipboardRepository {
     pub fn add(&self, item: ClipboardItem) -> AddOutcome {
         let conn = self.db.lock().unwrap();
         let hash = db::content_hash(&item.content);
+        // 新条目排到最前：sort_order 取全表最大值 +1（置顶/普通各自比较，全局最大值兼容两组）
+        let next_sort: f64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(sort_order), 0) + 1.0 FROM items",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(1.0);
 
         let inserted = match conn.execute(
             db::INSERT_ITEM,
@@ -339,6 +347,7 @@ impl ClipboardRepository {
                 tags_json(&item),
                 item.source,
                 item.image_hash,
+                next_sort,
             ],
         ) {
             Ok(n) => n,
@@ -377,15 +386,22 @@ impl ClipboardRepository {
         self.with_conn(|conn| {
             let now = chrono::Utc::now().timestamp_millis();
             // 同一毫秒内连续操作时，新旧时间戳相等会退回按 rowid 排序，
-            // 老条目反而排在前面——取 max(now, 现有最大 + 1) 保证 bump 一定回到队首
-            let max_created: Option<i64> = conn
-                .query_row("SELECT MAX(created_at) FROM items", [], |row| row.get(0))
+            // 老条目反而排在前面——取 max(now, 现有最大 + 1) 保证 bump 一定回到队首。
+            // sort_order 同理取最大值 +1：用户手动拖过序之后，bump 仍然是「最近使用置顶」。
+            let (max_created, max_sort): (Option<i64>, Option<f64>) = conn
+                .query_row(
+                    "SELECT MAX(created_at), MAX(sort_order) FROM items",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
                 .map_err(|e| e.to_string())?;
             let stamp = max_created.map_or(now, |max| now.max(max + 1));
+            let sort = max_sort.map_or(1.0, |max| max + 1.0);
             let changed = conn
                 .execute(
-                    "UPDATE items SET created_at = ?1, updated_at = ?1 WHERE id = ?2",
-                    params![stamp, id],
+                    "UPDATE items SET created_at = ?1, updated_at = ?1, sort_order = ?3
+                     WHERE id = ?2",
+                    params![stamp, id, sort],
                 )
                 .map_err(|e| e.to_string())?;
             if changed == 0 {
@@ -400,6 +416,20 @@ impl ClipboardRepository {
             .map_err(|e| e.to_string())
         })
         .flatten()
+    }
+
+    /// 把条目移动到 `prev_id` 和 `next_id` 之间（prev 在上、next 在下）。
+    ///
+    /// 只允许在同一置顶分组内移动：跨过置顶分界线等于隐式改图钉状态，
+    /// 用户拖一下不该产生这种副作用。新位置取相邻两条 `sort_order` 的中点。
+    pub fn move_to(
+        &self,
+        id: &str,
+        prev_id: Option<&str>,
+        next_id: Option<&str>,
+    ) -> Result<(), String> {
+        let conn = self.db.lock().unwrap();
+        move_item(&conn, id, prev_id, next_id)
     }
 
     pub fn delete(&self, id: &str) {
@@ -472,6 +502,7 @@ impl ClipboardRepository {
                         tags_json(item),
                         item.source,
                         item.image_hash,
+                        item.created_at as f64,
                     ])
                     .map_err(|e| format!("insert: {e}"))?;
                 }
@@ -561,6 +592,104 @@ fn query_items(
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+/// 读一条的排序权重和置顶状态；不存在时报给前端（面板数据过期会走到这里）。
+fn item_sort(conn: &Connection, id: &str) -> Result<(f64, bool), String> {
+    conn.query_row(
+        "SELECT sort_order, is_pinned FROM items WHERE id = ?1",
+        params![id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| format!("条目不存在: {id}"))
+}
+
+/// 整组重排成 1..=n 的整数权重，保留当前顺序。
+///
+/// 只在相邻两条的 `sort_order` 靠得太近（浮点中点失效）时调用；
+/// 正常拖拽一次只会改一条，不会碰全表。
+fn renumber_group(conn: &Connection, pinned: bool) -> Result<(), String> {
+    let ids: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id FROM items WHERE is_pinned = ?1
+                 ORDER BY sort_order DESC, created_at DESC, rowid DESC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![pinned], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let base = ids.len() as f64 + 1.0;
+    for (index, item_id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE items SET sort_order = ?1 WHERE id = ?2",
+            params![base - index as f64, item_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())
+}
+
+/// `move_to` 的实现：只改被拖动条目的 `sort_order`。
+fn move_item(
+    conn: &Connection,
+    id: &str,
+    prev_id: Option<&str>,
+    next_id: Option<&str>,
+) -> Result<(), String> {
+    let (current, pinned) = item_sort(conn, id)?;
+    let prev = prev_id.map(|p| item_sort(conn, p)).transpose()?;
+    let next = next_id.map(|n| item_sort(conn, n)).transpose()?;
+
+    // 前端已经把拖拽限制在分组内；这里再挡一次，避免数据过期时把置顶项拖进普通区
+    for (label, neighbour) in [("prev", prev), ("next", next)] {
+        if let Some((_, neighbour_pinned)) = neighbour {
+            if neighbour_pinned != pinned {
+                return Err(format!("不能跨置顶分组排序：{label} 分组不一致"));
+            }
+        }
+    }
+
+    let new_sort = match (prev, next) {
+        (Some((p, _)), Some((n, _))) => {
+            if p > n {
+                let mid = n + (p - n) / 2.0;
+                if mid > n && mid < p {
+                    mid
+                } else {
+                    renumber_group(conn, pinned)?;
+                    let (p, _) = item_sort(conn, prev_id.unwrap())?;
+                    let (n, _) = item_sort(conn, next_id.unwrap())?;
+                    n + (p - n) / 2.0
+                }
+            } else {
+                // 邻居顺序反了（前端数据过期或同值）：按当前顺序重排整组再取中点
+                renumber_group(conn, pinned)?;
+                let (p, _) = item_sort(conn, prev_id.unwrap())?;
+                let (n, _) = item_sort(conn, next_id.unwrap())?;
+                n + (p - n) / 2.0
+            }
+        }
+        (Some((p, _)), None) => p - 1.0,
+        (None, Some((n, _))) => n + 1.0,
+        (None, None) => chrono::Utc::now().timestamp_millis() as f64,
+    };
+
+    if (new_sort - current).abs() < f64::EPSILON {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE items SET sort_order = ?1 WHERE id = ?2",
+        params![new_sort, id],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -636,6 +765,101 @@ mod tests {
         repo.bump(&old.id).expect("bump 应成功");
         let ids: Vec<String> = repo.list(10, "all", "").into_iter().map(|i| i.id).collect();
         assert_eq!(ids, vec![pinned.id, old.id, newer.id]);
+    }
+
+    fn contents(repo: &ClipboardRepository) -> Vec<String> {
+        repo.list(50, "all", "")
+            .into_iter()
+            .map(|i| i.content)
+            .collect()
+    }
+
+    #[test]
+    fn test_move_item_between_neighbors_and_edges() {
+        let (_dir, repo) = text_repo(100);
+        let a = ClipboardItem::new("a".to_string(), "text");
+        let b = ClipboardItem::new("b".to_string(), "text");
+        let c = ClipboardItem::new("c".to_string(), "text");
+        repo.add(a.clone());
+        repo.add(b.clone());
+        repo.add(c.clone());
+        // 插入顺序决定初始 sort_order：新加的在上
+        assert_eq!(contents(&repo), ["c", "b", "a"]);
+
+        // 中间：放到 c 与 b 之间
+        repo.move_to(&a.id, Some(&c.id), Some(&b.id)).unwrap();
+        assert_eq!(contents(&repo), ["c", "a", "b"]);
+
+        // 最前
+        repo.move_to(&b.id, None, Some(&c.id)).unwrap();
+        assert_eq!(contents(&repo), ["b", "c", "a"]);
+
+        // 最后
+        repo.move_to(&b.id, Some(&a.id), None).unwrap();
+        assert_eq!(contents(&repo), ["c", "a", "b"]);
+    }
+
+    #[test]
+    fn test_move_across_pinned_section_is_rejected() {
+        let (_dir, repo) = text_repo(100);
+        let mut pinned = ClipboardItem::new("pinned".to_string(), "text");
+        pinned.is_pinned = true;
+        let normal = ClipboardItem::new("normal".to_string(), "text");
+        repo.add(pinned.clone());
+        repo.add(normal.clone());
+
+        // 普通条目不能拖到置顶项上面
+        assert!(repo
+            .move_to(&normal.id, None, Some(&pinned.id))
+            .is_err());
+        // 置顶项也不能拖进普通区
+        assert!(repo.move_to(&pinned.id, Some(&normal.id), None).is_err());
+        // 分组内移动仍然可以
+        repo.move_to(&pinned.id, None, None).unwrap();
+    }
+
+    #[test]
+    fn test_bump_still_moves_to_top_after_manual_sort() {
+        let (_dir, repo) = text_repo(100);
+        let a = ClipboardItem::new("a".to_string(), "text");
+        let b = ClipboardItem::new("b".to_string(), "text");
+        let c = ClipboardItem::new("c".to_string(), "text");
+        repo.add(a.clone());
+        repo.add(b.clone());
+        repo.add(c.clone());
+
+        repo.move_to(&c.id, Some(&a.id), None).unwrap();
+        assert_eq!(contents(&repo), ["b", "a", "c"]);
+
+        repo.bump(&c.id).expect("bump 应成功");
+        assert_eq!(contents(&repo), ["c", "b", "a"]);
+    }
+
+    #[test]
+    fn test_move_between_equal_sort_order_renumbers() {
+        let (_dir, repo) = text_repo(100);
+        let a = ClipboardItem::new("a".to_string(), "text");
+        let b = ClipboardItem::new("b".to_string(), "text");
+        let c = ClipboardItem::new("c".to_string(), "text");
+        repo.add(a.clone());
+        repo.add(b.clone());
+        repo.add(c.clone());
+
+        // 模拟 JSON 导入后 created_at 相同、sort_order 打平的情况：c=3, a=b=1
+        {
+            let conn = repo.db.lock().unwrap();
+            conn.execute(
+                "UPDATE items SET sort_order = 1.0 WHERE id IN (?1, ?2)",
+                params![a.id, b.id],
+            )
+            .unwrap();
+        }
+        // 平局时退到 rowid DESC：c, b, a
+        assert_eq!(contents(&repo), ["c", "b", "a"]);
+
+        // 把 c 拖到 b 与 a 之间：两条邻居同值，必须先重排再取中点
+        repo.move_to(&c.id, Some(&b.id), Some(&a.id)).unwrap();
+        assert_eq!(contents(&repo), ["b", "c", "a"]);
     }
 
     #[test]

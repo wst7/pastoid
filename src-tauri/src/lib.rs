@@ -331,6 +331,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_clipboard_items,
+            commands::move_clipboard_item,
             commands::get_clipboard_counts,
             commands::get_clipboard_tags,
             commands::preview_trim_history,
