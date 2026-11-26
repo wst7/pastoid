@@ -161,8 +161,9 @@ export default function QuickPaste() {
   // 拖动期间的可见顺序（同步更新，不等 React commit）
   const dragOrderRef = useRef<ClipboardItem[] | null>(null);
   const dragMovedRef = useRef(false);
-  // FLIP：换位前记录位置，commit 后补间
+  // FLIP：换位前记录位置，commit 后用 Web Animations 补间
   const flipRectsRef = useRef<Map<string, DOMRect> | null>(null);
+  const flipAnimationsRef = useRef<Animation[]>([]);
   const reorderPendingRef = useRef(false);
   // 拖完松手可能补一个 click（目标未必还是被拖的卡片），用一个短时间窗吞掉它
   const dragSuppressClickRef = useRef(0);
@@ -521,13 +522,6 @@ export default function QuickPaste() {
     if (!all.length) return;
     const dragEl = all.find((el) => el.dataset.id === drag.id);
 
-    // 清掉上一轮 FLIP 的临时 transform，按新的布局位置重新测量
-    for (const card of all) {
-      card.style.transition = "none";
-      card.style.transform = "";
-    }
-    void strip.offsetWidth;
-
     const others = all.filter((el) => el !== dragEl);
     let index = 0;
     for (const card of others) {
@@ -631,8 +625,7 @@ export default function QuickPaste() {
     dragStateRef.current = null;
     stopDragAutoScroll();
     setDraggingId(null);
-    reorderPendingRef.current = false;
-    flipRectsRef.current = null;
+    // 别清 flipRectsRef：松手前最后一次换位可能还没 commit，留给 useLayoutEffect 补间
     if (drag.active) {
       dragSuppressClickRef.current = performance.now() + 300;
       // 拖完鼠标停在原地也会触发 hover，锁到真的移动 4px 之后再恢复
@@ -651,6 +644,8 @@ export default function QuickPaste() {
     dragMovedRef.current = false;
     flipRectsRef.current = null;
     reorderPendingRef.current = false;
+    for (const animation of flipAnimationsRef.current) animation.cancel();
+    flipAnimationsRef.current = [];
     stopDragAutoScroll();
     setDraggingId(null);
   }, [stopDragAutoScroll]);
@@ -662,6 +657,8 @@ export default function QuickPaste() {
     dragMovedRef.current = false;
     flipRectsRef.current = null;
     reorderPendingRef.current = false;
+    for (const animation of flipAnimationsRef.current) animation.cancel();
+    flipAnimationsRef.current = [];
     dragSuppressClickRef.current = 0;
     setDraggingId(null);
     stopDragAutoScroll();
@@ -706,7 +703,8 @@ export default function QuickPaste() {
     };
   }, [cancelDrag, finishDrag, startDragAutoScroll, updateDropTarget]);
 
-  // FLIP：实时换位后让卡片从旧位置滑到新位置，而不是瞬移
+  // FLIP：实时换位后让卡片从旧位置滑到新位置（Web Animations，避免 CSS transition
+  // 在「设置 transition 和清 transform 同一帧」时被合并掉；WKWebView 上尤其明显）
   useLayoutEffect(() => {
     const prev = flipRectsRef.current;
     flipRectsRef.current = null;
@@ -714,6 +712,8 @@ export default function QuickPaste() {
     if (!prev) return;
     const strip = listRef.current;
     if (!strip) return;
+    for (const animation of flipAnimationsRef.current) animation.cancel();
+    flipAnimationsRef.current = [];
     for (const el of strip.querySelectorAll<HTMLElement>("[data-id]")) {
       const id = el.dataset.id;
       const old = id ? prev.get(id) : undefined;
@@ -722,18 +722,14 @@ export default function QuickPaste() {
       const dx = old.left - now.left;
       const dy = old.top - now.top;
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
-      el.style.transition = "none";
-      el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
-      void el.offsetWidth;
-      el.style.transition = "transform 160ms cubic-bezier(0.2, 0, 0, 1)";
-      el.style.transform = "";
-      const clear = () => {
-        el.style.transition = "";
-        el.style.transform = "";
-        el.removeEventListener("transitionend", clear);
-      };
-      el.addEventListener("transitionend", clear);
-      window.setTimeout(clear, 220);
+      const animation = el.animate(
+        [
+          { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+          { transform: "none" },
+        ],
+        { duration: 160, easing: "cubic-bezier(0.2, 0, 0, 1)" }
+      );
+      flipAnimationsRef.current.push(animation);
     }
   }, [items]);
 
