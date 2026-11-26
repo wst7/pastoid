@@ -252,11 +252,21 @@ pub fn run() {
                         panel.set_style_mask(1 << 7); // NSWindowStyleMaskNonActivatingPanel
                         // 层级高于菜单栏，确保覆盖全屏应用
                         panel.set_level(NSMainMenuWindowLevel + 1);
-                        // 在所有 Space（含全屏）中共享
+                        // MoveToActiveSpace：面板隐藏时会留在上次的 Space，order front 时搬到当前
+                        // Space（含全屏）。只用 CanJoinAllSpaces 在 macOS 26/27 上出现过
+                        // 「isVisible = true 但 occluded = true」——窗口在别的 Space 上，用户看不见。
+                        // CanJoinAllApplications（1 << 18，macOS 13+）允许浮窗加入其它应用的全屏
+                        // Space；cocoa 0.26 的 bitflags 没有这一位，手动补上。
+                        // 注意 CanJoinAllSpaces 与 MoveToActiveSpace 互斥，同时设置会抛异常。
+                        // from_bits_truncate 会丢掉未声明的位，from_bits_retain 才能保留 1 << 18
+                        // （macOS 13+ 的有效常量；更老的系统忽略未知位）。
+                        const CAN_JOIN_ALL_APPLICATIONS: u64 = 1 << 18;
+                        let behavior: u64 = (NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace
+                            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary)
+                            .bits()
+                            | CAN_JOIN_ALL_APPLICATIONS;
                         panel.set_collection_behaviour(
-                            NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
-                                | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
-                                | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
+                            NSWindowCollectionBehavior::from_bits_retain(behavior),
                         );
                     }
 

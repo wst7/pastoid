@@ -82,6 +82,11 @@ npm run release:major     # 0.1.0 -> 1.0.0
   广播可能在 `panelVisibleRef` 恢复前被丢弃
 - 面板定位在 `shortcut.rs::position_panel`：按光标选屏 + `work_area` 对齐底部，
   隐藏窗口的 `current_monitor()` 是上次的位置，直接用会弹错屏
+- **macOS 面板的 Space 行为**（`lib.rs` 的 `to_panel()` 之后）：collection behavior 用
+  `MoveToActiveSpace | FullScreenAuxiliary | CanJoinAllApplications(1 << 18)`，层级 `NSMainMenuWindowLevel + 1`。
+  不能写成 `CanJoinAllSpaces`（与 MoveToActiveSpace 互斥，同时设置直接抛异常）；只用 CanJoinAllSpaces
+  在 macOS 26/27 上会出现「`isVisible = true` 但 `occluded = true`」——窗口留在旧 Space，全屏下用户看不见。
+  `CanJoinAllApplications` 是 macOS 13+ 常量，cocoa 的 bitflags 没声明这一位，要用 `from_bits_retain` 保留
 - **主题 = 语义 token 覆盖，不动组件结构**：`html[data-style="<id>"]` + `.light/.dark`，
   面板/卡片的形状走 `--panel-*` / `--card-*`（见 `src/index.css` 的 `.pastoid-panel` / `.pastoid-card`）
 - **外观 = 7 套风格 + 3 个明暗按钮**（自动/浅/深）：风格只保差异最大的 7 套。
